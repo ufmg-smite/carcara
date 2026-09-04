@@ -814,6 +814,35 @@ fn test_qualified_operators() {
 }
 
 #[test]
+fn test_custom_operators() {
+    let mut p = PrimitivePool::new();
+    let term = parse_term(&mut p, "(str.rev \"abc\")");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::String);
+
+    let term = parse_term(&mut p, "(str.to_lower \"abc\")");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::String);
+
+    let term = parse_term(&mut p, "(str.to_upper \"abc\")");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::String);
+
+    let term = parse_term(&mut p, "(str.update \"abc\" 1 \"x\")");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::String);
+
+    assert!(matches!(
+        parse_term_err("(str.rev 1)"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(str.update \"abc\" \"1\" \"x\")"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(str.update \"abc\" 1)"),
+        Error::Parser(ParserError::WrongNumberOfArgs(_, _), _, _),
+    ));
+}
+
+#[test]
 fn test_proofs_with_extra_parens() {
     let mut p = PrimitivePool::new();
     let proof = parse_proof(&mut p, "( (assume h1 true) )");

@@ -3,6 +3,7 @@
 mod datatypes;
 mod error;
 mod lexer;
+mod operators;
 mod rare;
 pub(crate) mod tests;
 
@@ -11,15 +12,14 @@ use crate::{
     ast::{
         AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
         Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
-        Subproof, Substitution, Term, build_term,
+        Subproof, Substitution, Term, build_term, lookup_operator,
         pool::{PrimitivePool, TermPool},
         rare_rules::{RareStatements, Rules},
     },
-    automata::parser::parse_automaton,
     utils::{HashCache, HashMapStack},
 };
 use carcara_macros::GenerateSetters;
-use error::{assert_indexed_op_args_value, assert_num_args, check_relation_sort, check_set_sort};
+use error::{assert_indexed_op_args_value, assert_num_args, check_set_sort};
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use rug::{Integer, Rational};
@@ -419,400 +419,8 @@ impl<'p, 's> Parser<'p, 's> {
     /// Constructs and sort checks an operation term.
     fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
         let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
-
-        match op {
-            Operator::True | Operator::False => assert_num_args(&args, 0)?,
-            Operator::Not => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
-            }
-            Operator::Implies => {
-                assert_num_args(&args, 2..)?;
-                for s in sorts {
-                    self.check_sort_eq(&Sort::Bool, &s)?;
-                }
-            }
-            Operator::Or | Operator::And | Operator::Xor => {
-                // If we are not in "strict" parsing mode, we allow these operators to be called
-                // with just one argument
-                assert_num_args(&args, if self.config.strict { 2.. } else { 1.. })?;
-                for s in sorts {
-                    self.check_sort_eq(&Sort::Bool, &s)?;
-                }
-            }
-            Operator::Equals | Operator::Distinct => {
-                assert_num_args(&args, 2..)?;
-                self.check_sort_all_eq(&sorts)?;
-            }
-            Operator::Ite => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
-                self.check_sort_eq(sorts[1].as_ref(), &sorts[2])?;
-            }
-            Operator::Add | Operator::Sub | Operator::Mult => {
-                // The `-` operator, in particular, can be called with only one argument, in which
-                // case it means negation instead of subtraction
-                if op == Operator::Sub {
-                    assert_num_args(&args, 1..)?;
-                } else {
-                    assert_num_args(&args, 2..)?;
-                }
-
-                // All the arguments must be either Int or Real. Also, if we are not allowing
-                // Int/Real subtyping, all arguments must have the same sort
-                if self.config.allow_int_real_subtyping {
-                    for s in sorts {
-                        self.check_sort_one_of(&[Sort::Int, Sort::Real], &s)?;
-                    }
-                } else {
-                    self.check_sort_one_of(&[Sort::Int, Sort::Real], &sorts[0])?;
-                    self.check_sort_all_eq(&sorts)?;
-                }
-            }
-            Operator::IntDiv => {
-                assert_num_args(&args, 2..)?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-                self.check_sort_all_eq(&sorts)?;
-            }
-            Operator::RealDiv => {
-                assert_num_args(&args, 2..)?;
-
-                // Normally, the `/` operator may only receive Real arguments, but if we are
-                // allowing Int/Real subtyping, it may also receive Ints
-                if self.config.allow_int_real_subtyping {
-                    for s in sorts {
-                        self.check_sort_one_of(&[Sort::Int, Sort::Real], &s)?;
-                    }
-                } else {
-                    self.check_sort_eq(&Sort::Real, &sorts[0])?;
-                    self.check_sort_all_eq(&sorts)?;
-                }
-
-                if let Some(r) = self.interpret_div_as_real_lit(&args[0], &args[1]) {
-                    return Ok(r);
-                }
-            }
-            Operator::Mod => {
-                assert_num_args(&args, 2)?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-                self.check_sort_eq(&Sort::Int, &sorts[1])?;
-            }
-            Operator::Abs => {
-                assert_num_args(&args, 1)?;
-                // The argument must be Int unless we are allowing Int/Real subtyping
-                if self.config.allow_int_real_subtyping {
-                    self.check_sort_one_of(&[Sort::Int, Sort::Real], &sorts[0])?;
-                } else {
-                    self.check_sort_eq(&Sort::Int, &sorts[0])?;
-                }
-            }
-            Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
-                assert_num_args(&args, 2..)?;
-                // All the arguments must be either Int or Real sorted, but they don't need to all
-                // have the same sort
-                for s in sorts {
-                    self.check_sort_one_of(&[Sort::Int, Sort::Real], &s)?;
-                }
-            }
-            Operator::ToReal => {
-                assert_num_args(&args, 1)?;
-                // If the logic contains reals but not integers, integer constants are interpreted
-                // as reals, so the argument might have sort Real instead of the expected Int
-                self.check_sort_one_of(&[Sort::Int, Sort::Real], &sorts[0])?;
-            }
-            Operator::ToInt | Operator::IsInt => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Real, &sorts[0])?;
-            }
-            Operator::Select => {
-                assert_num_args(&args, 2)?;
-                self.check_array_sort(Some(&sorts[1]), None, &sorts[0])?;
-            }
-            Operator::Store => {
-                assert_num_args(&args, 3)?;
-                self.check_array_sort(Some(&sorts[1]), Some(&sorts[2]), &sorts[0])?;
-            }
-            Operator::StrConcat => {
-                assert_num_args(&args, 2..)?;
-                for s in sorts {
-                    self.check_sort_eq(&Sort::String, &s)?;
-                }
-            }
-            Operator::StrLen | Operator::StrIsDigit | Operator::StrToCode | Operator::StrToInt => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-            }
-            Operator::StrLessThan
-            | Operator::StrLessEq
-            | Operator::PrefixOf
-            | Operator::SuffixOf
-            | Operator::Contains
-            | Operator::ReRange => {
-                assert_num_args(&args, 2)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::String, &sorts[1])?;
-            }
-            Operator::CharAt => {
-                assert_num_args(&args, 2)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::Int, &sorts[1])?;
-            }
-            Operator::Substring => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::Int, &sorts[1])?;
-                self.check_sort_eq(&Sort::Int, &sorts[2])?;
-            }
-            Operator::IndexOf => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::String, &sorts[1])?;
-                self.check_sort_eq(&Sort::Int, &sorts[2])?;
-            }
-            Operator::IndexOfRe => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::RegLan, &sorts[1])?;
-                self.check_sort_eq(&Sort::Int, &sorts[2])?;
-            }
-            Operator::Replace | Operator::ReplaceAll => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::String, &sorts[1])?;
-                self.check_sort_eq(&Sort::String, &sorts[2])?;
-            }
-            Operator::ReFromAutomaton => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                if let Term::Const(Constant::String(s)) = args[0].as_ref() {
-                    let automata = match parse_automaton(s.trim()) {
-                        Ok((remaining, automata)) => {
-                            if !remaining.is_empty() {
-                                return Err(ParserError::InvalidAutomatonDeclaration(s.clone()));
-                            }
-                            Ok(automata)
-                        }
-                        Err(_) => Err(ParserError::InvalidAutomatonDeclaration(s.clone())),
-                    }?;
-                    return Ok(self
-                        .pool
-                        .add(Term::Const(Constant::RegLan(s.to_owned(), automata))));
-                } else {
-                    return Err(ParserError::ExpectedAnAutomatonDeclaration(args[0].clone()));
-                }
-            }
-            Operator::StrFromCode | Operator::StrFromInt => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-            }
-            Operator::StrToRe => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-            }
-            Operator::StrInRe => {
-                assert_num_args(&args, 2)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::RegLan, &sorts[1])?;
-            }
-            Operator::ReNone | Operator::ReAll | Operator::ReAllChar => {
-                assert_num_args(&args, 0)?;
-            }
-            Operator::ReConcat
-            | Operator::ReUnion
-            | Operator::ReIntersection
-            | Operator::ReDiff => {
-                assert_num_args(&args, 2..)?;
-                for s in sorts {
-                    self.check_sort_eq(&Sort::RegLan, &s)?;
-                }
-            }
-            Operator::ReKleeneClosure
-            | Operator::ReComplement
-            | Operator::ReKleeneCross
-            | Operator::ReOption => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::RegLan, &sorts[0])?;
-            }
-            Operator::ReplaceRe | Operator::ReplaceReAll => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::String, &sorts[0])?;
-                self.check_sort_eq(&Sort::RegLan, &sorts[1])?;
-                self.check_sort_eq(&Sort::String, &sorts[2])?;
-            }
-            Operator::BvNot | Operator::BvNeg => {
-                assert_num_args(&args, 1)?;
-                for s in sorts {
-                    if !s.is_bitvec() {
-                        return Err(ParserError::ExpectedBvSort(s));
-                    }
-                }
-            }
-            Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
-                assert_num_args(&args, 1)?;
-                if !sorts[0].is_bitvec() {
-                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
-                }
-            }
-            Operator::BvBbTerm => {
-                assert_num_args(&args, 1..)?;
-                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
-                self.check_sort_all_eq(&sorts)?;
-            }
-            Operator::BvPBbTerm => {
-                assert_num_args(&args, 1..)?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-                self.check_sort_all_eq(&sorts)?;
-            }
-            Operator::BvConst => {
-                assert_num_args(&args, 2)?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-                self.check_sort_eq(&Sort::Int, &sorts[1])?;
-            }
-            Operator::BvConcat => {
-                assert_num_args(&args, 2..)?;
-                for s in sorts {
-                    if !s.is_bitvec() {
-                        return Err(ParserError::ExpectedBvSort(s));
-                    }
-                }
-            }
-            Operator::Cl => {}
-            Operator::Delete => {
-                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
-                assert_num_args(&args, 1)?;
-            }
-            Operator::BvAdd
-            | Operator::BvMul
-            | Operator::BvAnd
-            | Operator::BvOr
-            | Operator::BvXor => {
-                assert_num_args(&args, 2..)?;
-                if !sorts[0].is_bitvec() {
-                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
-                }
-                self.check_sort_all_eq(&sorts)?;
-            }
-            Operator::BvUDiv
-            | Operator::BvURem
-            | Operator::BvShl
-            | Operator::BvLShr
-            | Operator::BvULt
-            | Operator::BvNAnd
-            | Operator::BvNOr
-            | Operator::BvXNor
-            | Operator::BvComp
-            | Operator::BvSub
-            | Operator::BvSDiv
-            | Operator::BvSRem
-            | Operator::BvSMod
-            | Operator::BvAShr
-            | Operator::BvULe
-            | Operator::BvUGt
-            | Operator::BvUGe
-            | Operator::BvSLt
-            | Operator::BvSLe
-            | Operator::BvSGt
-            | Operator::BvSGe => {
-                assert_num_args(&args, 2)?;
-                if !sorts[0].is_bitvec() {
-                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
-                }
-                self.check_sort_all_eq(&sorts)?;
-            }
-            Operator::BvIte => {
-                assert_num_args(&args, 3)?;
-                self.check_sort_eq(&Sort::BitVec(1), &sorts[0])?;
-                self.check_sort_all_eq(&sorts[1..])?;
-            }
-            Operator::RareList => (),
-            Operator::Pow2 | Operator::Log2 | Operator::IsPow2 => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-            }
-            Operator::RealPi => assert_num_args(&args, 0)?,
-            Operator::Sqrt
-            | Operator::Exp
-            | Operator::Sin
-            | Operator::Cos
-            | Operator::Tan
-            | Operator::Csc
-            | Operator::Sec
-            | Operator::Cot
-            | Operator::Arcsin
-            | Operator::Arccos
-            | Operator::Arctan
-            | Operator::Arccsc
-            | Operator::Arcsec
-            | Operator::Arccot => {
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Real, &sorts[0])?;
-            }
-            Operator::SetUnion | Operator::SetInter | Operator::SetMinus | Operator::SetSubset => {
-                assert_num_args(&args, 2)?;
-                self.check_sort_all_eq(&sorts)?;
-                for sort in sorts {
-                    check_set_sort(&sort)?;
-                }
-            }
-            Operator::SetMember => {
-                assert_num_args(&args, 2)?;
-                let expected = self.pool.add_sort(Sort::Set(sorts[0].clone()));
-                self.check_sort_eq(&expected, &sorts[1])?;
-            }
-            Operator::SetSingleton => {
-                assert_num_args(&args, 1)?;
-            }
-            Operator::SetIsEmpty
-            | Operator::SetIsSingleton
-            | Operator::SetCard
-            | Operator::SetComplement => {
-                assert_num_args(&args, 1)?;
-                check_set_sort(&sorts[0])?;
-            }
-            Operator::SetInsert => {
-                assert_num_args(&args, 2..)?;
-                self.check_sort_all_eq(&sorts[..sorts.len() - 1])?;
-                let expected = self.pool.add_sort(Sort::Set(sorts[0].clone()));
-                self.check_sort_eq(&expected, sorts.last().unwrap())?;
-            }
-            Operator::Tuple => {
-                assert_num_args(&args, 1..)?;
-            }
-            Operator::TupleUnit => {
-                assert_num_args(&args, 0)?;
-            }
-            Operator::RelTranspose => {
-                assert_num_args(&args, 1)?;
-                check_relation_sort(&sorts[0])?;
-            }
-            Operator::RelTclosure => {
-                assert_num_args(&args, 1)?;
-                check_relation_sort(&sorts[0])?;
-                let Sort::Set(tuple) = sorts[0].as_ref() else {
-                    unreachable!()
-                };
-                let Sort::Tuple(elems) = tuple.as_ref() else {
-                    unreachable!()
-                };
-                if elems.len() != 2 {
-                    // Hacky way to print an error saying the relation should be binary
-                    let any = self.pool.add_sort(Sort::Var("?".into()));
-                    let tuple = self.pool.add_sort(Sort::Tuple(vec![any.clone(), any]));
-                    let expected = vec![self.pool.add_sort(Sort::Set(tuple))].into_boxed_slice();
-                    return Err(SortError { expected, got: sorts[0].clone() }.into());
-                }
-            }
-            Operator::RelJoin => {
-                assert_num_args(&args, 2)?;
-                check_relation_sort(&sorts[0])?;
-                check_relation_sort(&sorts[1])?;
-                // TODO: check properly
-            }
-            Operator::RelProduct => {
-                assert_num_args(&args, 2)?;
-                check_relation_sort(&sorts[0])?;
-                check_relation_sort(&sorts[1])?;
-            }
+        if let Some(term) = operators::check_op_types(self, op, &args, &sorts)? {
+            return Ok(term);
         }
         Ok(self.pool.add(Term::Op(op, args)))
     }
@@ -1621,7 +1229,7 @@ impl<'p, 's> Parser<'p, 's> {
                 return if let Some(func) = self.state.function_defs.get(&s) {
                     func.apply(self.pool, Vec::new())
                         .map_err(|err| self.err(err, pos))
-                } else if let Ok(op) = Operator::from_str(&s) {
+                } else if let Some(op) = lookup_operator(&s) {
                     let args = Vec::new();
 
                     self.make_op(op, args).map_err(|err| self.err(err, pos))
@@ -2012,8 +1620,8 @@ impl<'p, 's> Parser<'p, 's> {
             //
             // However, `if let` guards are still nightly only. For more info, see:
             // https://github.com/rust-lang/rust/issues/51114
-            Token::Symbol(s) if Operator::from_str(s).is_ok() => {
-                let operator = Operator::from_str(s).unwrap();
+            Token::Symbol(s) if lookup_operator(s).is_some() => {
+                let operator = lookup_operator(s).unwrap();
                 self.next_token()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
                 self.make_op(operator, args)

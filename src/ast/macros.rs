@@ -101,8 +101,12 @@ macro_rules! build_term {
 ///     assert_eq!(Foo::from_str("d"), Err(()));
 /// }
 /// ```
+// `|$f:ident|` names the formatter so call-site `extra_display` expressions can refer to it.
 macro_rules! impl_str_conversion_traits {
     ($enum_name:ident { $($variant:ident: $str:literal),* $(,)? }) => {
+        impl_str_conversion_traits!($enum_name { $($variant: $str),* }, extra_display: |f| {});
+    };
+    ($enum_name:ident { $($variant:ident: $str:literal),* $(,)? }, extra_display: |$f:ident| { $($extra_pat:pat => $extra_expr:expr),* $(,)? }) => {
         impl std::str::FromStr for $enum_name {
             type Err = ();
 
@@ -115,14 +119,14 @@ macro_rules! impl_str_conversion_traits {
         }
 
         impl std::fmt::Display for $enum_name {
-            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                let s = match self {
-                    $($enum_name::$variant => $str,)*
-                };
-                write!(f, "{}", s)
+            fn fmt(&self, $f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                match self {
+                    $($enum_name::$variant => write!($f, "{}", $str),)*
+                    $($extra_pat => $extra_expr,)*
+                }
             }
         }
-    }
+    };
 }
 
 pub(crate) use {build_term, impl_str_conversion_traits, match_term_err};
