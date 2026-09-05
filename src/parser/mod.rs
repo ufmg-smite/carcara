@@ -1302,12 +1302,13 @@ impl<'p, 's> Parser<'p, 's> {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
 
-            // If the rule is `hole` and `--parse-hole-args` is not enabled, we want to allow any
-            // invalid arguments, so we read the rest of the `:args` attribute without trying to
-            // parse anything
             if rule == "hole" && !self.config.parse_hole_args {
+                let marker = match &self.current_token {
+                    Token::String(marker) => Some(self.pool.add(Term::new_string(marker.clone()))),
+                    _ => None,
+                };
                 self.ignore_until_close_parens()?;
-                Vec::new()
+                marker.into_iter().collect()
             } else {
                 self.parse_sequence(Self::parse_term, true)?
             }
@@ -1834,9 +1835,17 @@ impl<'p, 's> Parser<'p, 's> {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
                 let value = op_args[0].as_integer().unwrap();
-                let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
-                assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
-                assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
+                let width_value = op_args[1].as_integer().unwrap();
+
+                if value < 0 {
+                    return Err(ParserError::WrongValueOfArgs((0..).into(), value));
+                }
+                let width = width_value.to_usize().ok_or_else(|| {
+                    ParserError::WrongValueOfArgs((1..).into(), width_value.clone())
+                })?;
+                if width == 0 {
+                    return Err(ParserError::WrongValueOfArgs((1..).into(), width_value));
+                }
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             ParamOperator::BvExtract => {

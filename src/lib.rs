@@ -69,6 +69,9 @@ use thiserror::Error;
 /// A type alias for a `Result` whose error type is a Carcara error.
 pub type CarcaraResult<T> = Result<T, Error>;
 
+/// Options for validating trusted theory-rewrite holes using RARE and egglog.
+pub use checker::RunEgglogOptions;
+
 /// The result of a checking a proof, if no errors were found. Can be either "valid" or "holey"
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {

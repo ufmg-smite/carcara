@@ -1,10 +1,10 @@
 use carcara::{
-    checker, elaborator,
+    RunEgglogOptions, checker, elaborator,
     external::{ExternalTool, SatTools},
     parser,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 const VERSION_STRING: &str = carcara_macros::version_string!();
 
@@ -198,6 +198,22 @@ pub struct CheckingOptions {
 
     #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
     pub sat_ref_checker: Option<ExternalTool>,
+
+    /// Validate `hole` steps marked as `TRUST_THEORY_REWRITE` using RARE and egglog.
+    #[clap(long)]
+    pub check_hole_rewrites: bool,
+
+    /// Print the egglog program generated for each checked hole rewrite.
+    #[clap(long, requires = "check-hole-rewrites")]
+    pub print_egglog: bool,
+
+    /// Keep running RARE egglog schedules until goals are saturated.
+    #[clap(long = "continuous-saturation", requires = "check-hole-rewrites")]
+    pub continuous_saturation: bool,
+
+    /// Cooperative time budget in milliseconds for each RARE hole rewrite.
+    #[clap(long, requires = "check-hole-rewrites", value_name = "MILLISECONDS")]
+    pub rare_check_timeout: Option<u64>,
 }
 
 #[derive(ValueEnum, Clone)]
@@ -477,6 +493,13 @@ impl IntoConfig for (CheckingOptions, ToolOptions) {
             .allowed_rules(c.allowed_rules.unwrap_or_default())
             .rule_checkers(c.rule_checkers.into_iter().collect())
             .sat_ref_config(sat_ref_config)
+            .check_hole_rewrites(c.check_hole_rewrites)
+            .hole_rewrite_options(RunEgglogOptions {
+                continuous_saturation: c.continuous_saturation,
+                timeout: c.rare_check_timeout.map(Duration::from_millis),
+                print_egglog: c.print_egglog,
+                ..RunEgglogOptions::default()
+            })
     }
 }
 
