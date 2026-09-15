@@ -411,11 +411,12 @@ pub fn get_rule(
         "concat_bwd_propagation" => strings::concat_bwd_propagation,
         "concat_aut_bwd_propagation" => strings::concat_aut_bwd_propagation,
 
-        // RE eval rules
+        // Other String rules
         "str_indexof_re_eval" => strings::str_indexof_re_eval,
         "str_replace_re_eval" => strings::str_replace_re_eval,
         "str_replace_re_all_eval" => strings::str_replace_re_all_eval,
         "str_in_re_eval" => strings::str_in_re_eval,
+        "str_concat_len" => strings::str_concat_len,
 
         // Drup format rules
         "drup" => |x| crate::checker::rules::drup::drup(false, x),

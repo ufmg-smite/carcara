@@ -1540,3 +1540,28 @@ pub fn str_in_re_eval(
 
     Ok(())
 }
+
+pub fn str_concat_len(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
+
+    let premise = get_premise_term(&premises[0])?;
+    let (s1, ts) = match_term_err!((= s1 (strconcat ...)) = premise)?;
+    let (s2, t_lens) = match_term_err!((= (strlen s2) (+ ...)) = &conclusion[0])?;
+
+    assert_eq(s1, s2)?;
+
+    if ts.len() != t_lens.len() {
+        return Err(CheckerError::TermOfWrongForm(
+            "(= (str.len s) (+ (str.len a_1) ... (str.len a_n)))",
+            conclusion[0].clone(),
+        ));
+    }
+
+    for (t1, t2) in std::iter::zip(ts, t_lens) {
+        let inner = match_term_err!((strlen inner) = t2)?;
+        assert_eq(t1, inner)?;
+    }
+
+    Ok(())
+}
