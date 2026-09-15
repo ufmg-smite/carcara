@@ -1178,7 +1178,6 @@ pub fn re_empty_intersection(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResul
     let a1 = a1.as_automaton_err()?;
     let a2 = a2.as_automaton_err()?;
 
-    // Short circuit
     if !has_reachable_accepting_state(&a1) || !has_reachable_accepting_state(&a2) {
         return Ok(());
     }
@@ -1194,40 +1193,62 @@ pub fn re_empty_intersection(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResul
     Ok(())
 }
 
-// TODO: implementar short circuit aqui também (qualquer autômato que não aceita nenhuma cadeia
-// torna a interseção vazia, basta comparar se a conclusão é vazia também)
 pub fn re_intersection(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 2..)?;
     assert_clause_len(conclusion, 1)?;
 
-    let mut ws: Vec<Rc<Term>> = Vec::new();
-    let mut premise_automatas: Vec<Automaton> = Vec::new();
+    let (w_conc, conc_automaton) = match_term_err!(
+        (strinre w a) = &conclusion[0]
+    )?;
+    let conc_automaton = conc_automaton.as_automaton_err()?;
+
+    let mut has_empty_premise = false;
+    let mut premise_automatas: Vec<Automaton> = Vec::with_capacity(premises.len());
 
     for premise in premises {
         let term = get_premise_term(premise)?;
         let (w, a) = match_term_err!((strinre w a1) = term)?;
-        ws.push(w.clone());
-        premise_automatas.push(Automaton::determinize(&a.as_automaton_err()?));
+        assert_eq(w, w_conc)?;
+
+        let a = a.as_automaton_err()?;
+        if !has_reachable_accepting_state(&a) {
+            has_empty_premise = true;
+        }
+
+        if !has_empty_premise {
+            premise_automatas.push(a);
+        }
     }
 
-    let (w_conc, conc_automaton) = match_term_err!(
-        (strinre w a) = &conclusion[0]
-    )?;
-
-    let mut r = 1;
-    for l in 0..(ws.len() - 1) {
-        assert_eq(&ws[l], &ws[r])?;
-        r += 1;
-    }
-    assert_eq(&ws[r - 1], w_conc)?;
-
-    let mut expected =
-        operations::intersection(premise_automatas[0].clone(), premise_automatas[1].clone())?;
-    for automaton in premise_automatas.iter().skip(2) {
-        expected = operations::intersection(expected, automaton.clone())?;
+    if has_empty_premise {
+        if !has_reachable_accepting_state(&conc_automaton) {
+            return Ok(());
+        } else {
+            let expected = Automaton::empty_automaton();
+            return Err(StringError::ExpectedEquivalentAutomata(
+                expected,
+                Automaton::determinize(&conc_automaton),
+            )
+            .into());
+        }
     }
 
-    let conc_automaton = Automaton::determinize(&conc_automaton.as_automaton_err()?);
+    let mut expected = Automaton::determinize(&premise_automatas[0]);
+    for automaton in &premise_automatas[1..] {
+        let det_a = Automaton::determinize(automaton);
+        expected = operations::intersection(expected, det_a)?;
+        if !has_reachable_accepting_state(&expected) {
+            break;
+        }
+    }
+
+    let conc_is_empty = !has_reachable_accepting_state(&conc_automaton);
+    let expected_is_empty = !has_reachable_accepting_state(&expected);
+    if conc_is_empty && expected_is_empty {
+        return Ok(());
+    }
+
+    let conc_automaton = Automaton::determinize(&conc_automaton);
     if !operations::is_equivalent(expected.clone(), conc_automaton.clone()) {
         return Err(StringError::ExpectedEquivalentAutomata(expected, conc_automaton).into());
     }
