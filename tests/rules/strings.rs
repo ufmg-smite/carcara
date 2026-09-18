@@ -1663,13 +1663,25 @@ fn str_replace_re_eval() {
     test_cases! {
         definitions = "
             (declare-fun a () String)
-            (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc123def456" (str.to_re "123") "xyz") "abcxyzdef456")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc123def456" (re.+ (re.range "0" "9")) "xyz") "abcxyz23def456")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc" (str.to_re "z") "x") "abc")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc" (re.* (str.to_re "z")) "x") "xabc")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "" (str.to_re "a") "x") "")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "" (re.* (str.to_re "a")) "x") "x")) :rule str_replace_re_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "ababa")) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re "abc" (str.to_re "z") "x") "xabc")) :rule str_replace_re_eval)"#: false,
+            r#"(assume h1 (= a "ababa"))
+               (step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba")) :rule str_replace_re_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (not (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba"))) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba") false) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re a (str.to_re "a") "c") "cbaba")) :rule str_replace_re_eval)"#: false,
         }
     }
 }
@@ -1679,13 +1691,22 @@ fn str_replace_re_all_eval() {
     test_cases! {
         definitions = "
             (declare-fun a () String)
-            (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "a1b2c3" (re.range "0" "9") "x") "axbxcx")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "abc def abc" (str.to_re "abc") "xyz") "xyz def xyz")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "abc" (str.to_re "z") "x") "abc")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "" (str.to_re "a") "x") "")) :rule str_replace_re_all_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbaba")) :rule str_replace_re_all_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "ababa")) :rule str_replace_re_all_eval)"#: false,
+            r#"(assume h1 (= a "ababa"))
+               (step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_all_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (not (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc"))) :rule str_replace_re_all_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc") false) :rule str_replace_re_all_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re_all a (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_all_eval)"#: false,
         }
     }
 }
@@ -1695,13 +1716,25 @@ fn str_in_re_eval() {
     test_cases! {
         definitions = "
             (declare-fun a () String)
-            (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" (re.+ (re.range "0" "9"))) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "" (re.* (str.to_re "a"))) true)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "" (re.+ (str.to_re "a"))) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" (re.union (str.to_re "abc") (str.to_re "def"))) true)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "xyz" (re.union (str.to_re "abc") (str.to_re "def"))) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" re.none) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" re.all) true)) :rule str_in_re_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.in_re "abc" (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) false)) :rule str_in_re_eval)"#: false,
+            r#"(assume h1 (= a "123"))
+               (step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (str.in_re "123" (re.+ (re.range "0" "9")))) :rule str_in_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) true) false) :rule str_in_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.in_re a (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval)"#: false,
         }
     }
 }
@@ -1711,13 +1744,26 @@ fn str_indexof_re_eval() {
     test_cases! {
         definitions = "
             (declare-fun a () String)
-            (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 6) 9)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 4) 4)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abcdef" (re.+ (re.range "0" "9")) 0) (- 1))) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (re.* (str.to_re "b")) 1) 1)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (str.to_re "c") 3) (- 1))) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (re.* (str.to_re "c")) 3) 3)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (str.to_re "a") 10) (- 1))) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (str.to_re "a") (- 1)) (- 1))) :rule str_indexof_re_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 2)) :rule str_indexof_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.indexof_re "abcdef" (re.+ (re.range "0" "9")) 0) 0)) :rule str_indexof_re_eval)"#: false,
+            r#"(assume h1 (= a "abc123def456"))
+               (step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3)) :rule str_indexof_re_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (not (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3))) :rule str_indexof_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3) false) :rule str_indexof_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.indexof_re a (re.+ (re.range "0" "9")) 0) 3)) :rule str_indexof_re_eval)"#: false,
         }
     }
 }
