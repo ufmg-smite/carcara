@@ -179,6 +179,7 @@ impl<'e> Elaborator<'e> {
                 "subproof" => polyeq::subproof::subproof,
                 "ite_intro" => polyeq::tautology::ite_intro,
                 "bfun_elim" => polyeq::clausification::bfun_elim,
+                "distinct_elim" => polyeq::clausification::distinct_elim,
                 _ => return None,
             })
         }
