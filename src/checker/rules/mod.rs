@@ -29,6 +29,11 @@ pub struct RuleArgs<'a> {
     pub(super) discharge: &'a [&'a ProofCommand],
 
     pub(super) polyeq_time: &'a mut Duration,
+
+    // Automatons built from regex terms by the regex-eval rules, cached across steps: proofs
+    // commonly apply many such steps to the same (hash-consed) regex.
+    pub(super) automata_cache:
+        &'a mut indexmap::IndexMap<Rc<Term>, std::sync::Arc<crate::automata::Automaton>>,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]

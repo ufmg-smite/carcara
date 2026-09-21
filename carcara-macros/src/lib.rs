@@ -345,6 +345,9 @@ fn op_to_variant(op: &str) -> TokenStream2 {
         "strlen" => quote! { crate::ast::Operator::StrLen },
         "strinre" => quote! { crate::ast::Operator::StrInRe },
         "reinter" => quote! { crate::ast::Operator::ReIntersection },
+        "replacere" => quote! { crate::ast::Operator::ReplaceRe },
+        "replacereall" => quote! { crate::ast::Operator::ReplaceReAll },
+        "indexofre" => quote! { crate::ast::Operator::IndexOfRe },
 
         // Arrays
         "select" => quote! { crate::ast::Operator::Select },

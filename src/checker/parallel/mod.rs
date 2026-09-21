@@ -35,6 +35,7 @@ pub struct ParallelProofChecker<'c> {
     reached_empty_clause: bool,
     is_holey: bool,
     stack_size: usize,
+    automata_cache: indexmap::IndexMap<Rc<Term>, std::sync::Arc<crate::automata::Automaton>>,
     rare_rules: Rules,
 }
 
@@ -58,6 +59,7 @@ impl<'c> ParallelProofChecker<'c> {
             reached_empty_clause: false,
             is_holey: false,
             stack_size,
+            automata_cache: indexmap::IndexMap::new(),
             rare_rules,
         }
     }
@@ -72,6 +74,7 @@ impl<'c> ParallelProofChecker<'c> {
             reached_empty_clause: false,
             is_holey: false,
             stack_size: self.stack_size,
+            automata_cache: indexmap::IndexMap::new(),
             rare_rules: self.rare_rules.clone(),
         }
     }
@@ -421,6 +424,7 @@ impl<'c> ParallelProofChecker<'c> {
             previous_command,
             discharge: &discharge,
             polyeq_time: &mut polyeq_time,
+            automata_cache: &mut self.automata_cache,
             rare_rules: &self.rare_rules,
         };
 

@@ -1196,7 +1196,7 @@ impl Term {
         }
     }
 
-    /// Tries to extract a `String` from a term. Returns `Some` if the term is a string constant.
+    /// Tries to extract a `String` from a term. Returns `Some` if the term is a String constant.
     pub fn as_string(&self) -> Option<String> {
         match self {
             Term::Const(Constant::String(s)) => Some(s.to_owned()),
@@ -1280,6 +1280,14 @@ impl Term {
         }
     }
 
+    /// Tries to unwrap an [`Automaton`] from a term. Returns `None` if the term is not a `RegLan` term.
+    pub fn as_automaton(&self) -> Option<Automaton> {
+        match self {
+            Term::Const(Constant::RegLan(_, a)) => Some(a.clone()),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if the term is the boolean constant `true`.
     pub fn is_bool_true(&self) -> bool {
         *self == Term::Op(Operator::True, Vec::new())
@@ -1348,6 +1356,12 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedAnyInteger(self.clone()))
     }
 
+    /// Similar to `Term::as_signed_integer`, but returns a `CheckerError` on failure.
+    pub fn as_signed_integer_err(&self) -> Result<Integer, CheckerError> {
+        self.as_signed_integer()
+            .ok_or_else(|| CheckerError::ExpectedAnyInteger(self.clone()))
+    }
+
     /// Similar to `Term::as_integer_err`, but also checks if non-negative.
     pub fn as_usize_err(&self) -> Result<usize, CheckerError> {
         if let Some(i) = self.as_integer()
@@ -1368,6 +1382,12 @@ impl Rc<Term> {
     pub fn as_bitvector_err(&self) -> Result<(Integer, usize), CheckerError> {
         self.as_bitvector()
             .ok_or_else(|| CheckerError::ExpectedBitvector(self.clone()))
+    }
+
+    /// Similar to `Term::as_string`, but returns a `CheckerError` on failure.
+    pub fn as_string_err(&self) -> Result<String, CheckerError> {
+        self.as_string()
+            .ok_or_else(|| CheckerError::ExpectedAnyString(self.clone()))
     }
 
     /// Similar to `Term::as_fraction`, but returns a `CheckerError` on failure.
@@ -1408,6 +1428,12 @@ impl Rc<Term> {
     pub fn as_let_err(&self) -> Result<(&BindingList<Rc<Term>>, &Rc<Term>), CheckerError> {
         self.as_let()
             .ok_or_else(|| CheckerError::ExpectedLetTerm(self.clone()))
+    }
+
+    /// Similar to `Term::as_automaton`, but returns a `CheckerError` on failure.
+    pub fn as_automaton_err(&self) -> Result<Automaton, CheckerError> {
+        self.as_automaton()
+            .ok_or_else(|| CheckerError::ExpectedAutomaton(self.clone()))
     }
 }
 

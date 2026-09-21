@@ -1560,3 +1560,396 @@ fn re_concat_unfold_pos() {
         }
     }
 }
+
+// TODO: add test cases for all rules
+#[test]
+fn re_convert() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_convert)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "ab"))) (str.in_re a (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_convert)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.* (str.to_re "a")))) (str.in_re a (re.from_automaton "automaton aut_astar { init s0; s0 -> s0 [97, 97]; accepting s0; };"))) :rule re_convert)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };"))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re b (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (str.in_re a (str.to_re "a")) (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re a (str.to_re "a"))) :rule re_convert)"#: false,
+        }
+    }
+}
+
+#[test]
+fn re_empty_intersection() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule re_empty_intersection)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_digit { init s0; s0 -> s1 [48, 57]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_alpha { init s0; s0 -> s1 [97, 122]; accepting s1; };")))) :rule re_empty_intersection)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_aa { init s0; s0 -> s1 [97, 97]; s1 -> s2 [97, 97]; accepting s2; };")))) :rule re_empty_intersection)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_empty { init s0; s1 -> s2 [97, 97]; accepting s2; };"))) (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_empty_intersection)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a1 { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_a2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_empty_intersection)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule re_empty_intersection)"#: false,
+            r#"(step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (not (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule re_empty_intersection)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (not (str.in_re a (str.to_re "b")))) :rule re_empty_intersection)"#: false,
+        }
+    }
+}
+
+#[test]
+fn re_intersection() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_inter { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_empty { init s0; s1 -> s2 [97, 97]; accepting s2; };"))) :rule re_intersection :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h3 (str.in_re a (re.from_automaton "automaton aut_a3 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_inter { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2 h3))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (assume h3 (str.in_re a (re.from_automaton "automaton aut_c { init s0; s0 -> s1 [99, 99]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_empty { init s0; s1 -> s2 [97, 97]; accepting s2; };"))) :rule re_intersection :premises (h1 h2 h3))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_intersection :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")) false) :rule re_intersection :premises (h1 h2))"#: false,
+        }
+    }
+}
+
+#[test]
+fn re_forward_prop() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+            (declare-fun b () String)
+            (declare-fun c () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b) (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (assume h3 (str.in_re c (re.from_automaton "automaton aut_c { init s0; s0 -> s1 [99, 99]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b c) (re.from_automaton "automaton aut_abc { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; s2 -> s3 [99, 99]; accepting s3; };"))) :rule re_forward_prop :premises (h1 h2 h3))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ b a) (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b c) (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_forward_prop :premises (h1))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b) (re.from_automaton "automaton aut_ba { init s0; s0 -> s1 [98, 98]; s1 -> s2 [97, 97]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+        }
+    }
+}
+
+#[test]
+fn concat_bwd_propagation() {
+    test_cases! {
+        definitions = "
+            (declare-fun x () String)
+            (declare-fun a () String)
+            (declare-fun b () String)
+            (declare-fun c () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (re.+ (str.to_re "a"))))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (re.* (str.to_re "a"))))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b"))) (and (str.in_re a (str.to_re "ab")) (str.in_re b (str.to_re "")))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (= x (str.++ a b c)))
+               (assume h2 (str.in_re x (str.to_re "abc")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")) (str.in_re c (str.to_re "c")))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "x")) (str.in_re b (str.to_re "y")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")) (str.in_re c (str.to_re "c")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re b (str.to_re "a")) (str.in_re a (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (str.to_re "ab")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re a (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+        }
+    }
+}
+
+#[test]
+fn concat_aut_bwd_propagation() {
+    test_cases! {
+        definitions = "
+            (declare-fun x () String)
+            (declare-fun a () String)
+            (declare-fun b () String)
+            (declare-fun c () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 98]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b c)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re c (re.from_automaton "automaton aut_sub3 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 98]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [98, 98]; accepting s1; };"))) (and (str.in_re a (re.from_automaton "automaton aut_sub3 { init s0; s0 -> s1 [98, 98]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub4 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [98, 98]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re c (re.from_automaton "automaton aut_sub3 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= a (str.++ b c)))
+               (step t1 (cl (and (str.in_re b (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re c (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (str.to_re "a")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+        }
+    }
+}
+
+#[test]
+fn str_replace_re_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+        ",
+        "Simple working examples" {
+            r#"(step t1 (cl (= (str.replace_re "abc123def456" (str.to_re "123") "xyz") "abcxyzdef456")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc123def456" (re.+ (re.range "0" "9")) "xyz") "abcxyz23def456")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc" (str.to_re "z") "x") "abc")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "abc" (re.* (str.to_re "z")) "x") "xabc")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "" (str.to_re "a") "x") "")) :rule str_replace_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re "" (re.* (str.to_re "a")) "x") "x")) :rule str_replace_re_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "ababa")) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re "abc" (str.to_re "z") "x") "xabc")) :rule str_replace_re_eval)"#: false,
+            r#"(assume h1 (= a "ababa"))
+               (step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba")) :rule str_replace_re_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (not (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba"))) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re "ababa" (str.to_re "a") "c") "cbaba") false) :rule str_replace_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re a (str.to_re "a") "c") "cbaba")) :rule str_replace_re_eval)"#: false,
+        }
+    }
+}
+
+#[test]
+fn str_replace_re_all_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+        ",
+        "Simple working examples" {
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "a1b2c3" (re.range "0" "9") "x") "axbxcx")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "abc def abc" (str.to_re "abc") "xyz") "xyz def xyz")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "abc" (str.to_re "z") "x") "abc")) :rule str_replace_re_all_eval)"#: true,
+            r#"(step t1 (cl (= (str.replace_re_all "" (str.to_re "a") "x") "")) :rule str_replace_re_all_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbaba")) :rule str_replace_re_all_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "ababa")) :rule str_replace_re_all_eval)"#: false,
+            r#"(assume h1 (= a "ababa"))
+               (step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_all_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (not (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc"))) :rule str_replace_re_all_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re_all "ababa" (str.to_re "a") "c") "cbcbc") false) :rule str_replace_re_all_eval)"#: false,
+            r#"(step t1 (cl (= (str.replace_re_all a (str.to_re "a") "c") "cbcbc")) :rule str_replace_re_all_eval)"#: false,
+        }
+    }
+}
+
+#[test]
+fn str_in_re_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+        ",
+        "Simple working examples" {
+            r#"(step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" (re.+ (re.range "0" "9"))) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "" (re.* (str.to_re "a"))) true)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "" (re.+ (str.to_re "a"))) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" (re.union (str.to_re "abc") (str.to_re "def"))) true)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "xyz" (re.union (str.to_re "abc") (str.to_re "def"))) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" re.none) false)) :rule str_in_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.in_re "abc" re.all) true)) :rule str_in_re_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.in_re "abc" (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) false)) :rule str_in_re_eval)"#: false,
+            r#"(assume h1 (= a "123"))
+               (step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (str.in_re "123" (re.+ (re.range "0" "9")))) :rule str_in_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.in_re "123" (re.+ (re.range "0" "9"))) true) false) :rule str_in_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.in_re a (re.+ (re.range "0" "9"))) true)) :rule str_in_re_eval)"#: false,
+        }
+    }
+}
+
+#[test]
+fn str_indexof_re_eval() {
+    test_cases! {
+        definitions = "
+            (declare-fun a () String)
+        ",
+        "Simple working examples" {
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 6) 9)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 4) 4)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abcdef" (re.+ (re.range "0" "9")) 0) (- 1))) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (re.* (str.to_re "b")) 1) 1)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (str.to_re "c") 3) (- 1))) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (re.* (str.to_re "c")) 3) 3)) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (str.to_re "a") 10) (- 1))) :rule str_indexof_re_eval)"#: true,
+            r#"(step t1 (cl (= (str.indexof_re "abc" (str.to_re "a") (- 1)) (- 1))) :rule str_indexof_re_eval)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 2)) :rule str_indexof_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.indexof_re "abcdef" (re.+ (re.range "0" "9")) 0) 0)) :rule str_indexof_re_eval)"#: false,
+            r#"(assume h1 (= a "abc123def456"))
+               (step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3)) :rule str_indexof_re_eval :premises (h1))"#: false,
+            r#"(step t1 (cl (not (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3))) :rule str_indexof_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.indexof_re "abc123def456" (re.+ (re.range "0" "9")) 0) 3) false) :rule str_indexof_re_eval)"#: false,
+            r#"(step t1 (cl (= (str.indexof_re a (re.+ (re.range "0" "9")) 0) 3)) :rule str_indexof_re_eval)"#: false,
+        }
+    }
+}
+
+#[test]
+fn str_concat_len() {
+    test_cases! {
+        definitions = "
+            (declare-fun s () String)
+            (declare-fun a () String)
+            (declare-fun b () String)
+            (declare-fun c () String)
+            (declare-fun d () String)
+        ",
+        "Simple working examples" {
+            r#"(assume h1 (= s (str.++ a b)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b)))) :rule str_concat_len :premises (h1))"#: true,
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: true,
+            r#"(assume h1 (= s (str.++ a b c d)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b) (str.len c) (str.len d)))) :rule str_concat_len :premises (h1))"#: true,
+            r#"(assume h1 (= s (str.++ a "xyz" b)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len "xyz") (str.len b)))) :rule str_concat_len :premises (h1))"#: true,
+        }
+        "Switched sides in premise or conclusion" {
+            r#"(assume h1 (= (str.++ a b c) s))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (+ (str.len a) (str.len b) (str.len c)) (str.len s))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Mismatched string variable" {
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len d) (+ (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Mismatched number of terms" {
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b)))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s (str.++ a b)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Wrong order or wrong terms in summation" {
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len s) (+ (str.len b) (str.len a) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len d) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Non-strlen operand in summation" {
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) 0 (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s (str.++ a b)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) 1))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Premise is not an equality or not a concatenation" {
+            r#"(assume h1 (not (= s (str.++ a b c))))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s a))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b)))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Conclusion is not an equality or not a summation" {
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (not (= (str.len s) (+ (str.len a) (str.len b) (str.len c))))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= (str.len s) (* (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+            r#"(assume h1 (= s (str.++ a b c)))
+               (step t1 (cl (= 0 (+ (str.len a) (str.len b) (str.len c)))) :rule str_concat_len :premises (h1))"#: false,
+        }
+        "Wrong number of premises or conclusion clauses" {
+            r#"(step t1 (cl (= (str.len s) (+ (str.len a) (str.len b)))) :rule str_concat_len)"#: false,
+            r#"(assume h1 (= s (str.++ a b)))
+               (assume h2 (= s (str.++ a b)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b)))) :rule str_concat_len :premises (h1 h2))"#: false,
+            r#"(assume h1 (= s (str.++ a b)))
+               (step t1 (cl (= (str.len s) (+ (str.len a) (str.len b))) false) :rule str_concat_len :premises (h1))"#: false,
+        }
+    }
+}
+
