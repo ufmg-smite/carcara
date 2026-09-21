@@ -79,6 +79,36 @@ pub enum SatRefConfig {
     Sat(SatTools),
 }
 
+/// Options for validating trusted theory-rewrite holes using RARE and egglog.
+///
+/// The checker integration is added by the accompanying RARE engine change; these options are
+/// defined here so command-line configuration has a stable, engine-independent API.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RunEgglogOptions {
+    /// Maximum number of goal-schedule rounds to execute for a proof step.
+    pub max_goal_schedule_rounds: usize,
+
+    /// Run schedules until goals are saturated instead of using the fixed round count.
+    pub continuous_saturation: bool,
+
+    /// Cooperative wall-clock budget for a proof step.
+    pub timeout: Option<Duration>,
+
+    /// Print the generated egglog program for each checked proof step.
+    pub print_egglog: bool,
+}
+
+impl Default for RunEgglogOptions {
+    fn default() -> Self {
+        Self {
+            max_goal_schedule_rounds: 3,
+            continuous_saturation: false,
+            timeout: None,
+            print_egglog: false,
+        }
+    }
+}
+
 /// Configuration options for the proof checker.
 #[derive(Debug, Default, Clone, GenerateSetters)]
 pub struct Config {
@@ -108,6 +138,12 @@ pub struct Config {
 
     /// The configuration for checking `sat_refutation` steps. See [`SatRefConfig`].
     sat_ref_config: SatRefConfig,
+
+    /// Whether to validate trusted theory-rewrite holes using RARE and egglog.
+    check_hole_rewrites: bool,
+
+    /// Options that will control egglog checks of trusted theory rewrites.
+    hole_rewrite_options: RunEgglogOptions,
 }
 
 impl Config {
