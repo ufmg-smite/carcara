@@ -145,3 +145,38 @@ fn bfun_elim() {
         }
     }
 }
+
+#[test]
+fn distinct_elim_orientation() {
+    test_cases! {
+        pipeline = Polyeq,
+        problem =  "
+            (declare-const a Int)
+            (declare-const b Int)
+            (declare-const c Int)
+        ",
+        "One pair flipped: the step is elaborated and the original conclusion is rederived" {
+            "(step t1 (cl (= (distinct a b c)
+                             (and (not (= a b)) (not (= c a)) (not (= b c))))) :rule distinct_elim)"
+            ->
+            "(step t1.t1 (cl (= (distinct a b c)
+                                (and (not (= a b)) (not (= a c)) (not (= b c))))) :rule distinct_elim)
+            (step t1.t2 (cl (= (= a c) (= c a))) :rule eq_symmetric)
+            (step t1.t3 (cl (= (not (= a c)) (not (= c a)))) :rule cong :premises (t1.t2))
+            (step t1.t4 (cl (= (and (not (= a b)) (not (= a c)) (not (= b c)))
+                               (and (not (= a b)) (not (= c a)) (not (= b c))))) :rule cong
+                               :premises (t1.t3))
+            (step t1 (cl (= (distinct a b c)
+                            (and (not (= a b)) (not (= c a)) (not (= b c))))) :rule trans
+                            :premises (t1.t1 t1.t4))",
+        }
+        "Binary distinct, flipped" {
+            "(step t1 (cl (= (distinct a b) (not (= b a)))) :rule distinct_elim)"
+            ->
+            "(step t1.t1 (cl (= (distinct a b) (not (= a b)))) :rule distinct_elim)
+            (step t1.t2 (cl (= (= a b) (= b a))) :rule eq_symmetric)
+            (step t1.t3 (cl (= (not (= a b)) (not (= b a)))) :rule cong :premises (t1.t2))
+            (step t1 (cl (= (distinct a b) (not (= b a)))) :rule trans :premises (t1.t1 t1.t3))",
+        }
+    }
+}
