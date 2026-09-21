@@ -1570,10 +1570,16 @@ fn re_convert() {
             (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_convert)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "ab"))) (str.in_re a (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_convert)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.* (str.to_re "a")))) (str.in_re a (re.from_automaton "automaton aut_astar { init s0; s0 -> s0 [97, 97]; accepting s0; };"))) :rule re_convert)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };"))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re b (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (str.in_re a (str.to_re "a")) (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_convert)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (str.in_re a (str.to_re "a"))) :rule re_convert)"#: false,
         }
     }
 }
@@ -1586,10 +1592,16 @@ fn re_empty_intersection() {
             (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule re_empty_intersection)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_digit { init s0; s0 -> s1 [48, 57]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_alpha { init s0; s0 -> s1 [97, 122]; accepting s1; };")))) :rule re_empty_intersection)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_aa { init s0; s0 -> s1 [97, 97]; s1 -> s2 [97, 97]; accepting s2; };")))) :rule re_empty_intersection)"#: true,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_empty { init s0; s1 -> s2 [97, 97]; accepting s2; };"))) (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_empty_intersection)"#: true,
+        }
+        "Failing examples" {
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a1 { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re a (re.from_automaton "automaton aut_a2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_empty_intersection)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) (not (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule re_empty_intersection)"#: false,
+            r#"(step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (not (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule re_empty_intersection)"#: false,
+            r#"(step t1 (cl (not (str.in_re a (str.to_re "a"))) (not (str.in_re a (str.to_re "b")))) :rule re_empty_intersection)"#: false,
         }
     }
 }
@@ -1602,10 +1614,36 @@ fn re_intersection() {
             (declare-fun b () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_inter { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_empty { init s0; s1 -> s2 [97, 97]; accepting s2; };"))) :rule re_intersection :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h3 (str.in_re a (re.from_automaton "automaton aut_a3 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_inter { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2 h3))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (assume h3 (str.in_re a (re.from_automaton "automaton aut_c { init s0; s0 -> s1 [99, 99]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_empty { init s0; s1 -> s2 [97, 97]; accepting s2; };"))) :rule re_intersection :premises (h1 h2 h3))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_intersection :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (not (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule re_intersection :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")) false) :rule re_intersection :premises (h1 h2))"#: false,
         }
     }
 }
@@ -1616,12 +1654,32 @@ fn re_forward_prop() {
         definitions = "
             (declare-fun a () String)
             (declare-fun b () String)
+            (declare-fun c () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b) (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (assume h3 (str.in_re c (re.from_automaton "automaton aut_c { init s0; s0 -> s1 [99, 99]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b c) (re.from_automaton "automaton aut_abc { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; s2 -> s3 [99, 99]; accepting s3; };"))) :rule re_forward_prop :premises (h1 h2 h3))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ b a) (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b c) (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };"))) :rule re_forward_prop :premises (h1))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re (str.++ a b) (re.from_automaton "automaton aut_ba { init s0; s0 -> s1 [98, 98]; s1 -> s2 [97, 97]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re a (re.from_automaton "automaton aut_a { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (str.in_re b (re.from_automaton "automaton aut_b { init s0; s0 -> s1 [98, 98]; accepting s1; };")))
+               (step t1 (cl (str.in_re a (re.from_automaton "automaton aut_ab { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };"))) :rule re_forward_prop :premises (h1 h2))"#: false,
         }
     }
 }
@@ -1630,14 +1688,41 @@ fn re_forward_prop() {
 fn concat_bwd_propagation() {
     test_cases! {
         definitions = "
+            (declare-fun x () String)
             (declare-fun a () String)
             (declare-fun b () String)
+            (declare-fun c () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (re.+ (str.to_re "a"))))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (re.* (str.to_re "a"))))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b"))) (and (str.in_re a (str.to_re "ab")) (str.in_re b (str.to_re "")))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (= x (str.++ a b c)))
+               (assume h2 (str.in_re x (str.to_re "abc")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")) (str.in_re c (str.to_re "c")))) :rule concat_bwd_propagation :premises (h1 h2))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "x")) (str.in_re b (str.to_re "y")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")) (str.in_re c (str.to_re "c")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re b (str.to_re "a")) (str.in_re a (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (str.to_re "ab")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re a (str.to_re "ab")))
+               (step t1 (cl (and (str.in_re a (str.to_re "a")) (str.in_re b (str.to_re "b")))) :rule concat_bwd_propagation :premises (h1 h2))"#: false,
         }
     }
 }
@@ -1646,14 +1731,41 @@ fn concat_bwd_propagation() {
 fn concat_aut_bwd_propagation() {
     test_cases! {
         definitions = "
+            (declare-fun x () String)
             (declare-fun a () String)
             (declare-fun b () String)
+            (declare-fun c () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; s1 -> s2 [98, 98]; accepting s2; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 98]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [98, 98]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b c)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re c (re.from_automaton "automaton aut_sub3 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 98]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [98, 98]; accepting s1; };"))) (and (str.in_re a (re.from_automaton "automaton aut_sub3 { init s0; s0 -> s1 [98, 98]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub4 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: true,
+        }
+        "Failing examples" {
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [98, 98]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re c (re.from_automaton "automaton aut_sub3 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (= x (str.++ a b)))
+               (assume h2 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (re.from_automaton "automaton aut_main { init s0; s0 -> s1 [97, 97]; accepting s1; };")))
+               (assume h2 (= a (str.++ b c)))
+               (step t1 (cl (and (str.in_re b (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re c (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
+            r#"(assume h1 (str.in_re x (str.to_re "a")))
+               (assume h2 (= x (str.++ a b)))
+               (step t1 (cl (and (str.in_re a (re.from_automaton "automaton aut_sub1 { init s0; s0 -> s1 [97, 97]; accepting s1; };")) (str.in_re b (re.from_automaton "automaton aut_sub2 { init s0; s0 -> s1 [97, 97]; accepting s1; };")))) :rule concat_aut_bwd_propagation :premises (h1 h2))"#: false,
         }
     }
 }

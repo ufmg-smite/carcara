@@ -1299,7 +1299,13 @@ pub fn concat_bwd_propagation(RuleArgs { premises, conclusion, pool, .. }: RuleA
 
     for and_term in conclusion {
         let ands = match_term_err!((and ...) = and_term)?;
-        assert_eq!(&ws.len(), &ands.len());
+        if ws.len() != ands.len() {
+            return Err(StringError::ConcatTermsNumberDiffersFromPremiseTermsNumber(
+                ws.len(),
+                ands.len(),
+            )
+            .into());
+        }
 
         let mut automata = Vec::new();
         for (idx, term) in ands.iter().enumerate() {
@@ -1338,7 +1344,13 @@ pub fn concat_aut_bwd_propagation(RuleArgs { premises, conclusion, .. }: RuleArg
 
     for and_term in conclusion {
         let ands = match_term_err!((and ...) = and_term)?;
-        assert_eq!(&ws.len(), &ands.len());
+        if ws.len() != ands.len() {
+            return Err(StringError::ConcatTermsNumberDiffersFromPremiseTermsNumber(
+                ws.len(),
+                ands.len(),
+            )
+            .into());
+        }
 
         for (idx, term) in ands.iter().enumerate() {
             let (w, aut) = match_term_err!((strinre w aut) = term)?;
