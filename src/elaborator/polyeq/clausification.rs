@@ -17,8 +17,8 @@ fn is_flipped(term: &Rc<Term>, a: &Rc<Term>, b: &Rc<Term>) -> bool {
 
 /// The elimination `distinct_elim` specifies, obtained by traversing
 /// `got` alongside the pairs of `args` and rebuilding only the
-/// disequalities that are flipped. If there is nothing to flip back,
-/// so the step needs no elaboration.
+/// disequalities that are flipped. If there isn't any, the function
+/// returns `None`.
 fn canonical_elimination(
     pool: &mut PrimitivePool,
     args: &[Rc<Term>],
