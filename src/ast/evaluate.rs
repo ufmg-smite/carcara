@@ -695,7 +695,8 @@ fn eval_op(pool: &mut dyn TermPool, op: Operator, arg_terms: &[Rc<Term>]) -> Opt
         | Operator::RelTranspose
         | Operator::RelTclosure
         | Operator::RelJoin
-        | Operator::RelProduct => return None,
+        | Operator::RelProduct
+        | Operator::Custom(_) => return None,
     })
 }
 

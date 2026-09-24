@@ -3,6 +3,7 @@
 //! This module also contains various utilities for manipulating Alethe proofs and terms.
 
 mod context;
+mod custom_operator;
 mod evaluate;
 mod iter;
 mod macros;
@@ -20,6 +21,7 @@ mod term;
 #[cfg(test)]
 mod tests;
 
+pub use custom_operator::{CustomOperator, CustomOperatorDef};
 pub use evaluate::Value;
 pub use iter::ProofIter;
 pub use node::{ProofNode, ProofNodeForest, StepNode, SubproofNode};
@@ -36,6 +38,7 @@ pub use term::{
 
 pub(crate) use carcara_macros::match_term;
 pub(crate) use context::ContextStack;
+pub(crate) use custom_operator::lookup_operator;
 pub(crate) use macros::{build_term, impl_str_conversion_traits, match_term_err};
 
 #[cfg(test)]
