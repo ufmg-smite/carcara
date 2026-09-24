@@ -422,7 +422,7 @@ fn custom_check(
             Ok(None)
         }
         Operator::Custom(custom) => {
-            let def = custom.0;
+            let def = custom.def();
             assert_num_args(sorts, def.arg_sorts.len())?;
             for (expected, got) in def.arg_sorts.iter().zip(sorts) {
                 parser.check_sort_eq(expected, got)?;

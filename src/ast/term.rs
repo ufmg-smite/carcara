@@ -981,7 +981,7 @@ impl_str_conversion_traits!(Operator {
     RelJoin: "rel.join",
     RelProduct: "rel.product",
 }, extra_display: |f| {
-    Operator::Custom(op) => write!(f, "{}", op.0.name),
+    Operator::Custom(op) => write!(f, "{}", op.def().name),
 });
 
 impl_str_conversion_traits!(ParamOperator {
