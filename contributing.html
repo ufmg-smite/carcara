@@ -183,7 +183,7 @@
 Federal de Minas Gerais (UFMG), we gladly welcome external contributions.</p>
 <p>If you wish to contribute to the project, please do so by opening a <a href="https://github.com/ufmg-smite/carcara/pulls">pull request via
 GitHub</a>.</p>
-<h2 id="guidelines"><a class="header" href="#guidelines">Guidelines</a></h2>
+<h2 id="code-guidelines"><a class="header" href="#code-guidelines">Code guidelines</a></h2>
 <p>In this project, we use <a href="https://github.com/rust-lang/rust-clippy">Clippy</a> as a linter and
 <a href="https://github.com/rust-lang/rustfmt">Rustfmt</a> for code formatting. If you manage your Rust
 toolchain using Rustup, you can install Clippy and Rustfmt by running:</p>
@@ -195,6 +195,18 @@ guidelines, or <code>cargo clippy</code> to detect possible problems using Clipp
 with Rustfmt. Run <code>cargo test</code> to ensure your changes do not break any existing behaviour.
 Additionally, we strive to support Rust versions as old as 1.93—please refrain from using features
 introduced in newer versions of Rust.</p>
+<h2 id="llm-usage-policy"><a class="header" href="#llm-usage-policy">LLM usage policy</a></h2>
+<p>The usage of LLMs when contributing to Carcara is allowed, with certain limitations. In particular:</p>
+<ol>
+<li>Using LLMs to create code is generally <strong>not</strong> allowed, with the exception of very trivial code
+changes (fixing typos, renaming symbols, etc).</li>
+<li>You <strong>may</strong> use LLMs to analyze code, review, give suggestions, or any other uses where you are the
+only one who sees the output.</li>
+<li>You <strong>may not</strong>  use LLMs to generate text in order to communicate with others. This includes
+in-code comments, documentation, PR or issue descriptions, and commit messages.</li>
+</ol>
+<p>These guidelines are intentionally somewhat vague, and specific cases are left to the maintainers’
+discretion. Above all, we incentivize honestly disclosing your usage, and approaching in good faith.</p>
 
                     </main>
 
