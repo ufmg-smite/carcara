@@ -243,9 +243,11 @@ elaborate these steps into a series of easier-to-check steps. For more details, 
 elaboration chapter</a>.</p>
 <h2 id="parallel-checking"><a class="header" href="#parallel-checking">Parallel checking</a></h2>
 <p>Using the <code>--num-threads</code>/<code>-u</code> option, you can control how many concurrent threads Carcara will use
-to check the proof. If the given value is greater than 1, Carcara will split the proof steps among
-that many worker threads, and check them in parallel. Note that proof parsing, which is oftentimes a
-bottleneck in Carcara, will still be sequential.</p>
+to check the proof. If the given value is greater than 1, Carcara will check the proof’s top-level
+commands in parallel, distributing them between that many worker threads (commands inside a
+subproof are checked together, as a single unit). Each worker uses its own private pool of terms
+that shares the parsed terms with the other workers, so no synchronization is needed between them.
+Note that proof parsing, which is oftentimes a bottleneck in Carcara, will still be sequential.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="checking-rare-rewrites"><a class="header" href="#checking-rare-rewrites">Checking Rare rewrites</a></h1>
 <p>SMT solvers can produce proofs that may depend on rare rules. In general, rare rules have the following format:</p>
 <pre><code>(declare-rare-rule bool-implies-de-morgan ((x1 Bool) (y1 Bool))
