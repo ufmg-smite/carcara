@@ -36,9 +36,7 @@ pub use term::{
 
 pub(crate) use carcara_macros::match_term;
 pub(crate) use context::ContextStack;
-#[cfg(test)]
-pub(crate) use macros::build_sort;
-pub(crate) use macros::{build_term, impl_str_conversion_traits, match_term_err};
+pub(crate) use macros::{build_sort, build_term, impl_str_conversion_traits, match_term_err};
 
 #[cfg(test)]
 pub(crate) use node::compare_forests;

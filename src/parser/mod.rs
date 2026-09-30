@@ -11,7 +11,7 @@ use crate::{
     ast::{
         AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
         Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
-        Subproof, Substitution, Term, build_term,
+        Subproof, Substitution, Term, build_sort, build_term,
         pool::Pool,
         rare_rules::{RareStatements, Rules},
     },
@@ -367,7 +367,7 @@ impl<'p, 's> Parser<'p, 's> {
         value: Option<&Rc<Sort>>,
         got: &Rc<Sort>,
     ) -> Result<(), SortError> {
-        let any = self.pool.add_sort(Sort::Atom("?".into(), Box::new([])));
+        let any = build_sort!(self.pool, (Atom "?"));
 
         let expected = {
             let [key, value] = [key, value].map(|s| s.cloned().unwrap_or_else(|| any.clone()));
@@ -792,9 +792,9 @@ impl<'p, 's> Parser<'p, 's> {
                 };
                 if elems.len() != 2 {
                     // Hacky way to print an error saying the relation should be binary
-                    let any = self.pool.add_sort(Sort::Var("?".into()));
-                    let tuple = self.pool.add_sort(Sort::Tuple(vec![any.clone(), any]));
-                    let expected = vec![self.pool.add_sort(Sort::Set(tuple))].into_boxed_slice();
+                    #[rustfmt::skip] // the `?`s confuse rustfmt
+                    let tuple = build_sort!(self.pool, (Tuple ? ?));
+                    let expected = vec![build_sort!(self.pool, (Set { tuple }))].into_boxed_slice();
                     return Err(SortError { expected, got: sorts[0].clone() }.into());
                 }
             }

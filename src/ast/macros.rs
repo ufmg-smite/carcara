@@ -83,7 +83,6 @@ macro_rules! build_term {
 /// let mut pool = Pool::new();
 /// let s = build_sort!(pool, (par (X) (-> X Int)));
 /// ```
-#[cfg(test)]
 macro_rules! build_sort {
     ($pool:expr, Int) => { $pool.add_sort($crate::ast::Sort::Int) };
     ($pool:expr, Bool) => { $pool.add_sort($crate::ast::Sort::Bool) };
@@ -124,6 +123,9 @@ macro_rules! build_sort {
         $pool.add_sort($crate::ast::Sort::Datatype { name: $name.into(), args })
     }};
     ($pool:expr, {$sort:expr}) => { $sort };
+    ($pool:expr, ?) => {{
+        $pool.add_sort($crate::ast::Sort::Var("?".to_owned()))
+    }};
     ($pool:expr, $var:ident) => {{
         $pool.add_sort($crate::ast::Sort::Var(stringify!($var).to_owned()))
     }};
@@ -185,9 +187,7 @@ macro_rules! impl_str_conversion_traits {
     }
 }
 
-#[cfg(test)]
-pub(crate) use build_sort;
-pub(crate) use {build_term, impl_str_conversion_traits, match_term_err};
+pub(crate) use {build_sort, build_term, impl_str_conversion_traits, match_term_err};
 
 #[cfg(test)]
 mod tests {

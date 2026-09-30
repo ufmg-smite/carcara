@@ -739,7 +739,7 @@ impl fmt::Display for ProblemPrelude {
 mod tests {
     use super::*;
     use crate::{
-        ast::pool::Pool,
+        ast::{build_sort, pool::Pool},
         parser::tests::{parse_proof, parse_terms},
     };
     use std::fmt::Write;
@@ -753,49 +753,28 @@ mod tests {
     #[test]
     fn test_sort_display() {
         let mut pool = Pool::new();
-        let int = pool.add_sort(Sort::Int);
-        let real = pool.add_sort(Sort::Real);
-        let bool_sort = pool.add_sort(Sort::Bool);
 
         let cases = [
-            (Sort::Bool, "Bool"),
-            (Sort::Int, "Int"),
-            (Sort::Real, "Real"),
-            (Sort::String, "String"),
-            (Sort::RegLan, "RegLan"),
-            (Sort::Type, "Type"),
-            (Sort::Atom("T".into(), Box::new([])), "T"),
-            (
-                Sort::Atom("f".into(), Box::new([int.clone(), bool_sort.clone()])),
-                "(f Int Bool)",
-            ),
-            (
-                Sort::Function(vec![int.clone(), real.clone(), bool_sort.clone()]),
-                "(-> Int Real Bool)",
-            ),
-            (Sort::Var("?x".into()), "?x"),
-            (Sort::Array(int.clone(), real.clone()), "(Array Int Real)"),
-            (Sort::BitVec(4), "(_ BitVec 4)"),
-            (Sort::ParamBitVec, "(_ BitVec ?)"),
-            (Sort::Set(int.clone()), "(Set Int)"),
-            (Sort::Tuple(vec![]), "UnitTuple"),
-            (
-                Sort::Tuple(vec![int.clone(), bool_sort.clone()]),
-                "(Tuple Int Bool)",
-            ),
-            (Sort::Par(vec!["X".into()], int.clone()), "(par (X) Int)"),
-            (
-                Sort::Par(vec!["X".into(), "Y".into()], int.clone()),
-                "(par (X Y) Int)",
-            ),
-            (Sort::Datatype { name: "List".into(), args: vec![] }, "List"),
-            (
-                Sort::Datatype {
-                    name: "List".into(),
-                    args: vec![int.clone()],
-                },
-                "(List Int)",
-            ),
+            (build_sort!(pool, Bool), "Bool"),
+            (build_sort!(pool, Int), "Int"),
+            (build_sort!(pool, Real), "Real"),
+            (build_sort!(pool, String), "String"),
+            (build_sort!(pool, RegLan), "RegLan"),
+            (build_sort!(pool, Type), "Type"),
+            (build_sort!(pool, (Atom "T")), "T"),
+            (build_sort!(pool, (Atom "f" Int Bool)), "(f Int Bool)"),
+            (build_sort!(pool, (-> Int Real Bool)), "(-> Int Real Bool)"),
+            (build_sort!(pool, x), "x"),
+            (build_sort!(pool, (Array Int Real)), "(Array Int Real)"),
+            (build_sort!(pool, (BitVec 4)), "(_ BitVec 4)"),
+            (build_sort!(pool, ParamBitVec), "(_ BitVec ?)"),
+            (build_sort!(pool, (Set Int)), "(Set Int)"),
+            (build_sort!(pool, (Tuple)), "UnitTuple"),
+            (build_sort!(pool, (Tuple Int Bool)), "(Tuple Int Bool)"),
+            (build_sort!(pool, (par (X) Int)), "(par (X) Int)"),
+            (build_sort!(pool, (par (X Y) Int)), "(par (X Y) Int)"),
+            (build_sort!(pool, (Datatype "List")), "List"),
+            (build_sort!(pool, (Datatype "List" Int)), "(List Int)"),
         ];
         for (sort, expected) in cases {
             assert_eq!(expected, format!("{}", sort), "sort: {sort:?}");

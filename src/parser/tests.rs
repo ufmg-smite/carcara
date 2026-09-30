@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use super::*;
-use crate::ast::pool::Pool;
+use crate::ast::{build_sort, pool::Pool};
 
 const ERROR_MESSAGE: &str = "parser error during test";
 
@@ -457,7 +457,7 @@ fn test_declare_sort() {
         (declare-fun x () T)",
         ["x"],
     );
-    let expected_sort = p.add_sort(Sort::Atom("T".into(), Box::new([])));
+    let expected_sort = build_sort!(p, (Atom "T"));
     assert_eq!(p.add(Term::new_var("x", expected_sort)), got);
 }
 
@@ -793,8 +793,7 @@ fn test_indexed_operators() {
 fn test_qualified_operators() {
     let mut p = Pool::new();
     let cases = [("((as const (Array Int Real)) 0.0)", {
-        let [int, real] = [Sort::Int, Sort::Real].map(|s| p.add_sort(s));
-        let sort = p.add_sort(Sort::Array(int, real));
+        let sort = build_sort!(p, (Array Int Real));
         Term::AsOp(
             QualifiedOperator::Const,
             sort,
