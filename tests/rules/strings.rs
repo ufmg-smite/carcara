@@ -1561,7 +1561,6 @@ fn re_concat_unfold_pos() {
     }
 }
 
-// TODO: add test cases for all rules
 #[test]
 fn re_convert() {
     test_cases! {
@@ -1952,4 +1951,3 @@ fn str_concat_len() {
         }
     }
 }
-
