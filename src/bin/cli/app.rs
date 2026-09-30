@@ -38,6 +38,10 @@ pub struct Cli {
     /// Don't use sharing when printing terms.
     #[clap(global = true, short = 'v', long)]
     pub no_print_with_sharing: bool,
+
+    /// Print term diffs on error.
+    #[clap(global = true, long = "diff")]
+    pub print_diffs: bool,
 }
 
 #[derive(Subcommand)]
@@ -62,6 +66,9 @@ pub enum Command {
 
     /// Translates an Alethe proof into different formats (Eunoia, TSTP).
     Translate(TranslateCommandOptions),
+
+    /// Compares two terms and prints a readable diff.
+    Diff(DiffCommandOptions),
 }
 
 #[derive(Args)]
@@ -388,6 +395,18 @@ pub struct TranslateCommandOptions {
 
     #[clap(flatten)]
     pub input: Input,
+
+    #[clap(flatten)]
+    pub parsing: ParsingOptions,
+}
+
+#[derive(Args)]
+pub struct DiffCommandOptions {
+    /// The original problem file.
+    pub problem_file: String,
+
+    /// A file containing two terms to be diffed.
+    pub terms_file: String,
 
     #[clap(flatten)]
     pub parsing: ParsingOptions,

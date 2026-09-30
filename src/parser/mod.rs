@@ -55,6 +55,28 @@ impl<'s> Source<'s> {
             })?;
         Ok(Self { name: path, contents: buf })
     }
+
+    /// Constructs a new `Source` by reading the contents of a file, or from stdin if `path` is "-".
+    ///
+    /// Since `Source` does not own its `contents` string, this must take a buffer in which to store
+    /// the file contents.
+    pub fn file_or_stdin(path: &'s Path, buf: &'s mut String) -> CarcaraResult<Self> {
+        use std::io::Read;
+
+        if path == "-" {
+            std::io::stdin()
+                .read_to_string(buf)
+                .map_err(|e| Error::Io { inner: e, file: "<stdin>".into() })?;
+        } else {
+            std::fs::File::open(path)
+                .and_then(|mut f| f.read_to_string(buf))
+                .map_err(|e| Error::Io {
+                    inner: e,
+                    file: path.to_str().unwrap().into(),
+                })?;
+        }
+        Ok(Self { name: path, contents: buf })
+    }
 }
 
 impl<'s> From<&'s str> for Source<'s> {

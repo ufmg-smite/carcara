@@ -1,5 +1,6 @@
 mod app;
 mod benchmarking;
+mod diff;
 mod error;
 mod logger;
 mod path_args;
@@ -41,6 +42,11 @@ fn main() {
                 Ok(s) => println!("{}", s),
                 Err(e) => {
                     log::error!("{}", e);
+                    if cli.print_diffs
+                        && let Some(diff) = diff_from_error(&e)
+                    {
+                        println!("{}", diff)
+                    }
                     println!("invalid");
                     std::process::exit(1);
                 }
@@ -58,9 +64,15 @@ fn main() {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
         Command::Translate(options) => translate_command(options),
+        Command::Diff(options) => diff_command(options).map(|d| println!("{}", d)),
     };
     if let Err(e) = result {
         log::error!("{}", e);
+        if cli.print_diffs
+            && let Some(diff) = diff_from_error(&e)
+        {
+            println!("{}", diff)
+        }
         std::process::exit(1);
     }
 }
@@ -352,4 +364,46 @@ fn translate_2_eunoia_command(
     println!("{}", DisplayEunoiaProof(eunoia_proof));
 
     Ok(())
+}
+
+fn diff_from_error(error: &CliError) -> Option<diff::TermDiff> {
+    use carcara::{
+        checker::error::{CheckerError, EqualityError},
+        elaborator::error::ElaborationError,
+    };
+
+    let error = match error {
+        CliError::CarcaraError(carcara::Error::Checker { inner, .. }) => inner,
+        CliError::CarcaraError(carcara::Error::Elaborator { inner, .. }) => match inner.as_ref() {
+            ElaborationError::Checker(inner) => inner,
+            _ => return None,
+        },
+        _ => return None,
+    };
+
+    match error {
+        CheckerError::ReflexivityFailed(l, r)
+        | CheckerError::SimplificationFailed { result: r, target: l, .. }
+        | CheckerError::TermEquality(EqualityError::ExpectedEqual(l, r))
+        | CheckerError::TermEquality(EqualityError::ExpectedToBe { expected: l, got: r })
+        | CheckerError::RarePremiseAreNotEqual(l, r)
+        | CheckerError::RareConclusionAreNotEqual(l, r) => Some(diff::diff(l, r)),
+        _ => None,
+    }
+}
+
+fn diff_command(options: DiffCommandOptions) -> CliResult<diff::TermDiff> {
+    let mut problem = String::new();
+    let problem = parser::Source::file(options.problem_file.as_ref(), &mut problem)?;
+
+    let mut terms = String::new();
+    let terms = parser::Source::file_or_stdin(options.terms_file.as_ref(), &mut terms)?;
+
+    let mut pool = ast::pool::Pool::new();
+    let mut parser = parser::Parser::new(&mut pool, options.parsing.into_config(), problem)?;
+    let _ = parser.parse_problem()?; // We only parse the problem to get the definitions
+    parser.reset(terms)?;
+    let left = parser.parse_term()?;
+    let right = parser.parse_term()?;
+    Ok(diff::diff(&left, &right))
 }
