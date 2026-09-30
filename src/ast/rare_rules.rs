@@ -43,6 +43,9 @@ pub struct RuleDefinition {
 
     /// The rule's conclusion, given via the `:conclusion` attribute.
     pub conclusion: Rc<Term>,
+
+    /// Whether the rule has already been elaborated for egglog execution.
+    pub is_elaborated: bool,
 }
 
 impl fmt::Display for RuleDefinition {
@@ -110,7 +113,7 @@ pub struct DeclConst {
 }
 
 /// A set of statements parsed from a Rare file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RareStatements {
     /// The rare rules, indexed by their name.
     pub rules: IndexMap<String, RuleDefinition>,
