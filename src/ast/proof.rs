@@ -1,4 +1,4 @@
-use super::{ProofIter, Rc, SortedVar, Term};
+use super::{ProofIter, Rc, Sort, SortedVar, Term};
 use std::path::PathBuf;
 
 /// A proof in the Alethe format.
@@ -6,8 +6,9 @@ use std::path::PathBuf;
 pub struct Proof {
     /// The constants defined in the proof using `define-fun` with arity zero.
     ///
-    /// This is only used to reconstruct these `define-fun`s when printing the proof.
-    pub constant_definitions: Vec<(String, Rc<Term>)>,
+    /// This is only used to reconstruct these `define-fun`s when printing the proof. We also store
+    /// the sort to avoid having to recompute it.
+    pub constant_definitions: Vec<(String, Rc<Term>, Rc<Sort>)>,
 
     /// The proof commands.
     pub commands: Vec<ProofCommand>,

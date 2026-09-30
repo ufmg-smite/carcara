@@ -9,7 +9,7 @@ mod macros;
 mod node;
 mod polyeq;
 pub mod pool;
-pub mod printer;
+pub mod printer; // TODO improve API
 mod problem;
 mod proof;
 pub mod rare_rules;

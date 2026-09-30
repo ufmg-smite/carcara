@@ -1,12 +1,12 @@
 use super::{RuleArgs, RuleResult, assert_eq, assert_num_args};
 use crate::{
-    ast::{Binder, Rc, Sort, Term, build_term, match_term, match_term_err, pool::TermPool},
+    ast::{Binder, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
     checker::{error::CheckerError, rules::cutting_planes::split_summation},
 };
 use rug::Integer;
 
 /// Helper to get the bit width of a bitvector looking into the pool
-fn get_bit_width(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<usize, CheckerError> {
+fn get_bit_width(x: &Rc<Term>, pool: &mut Pool) -> Result<usize, CheckerError> {
     // Get bit width of `x`
     let Sort::BitVec(n) = pool.sort(x).as_ref().clone() else {
         return Err(CheckerError::Explanation(
@@ -17,11 +17,7 @@ fn get_bit_width(x: &Rc<Term>, pool: &mut dyn TermPool) -> Result<usize, Checker
 }
 
 // Helper to check that a summation has the expected shape
-fn check_pbblast_sum(
-    pool: &mut dyn TermPool,
-    bitvector: &Rc<Term>,
-    sum: &[Rc<Term>],
-) -> RuleResult {
+fn check_pbblast_sum(pool: &mut Pool, bitvector: &Rc<Term>, sum: &[Rc<Term>]) -> RuleResult {
     // Obtain the bitvector width from the pool.
     let width = get_bit_width(bitvector, pool)?;
 
@@ -122,7 +118,7 @@ fn check_pbblast_sum_short_circuit(pbbterm: &[Rc<Term>], sum: &[Rc<Term>]) -> Ru
 /// Here, `left_sum` and `right_sum` come from two bitvectors `left_bv` and `right_bv` respectively.
 /// (The overall constraint is something like `(>= (- (+ left_sum) (+ right_sum)) constant)`.)
 fn check_pbblast_constraint(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     left_bv: &Rc<Term>,
     right_bv: &Rc<Term>,
     left_sum: &[Rc<Term>],
@@ -427,7 +423,7 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 ///
 /// Ex: `get_bitvector_terms((pbbterm @x0 @x1), 2)`
 /// >>> `[@x0, @x1]`
-fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut dyn TermPool) -> Vec<Rc<Term>> {
+fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut Pool) -> Vec<Rc<Term>> {
     if let Some(xs) = match_term!((pbbterm ...) = bv) {
         xs.to_vec()
     } else {

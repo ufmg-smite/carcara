@@ -713,10 +713,7 @@ mod tests {
 
     use super::{CoeffTimesVar, flatten_addition_tree};
     use crate::{
-        ast::{
-            build_term,
-            pool::{PrimitivePool, TermPool},
-        },
+        ast::{build_term, pool::Pool},
         checker::Rc,
         checker::rules::{RuleResult, Term},
     };
@@ -737,14 +734,14 @@ mod tests {
 
     #[test]
     fn flatten_addition_tree_single_constant() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let term = build_term!(pool, 1);
         flatten_addition_test_gen(&term, vec![], 1.into())
     }
 
     #[test]
     fn flatten_addition_tree_single_plain_variable() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let term = build_term!(pool, (let x Int));
         let var = CoeffTimesVar::from(&term);
         flatten_addition_test_gen(&term, vec![var], 0.into())
@@ -752,7 +749,7 @@ mod tests {
 
     #[test]
     fn flatten_addition_tree_single_negated_variable() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let x = build_term!(pool, (let x Int));
         let term = build_term!(pool, (- 1 {x.clone()}));
         let var = CoeffTimesVar {
@@ -765,7 +762,7 @@ mod tests {
 
     #[test]
     fn flatten_addition_tree_single_double_variable() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let x = build_term!(pool, (let x Int));
         let term = build_term!(pool, (* 2 {x.clone()}));
         let var = CoeffTimesVar {

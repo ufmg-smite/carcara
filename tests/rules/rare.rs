@@ -173,8 +173,7 @@ fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker =
-            checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+        let mut checker = checker::Checker::new(&mut pool, &rare_rules, checker::Config::new());
         let check_result = checker.check(&problem, &proof);
 
         let error_message = match &check_result {
@@ -223,7 +222,7 @@ fn run_rare_file_test(
     )
     .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
 
-    let mut checker = checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+    let mut checker = checker::Checker::new(&mut pool, &rare_rules, checker::Config::new());
     let check_result = checker.check(&problem, &proof);
 
     match check_result {

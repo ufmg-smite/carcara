@@ -12,7 +12,7 @@ use super::{
 use crate::{
     ast::{
         Binder, BindingList, Constant, Operator, Rc, Sort, Term, build_term, match_term_err,
-        pool::TermPool,
+        pool::Pool,
     },
     automata::{
         Automaton,
@@ -28,7 +28,7 @@ use rug::Integer;
 /// Internally handles the generation of the Skolem term resulting from `re_unfold_pos_component`,
 /// as well as the recursive step `re_unfold_pos_concat_recursive` to produce the resulting term.
 fn re_unfold_pos_concat(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     t: Rc<Term>,
     r: Rc<Term>,
 ) -> Result<(Rc<Term>, Rc<Term>), CheckerError> {
@@ -49,7 +49,7 @@ fn re_unfold_pos_concat(
     /// where `t` is the target string reconstructed by concatenating all `k_i`, and `i` is the
     /// index of the current string k being processed in the concatenation.
     fn re_unfold_pos_component(
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         t: Rc<Term>,
         i: usize,
         previous_ks: &mut Vec<Rc<Term>>,
@@ -110,7 +110,7 @@ fn re_unfold_pos_concat(
     }
 
     fn re_unfold_pos_concat_recursive(
-        pool: &mut dyn TermPool,
+        pool: &mut Pool,
         t: Rc<Term>,
         r: Rc<Term>,
         previous_ks: &mut Vec<Rc<Term>>,
@@ -176,7 +176,61 @@ fn re_unfold_pos_concat(
     )
 }
 
-// CPC Rules (a little outdated)
+/// A function to calculate the fixed length of a regular expression `r` (size of strings that
+/// match that RE) if it can be inferred.
+///
+/// It takes an `Rc<Term>` and recursively match over the regular expression operators whose length
+/// can be inferred. It throws an error if the term length cannot be evaluated, i.e., if the length
+/// of the term itself or one of its arguments cannot be inferred.
+fn str_fixed_len_re(pool: &mut Pool, r: &Rc<Term>) -> Result<usize, CheckerError> {
+    fn has_same_length(
+        pool: &mut Pool,
+        args: &[Rc<Term>],
+        r: Rc<Term>,
+        ignore: Operator,
+    ) -> Result<usize, CheckerError> {
+        let should_ignore = |term: &Term| term.as_op().is_some_and(|(op, _)| op == ignore);
+        let mut iter = args
+            .iter()
+            .filter(|a| !should_ignore(a))
+            .map(|a| str_fixed_len_re(pool, a));
+        let Some(first) = iter.next() else {
+            return Err(CheckerError::LengthCannotBeEvaluated(r.clone()));
+        };
+        let first = first?;
+        for size in iter {
+            let size = size?;
+            if size != first {
+                return Err(CheckerError::LengthCannotBeEvaluated(r.clone()));
+            }
+        }
+        Ok(first)
+    }
+
+    match r.as_ref() {
+        Term::Op(Operator::ReConcat, args) => {
+            let mut lengths = args.iter().map(|a| str_fixed_len_re(pool, a));
+            lengths.try_fold(0, |acc, x| Ok(acc + x?))
+        }
+        Term::Op(Operator::ReAllChar, _) => Ok(1),
+        Term::Op(Operator::ReRange, _) => Ok(1),
+        Term::Op(Operator::StrToRe, args) => {
+            let s_1 = args.first().unwrap();
+            match s_1.as_ref() {
+                Term::Const(Constant::String(s)) => Ok(s.len()),
+                _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
+            }
+        }
+        Term::Op(Operator::ReUnion, args) => {
+            has_same_length(pool, args, r.clone(), Operator::ReNone)
+        }
+        Term::Op(Operator::ReIntersection, args) => {
+            has_same_length(pool, args, r.clone(), Operator::ReAll)
+        }
+        _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
+    }
+}
+
 pub fn concat_eq(
     RuleArgs {
         premises,
@@ -1088,7 +1142,7 @@ pub fn re_unfold_neg_concat_fixed_prefix(
 
     let expanded = if let Term::Op(Operator::ReConcat, args) = r.as_ref() {
         if let [r_1, r_2 @ ..] = &args[..] {
-            let n = Term::new_int(str_fixed_len_re(r_1)?);
+            let n = Term::new_int(str_fixed_len_re(pool, r_1)?);
             let n = pool.add(n);
             let pref = pool.build_str_prefix(s, &n);
             let suff = pool.build_str_suffix_rem(s, &n);
@@ -1129,7 +1183,7 @@ pub fn re_unfold_neg_concat_fixed_suffix(
         args_rev.reverse();
 
         if let [r_1, r_2 @ ..] = &args_rev[..] {
-            let n = Term::new_int(str_fixed_len_re(r_1)?);
+            let n = Term::new_int(str_fixed_len_re(pool, r_1)?);
             let n = pool.add(n);
             let suff = pool.build_str_suffix(s, &n);
             let size = build_term!(pool, (- (strlen {s.clone()}) {n.clone()}));

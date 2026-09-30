@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Constant, MatchCase, Operator, Rc, Term, match_term, polyeq, pool::TermPool},
+    ast::{Constant, MatchCase, Operator, Rc, Term, match_term, polyeq, pool::Pool},
     checker::{error::CheckerError, rules::assert_polyeq_expected},
 };
 use std::{
@@ -35,7 +35,7 @@ impl NormalizedConcat {
     ///
     /// Dissolves all `str.++` applications and splits string constants into
     /// single-character string terms. Empty strings are omitted.
-    pub fn from_term(pool: &mut dyn TermPool, term: &Rc<Term>) -> Self {
+    pub fn from_term(pool: &mut Pool, term: &Rc<Term>) -> Self {
         let mut terms = Vec::new();
         Self::flatten_term(pool, term, &mut terms);
         Self(terms)
@@ -43,7 +43,7 @@ impl NormalizedConcat {
 
     /// Recursively flattens a term into an accumulator vector without allocating
     /// intermediate vectors.
-    fn flatten_term(pool: &mut dyn TermPool, term: &Rc<Term>, acc: &mut Vec<Rc<Term>>) {
+    fn flatten_term(pool: &mut Pool, term: &Rc<Term>, acc: &mut Vec<Rc<Term>>) {
         if let Term::Const(Constant::String(s)) = term.as_ref() {
             acc.extend(
                 s.chars()
@@ -85,7 +85,7 @@ impl NormalizedConcat {
     /// - If the sequence is empty, returns the empty string term `""`.
     /// - If it contains exactly one term, returns that term directly.
     /// - If it contains more than one term, returns an application `(str.++ ...)`.
-    pub fn to_term(&self, pool: &mut dyn TermPool) -> Rc<Term> {
+    pub fn to_term(&self, pool: &mut Pool) -> Rc<Term> {
         match self.0.as_slice() {
             [] => pool.add(Term::new_string("")),
             [single] => single.clone(),
@@ -94,7 +94,7 @@ impl NormalizedConcat {
     }
 
     /// Consumes `self` and converts it into an AST [`Rc<Term>`].
-    pub fn into_term(self, pool: &mut dyn TermPool) -> Rc<Term> {
+    pub fn into_term(self, pool: &mut Pool) -> Rc<Term> {
         match self.0.len() {
             0 => pool.add(Term::new_string("")),
             1 => self.0.into_iter().next().unwrap(),
@@ -245,7 +245,7 @@ impl NormalizedConcat {
     ///
     /// - Constants of length > 1 are broken into `str.++` of single characters.
     /// - Nested `str.++` applications are dissolved into a single flat application.
-    pub fn expand_constants(pool: &mut dyn TermPool, term: &Rc<Term>) -> Rc<Term> {
+    pub fn expand_constants(pool: &mut Pool, term: &Rc<Term>) -> Rc<Term> {
         match term.as_ref() {
             Term::Const(Constant::String(s)) => {
                 let args: Vec<Rc<Term>> = s
@@ -383,13 +383,13 @@ impl From<NormalizedConcat> for Vec<Rc<Term>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::pool::PrimitivePool;
+    use crate::ast::pool::Pool;
     use std::slice;
     use std::time::Duration;
 
     #[test]
     fn test_from_term_flatten_constants() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let term = pool.add(Term::new_string("abc"));
         let norm = NormalizedConcat::from_term(&mut pool, &term);
 
@@ -401,7 +401,7 @@ mod tests {
 
     #[test]
     fn test_from_term_omits_empty_strings() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let empty = pool.add(Term::new_string(""));
         let norm = NormalizedConcat::from_term(&mut pool, &empty);
         assert!(norm.is_empty());
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_from_term_nested_concat() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let str_sort = pool.add_sort(crate::ast::Sort::String);
         let x = pool.add(Term::new_var("x", str_sort));
         let ab = pool.add(Term::new_string("ab"));
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_from_term_unsplit() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let hello = pool.add(Term::new_string("hello"));
         let world = pool.add(Term::new_string("world"));
         let empty = pool.add(Term::new_string(""));
@@ -449,7 +449,7 @@ mod tests {
 
     #[test]
     fn test_to_term_and_into_term() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let a = pool.add(Term::new_string("a"));
         let b = pool.add(Term::new_string("b"));
 
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_is_compatible() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let a = pool.add(Term::new_string("a"));
         let b = pool.add(Term::new_string("b"));
         let c = pool.add(Term::new_string("c"));
@@ -494,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_overlap() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let a = pool.add(Term::new_string("a"));
         let b = pool.add(Term::new_string("b"));
         let c = pool.add(Term::new_string("c"));
@@ -517,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_strip_prefix_or_suffix() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let mut polyeq_time = Duration::ZERO;
 
         let a = pool.add(Term::new_string("a"));
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn test_assert_is_prefix_and_suffix() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let mut polyeq_time = Duration::ZERO;
 
         let a = pool.add(Term::new_string("a"));
@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_assert_length_one() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let one = pool.add(Term::new_string("x"));
         let two = pool.add(Term::new_string("xy"));
         let empty = pool.add(Term::new_string(""));
@@ -608,7 +608,7 @@ mod tests {
 
     #[test]
     fn test_expand_constants() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let ab = pool.add(Term::new_string("ab"));
         let expanded = NormalizedConcat::expand_constants(&mut pool, &ab);
 

@@ -1,9 +1,7 @@
 use crate::{
     ast::{
         Binder, BindingList, Operator, ProblemPrelude, ProofCommand, Rc, Sort, Substitution, Term,
-        build_term, match_term, match_term_err,
-        pool::{PrimitivePool, TermPool},
-        printer,
+        build_term, match_term, match_term_err, pool::Pool, printer,
     },
     checker::{SatRefConfig, error::CheckerError, rules::RuleResult},
     external,
@@ -17,7 +15,7 @@ use std::{
 };
 
 fn sat_refutation_external_check(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     cnf_path: String,
     prelude: &ProblemPrelude,
     checker: &external::ExternalTool,
@@ -51,16 +49,10 @@ fn sat_refutation_external_check(
         } else {
             unreachable!();
         };
-        let mut bytes = Vec::new();
-        printer::write_term(
-            pool,
-            prelude,
-            &mut bytes,
-            &lemma_or,
-            true,
-            format!("@p{}_", counter),
-        )
-        .unwrap();
+        let options = printer::DisplayOptions::new()
+            .use_sharing(true)
+            .smt_lib_strict(true)
+            .sharing_prefix(format!("@p{}_", counter));
         counter += 1;
         if !lemmas_to_th_ids.contains_key(lemma) {
             log::debug!("Lemma {} not in map {:?}", lemma, lemmas_to_th_ids);
@@ -70,7 +62,7 @@ fn sat_refutation_external_check(
             &mut lemmas_str,
             "{};{}",
             lemmas_to_th_ids[lemma],
-            String::from_utf8(bytes).unwrap()
+            lemma_or.display(options),
         )
         .unwrap();
     });
@@ -103,7 +95,7 @@ fn sat_refutation_external_check(
 }
 
 pub fn sat_refutation(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premise_steps: Vec<&ProofCommand>,
     prelude: &ProblemPrelude,
     config: &SatRefConfig,
@@ -205,7 +197,8 @@ pub fn sat_refutation(
                 let (choice_var_name, _) = &bindings[0];
                 let mut choice_dependencies = Vec::new();
                 let univ_vars = pool
-                    .collect_binders(body, Binder::Choice)
+                    .choice_subterms(body)
+                    .clone()
                     .iter()
                     .map(|c| {
                         choice_dependencies.push(c.clone());
@@ -279,7 +272,7 @@ pub fn sat_refutation(
                     clause_id_to_lemma.get(&i).map(|lemma| {
                         if handling_choice {
                             let choice_assertions: Vec<_> = pool
-                                .collect_binders(lemma, Binder::Choice)
+                                .choice_subterms(lemma)
                                 .iter()
                                 .map(|epsilon| epsilon_to_assertion[epsilon].clone())
                                 .collect();
@@ -319,7 +312,7 @@ pub fn sat_refutation(
                     .map(|(k, v)| {
                         // collect choices before we apply substitution in lemma
                         let choice_assertions: Vec<_> = pool
-                            .collect_binders(k, Binder::Choice)
+                            .choice_subterms(k)
                             .iter()
                             .map(|epsilon| epsilon_to_assertion[epsilon].clone())
                             .collect();
@@ -401,11 +394,9 @@ pub fn sat_refutation(
                             &lemma
                                 .iter()
                                 .map(|l| {
-                                    pool.collect_binders(l, Binder::Choice).iter().for_each(
-                                        |epsilon| {
-                                            lemma_choices.push(epsilon.clone());
-                                        },
-                                    );
+                                    pool.choice_subterms(l).iter().for_each(|epsilon| {
+                                        lemma_choices.push(epsilon.clone());
+                                    });
                                     substitution.apply(pool, l)
                                 })
                                 .collect::<Vec<Rc<Term>>>()
@@ -430,7 +421,7 @@ pub fn sat_refutation(
                         });
 
                         log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
-                        let problem = external::get_problem_string(pool, &prelude, &assertions);
+                        let problem = external::get_problem_string(&prelude, &assertions);
 
                         if let Err(e) =
                             external::get_solver_proof(pool, problem.clone(), smt_solver)

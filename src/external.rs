@@ -1,10 +1,8 @@
 use crate::{
     CarcaraResult, Status,
     ast::{
-        Binder, Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc,
-        StepNode, SubproofNode, Term, build_term, match_term,
-        pool::{PrimitivePool, TermPool},
-        printer,
+        Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc, StepNode,
+        SubproofNode, Term, build_term, match_term, pool::Pool, printer,
     },
     checker,
     elaborator::{IdHelper, Mutate},
@@ -126,20 +124,23 @@ pub enum ExternalError {
     LemmaNotChecked(Rc<Term>),
 }
 
-pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
-    pool: &mut PrimitivePool,
-    prelude: &ProblemPrelude,
-    assertions: I,
-) -> String {
+pub fn get_problem_string(prelude: &ProblemPrelude, assertions: &[Rc<Term>]) -> String {
     use std::fmt::Write;
 
     let mut problem = String::new();
     writeln!(&mut problem, "(set-option :produce-proofs true)").unwrap();
     write!(&mut problem, "{}", prelude).unwrap();
 
-    let mut bytes = Vec::new();
-    printer::write_asserts(pool, prelude, &mut bytes, assertions, false).unwrap();
-    write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+    let options = printer::DisplayOptions::new()
+        .use_sharing(false)
+        .sharing_prefix("p_".into())
+        .smt_lib_strict(true);
+    write!(
+        &mut problem,
+        "{}",
+        printer::display_asserts(assertions, options)
+    )
+    .unwrap();
     writeln!(&mut problem, "(check-sat)").unwrap();
     writeln!(&mut problem, "(get-proof)").unwrap();
     writeln!(&mut problem, "(exit)").unwrap();
@@ -148,7 +149,7 @@ pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
 }
 
 pub fn parse_and_check_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     problem: &str,
     proof: &str,
 ) -> CarcaraResult<(Vec<ProofCommand>, Status)> {
@@ -161,12 +162,12 @@ pub fn parse_and_check_solver_proof(
     let (problem, proof, rules) =
         parser::parse_instance_with_pool(problem, proof, None, config, pool)?;
     let config = checker::Config::new().ignore_unknown_rules(true);
-    let res = checker::ProofChecker::new(pool, &rules, config).check(&problem, &proof)?;
+    let res = checker::Checker::new(pool, &rules, config).check(&problem, &proof)?;
     Ok((proof.commands, res))
 }
 
 pub fn get_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     problem: String,
     solver: &ExternalTool,
 ) -> Result<(Vec<ProofCommand>, Status), ExternalError> {
@@ -255,7 +256,7 @@ pub fn gen_dimacs<'a>(
 }
 
 pub fn collect_premise_clauses(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premise_steps: &Vec<&ProofCommand>,
     lemmas_to_th_ids: &mut HashMap<Rc<Term>, String>,
     lemmas_to_step_ids: &mut HashMap<Rc<Term>, String>,
@@ -349,7 +350,7 @@ pub fn collect_premise_clauses(
     });
     premise_clauses.iter().for_each(|c| {
         c.iter().for_each(|l| {
-            let choices_l = pool.collect_binders(l, Binder::Choice);
+            let choices_l = pool.choice_subterms(l);
             choices_l.iter().for_each(|l_cs| {
                 choice_terms.insert(l_cs.clone());
             });
@@ -452,7 +453,7 @@ fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> 
 }
 
 pub fn insert_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],
     root_id: &str,

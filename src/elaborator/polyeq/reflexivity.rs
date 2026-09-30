@@ -13,7 +13,7 @@ fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>) -> bool {
 }
 
 fn elaborate_equality(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     l: &Rc<Term>,
     r: &Rc<Term>,
     ids: &mut IdHelper,
@@ -24,7 +24,7 @@ fn elaborate_equality(
 }
 
 pub fn refl(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     context: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

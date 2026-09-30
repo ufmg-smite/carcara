@@ -2,10 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::ast::{
-    Proof, ProofCommand, ProofStep, Rc, Subproof, Term,
-    pool::{PrimitivePool, TermPool},
-};
+use crate::ast::{Proof, ProofCommand, ProofStep, Rc, Subproof, Term, pool::Pool};
 
 enum PremiseType {
     Discharge,
@@ -104,7 +101,7 @@ struct Frame {
 fn get_slice_body(
     proof: &Proof,
     id: &str,
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     max_distance: usize,
 ) -> Option<Vec<ProofCommand>> {
     // The constant string trust to be used in the args list for every trust step
@@ -345,7 +342,7 @@ fn get_slice_body(
 pub fn slice(
     proof: &Proof,
     id: &str,
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     max_distance: usize,
 ) -> Option<(Proof, Vec<Rc<Term>>)> {
     let sliced_step_commands = get_slice_body(proof, id, pool, max_distance)?;

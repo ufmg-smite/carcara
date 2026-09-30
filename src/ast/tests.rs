@@ -1,8 +1,4 @@
-use super::{
-    Polyeq,
-    node::ProofNodeForest,
-    pool::{PrimitivePool, TermPool},
-};
+use super::{Polyeq, node::ProofNodeForest, pool::Pool};
 use crate::parser::tests::parse_terms;
 use indexmap::IndexSet;
 
@@ -10,7 +6,7 @@ use indexmap::IndexSet;
 fn test_free_vars() {
     fn run_tests(definitions: &str, cases: &[(&str, &[&str])]) {
         for &(term, expected) in cases {
-            let mut pool = PrimitivePool::new();
+            let mut pool = Pool::new();
             let [root] = parse_terms(&mut pool, definitions, [term]);
             let expected: IndexSet<_> = expected.iter().copied().collect();
             let set = pool.free_vars(&root);
@@ -47,7 +43,7 @@ fn test_polyeq() {
     }
 
     fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         for (i, (a, b)) in cases.iter().enumerate() {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
             let mut comp = match test_type {
@@ -148,7 +144,7 @@ fn test_node() {
             (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
         (step t6 (cl) :rule blah :premises (t3 t5))
     ";
-    let mut pool = PrimitivePool::new();
+    let mut pool = Pool::new();
     let original = parse_proof(&mut pool, original);
 
     let node = ProofNodeForest::from_commands(original.commands.clone());

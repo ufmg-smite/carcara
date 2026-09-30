@@ -3,33 +3,33 @@ pub mod error;
 mod parallel;
 mod rules;
 mod sat_refutation;
-mod shared;
 
 use crate::{
     CarcaraResult, Error, Status,
     ast::{
-        ContextStack, Problem, ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep, Rc, Term,
-        pool::PrimitivePool, rare_rules::Rules,
+        ContextStack, Polyeq, Problem, ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep,
+        Rc, Term, pool::Pool, rare_rules::Rules,
     },
     benchmarking::{CollectResults, OnlineBenchmarkResults},
     external::{ExternalTool, SatTools},
 };
+
 use carcara_macros::GenerateSetters;
-use error::CheckerError;
+use error::{CheckerError, SubproofError};
 use indexmap::{IndexMap, IndexSet};
-use rules::{Premise, RuleArgs, RuleResult};
-use shared::{StepCheckContext, check_assume_shared, check_step_core};
+use rules::{Premise, RuleArgs, RuleResult, get_rule};
 use std::{
     collections::HashSet,
     fmt,
+    path::Path,
     time::{Duration, Instant},
 };
-
-pub use parallel::{ParallelProofChecker, scheduler::Scheduler};
 
 // The elaborator needs to use this function to elaborate `bfun_elim` steps
 pub(crate) use rules::clausification::apply_bfun_elim;
 pub(crate) use rules::linear_arithmetic::la_generic_partial;
+
+pub use parallel::ParallelChecker;
 
 /// Benchmarking statistics collected while checking a proof.
 #[derive(Clone)]
@@ -124,8 +124,8 @@ impl Config {
 }
 
 /// A proof checker for Alethe.
-pub struct ProofChecker<'c> {
-    pool: &'c mut PrimitivePool,
+pub struct Checker<'c> {
+    pool: &'c mut Pool,
     config: Config,
     context: ContextStack,
     reached_empty_clause: bool,
@@ -134,10 +134,10 @@ pub struct ProofChecker<'c> {
     rare_rules: &'c Rules,
 }
 
-impl<'c> ProofChecker<'c> {
-    /// Constructs a new `ProofChecker` with a given pool, set of rare rules, and `Config`.
-    pub fn new(pool: &'c mut PrimitivePool, rare_rules: &'c Rules, config: Config) -> Self {
-        ProofChecker {
+impl<'c> Checker<'c> {
+    /// Constructs a new `Checker` with a given pool, set of rare rules, and `Config`.
+    pub fn new(pool: &'c mut Pool, rare_rules: &'c Rules, config: Config) -> Self {
+        Self {
             pool,
             config,
             context: ContextStack::new(),
@@ -152,11 +152,14 @@ impl<'c> ProofChecker<'c> {
     ///
     /// Returns `Ok` if the proof is valid, with the proof status.
     pub fn check(&mut self, problem: &Problem, proof: &Proof) -> CarcaraResult<Status> {
-        self.check_impl(
-            problem,
-            proof,
-            None::<&mut CheckerStatistics<OnlineBenchmarkResults>>,
-        )
+        let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
+        let status =
+            self.check_commands(problem, &proof.filename, &proof.commands, 0, null_stats)?;
+        if self.reached_empty_clause {
+            Ok(status)
+        } else {
+            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
+        }
     }
 
     /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
@@ -167,18 +170,31 @@ impl<'c> ProofChecker<'c> {
         proof: &Proof,
         stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<Status> {
-        self.check_impl(problem, proof, Some(stats))
+        let status =
+            self.check_commands(problem, &proof.filename, &proof.commands, 0, Some(stats))?;
+        if self.reached_empty_clause {
+            Ok(status)
+        } else {
+            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
+        }
     }
 
-    fn check_impl<CR: CollectResults + Send + Default>(
+    /// Checks a sequence of commands.
+    ///
+    /// This must be a contiguous slice of commands at the proof root level, that is, not inside
+    /// a subproof. Only the commands from `start_position` to the end of `commands` are actually
+    /// checked; the preceding commands are used only to resolve premises and the subproof context.
+    fn check_commands<CR: CollectResults + Send + Default>(
         &mut self,
         problem: &Problem,
-        proof: &Proof,
+        proof_filename: &Path,
+        commands: &[ProofCommand],
+        start_position: usize,
         mut stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
-        let mut iter = proof.iter();
+        let mut iter = ProofIter::new_at_position(commands, start_position);
         while let Some(command) = iter.next() {
             match command {
                 ProofCommand::Step(step) => {
@@ -200,7 +216,7 @@ impl<'c> ProofChecker<'c> {
                             inner: Box::new(e),
                             rule: step.rule.as_str().into(),
                             step: step.id.as_str().into(),
-                            file: proof.filename.clone(),
+                            file: proof_filename.to_path_buf(),
                         })?;
 
                     // If this is the last command of a subproof, we have to pop the subproof
@@ -242,21 +258,17 @@ impl<'c> ProofChecker<'c> {
                             inner: Box::new(CheckerError::Assume(term.clone())),
                             rule: "assume".into(),
                             step: id.as_str().into(),
-                            file: proof.filename.clone(),
+                            file: proof_filename.to_path_buf(),
                         });
                     }
                 }
             }
         }
-        if self.reached_empty_clause {
-            Ok(if self.is_holey {
-                Status::Holey
-            } else {
-                Status::Valid
-            })
+        Ok(if self.is_holey {
+            Status::Holey
         } else {
-            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
-        }
+            Status::Valid
+        })
     }
 
     fn check_assume<'i, CR: CollectResults + Send + Default>(
@@ -267,14 +279,66 @@ impl<'c> ProofChecker<'c> {
         iter: &'i ProofIter<'i>,
         stats: &mut Option<&mut CheckerStatistics<CR>>,
     ) -> bool {
-        check_assume_shared(
-            id,
-            term,
-            premises,
-            &self.config,
-            iter.is_in_subproof(),
-            stats,
-        )
+        // Some subproofs contain `assume` commands inside them. These don't refer to the original
+        // problem premises, but are instead local assumptions that are discharged by the subproof's
+        // final step, so we ignore the `assume` command if it is inside a subproof.
+        if iter.is_in_subproof() {
+            return true;
+        }
+
+        let time = Instant::now();
+
+        // Check for exact match first
+        if premises.contains(term) {
+            let total_time = time.elapsed();
+            if let Some(s) = stats {
+                s.assume_time += total_time;
+                s.results
+                    .add_assume_measurement(s.file_name, id, true, total_time);
+            }
+            return true;
+        }
+
+        // If elaborated mode, no polyeq checking allowed
+        if self.config.elaborated {
+            return false;
+        }
+
+        // Perform polyeq checking
+        let mut found = false;
+        let mut polyeq_time = Duration::ZERO;
+        let mut core_time = Duration::ZERO;
+
+        for p in premises {
+            let mut this_polyeq_time = Duration::ZERO;
+
+            let mut comp = Polyeq::new().mod_reordering(true).mod_nary(true);
+            let result = comp.eq_with_time(term, p, &mut this_polyeq_time);
+            let depth = comp.max_depth();
+
+            polyeq_time += this_polyeq_time;
+
+            if let Some(s) = &mut *stats {
+                s.results.add_polyeq_depth(depth);
+            }
+            if result {
+                core_time = this_polyeq_time;
+                found = true;
+                break;
+            }
+        }
+
+        let total_time = time.elapsed();
+
+        if let Some(s) = stats {
+            s.assume_time += total_time;
+            s.assume_core_time += core_time;
+            s.polyeq_time += polyeq_time;
+            s.results
+                .add_assume_measurement(s.file_name, id, false, total_time);
+        }
+
+        found
     }
 
     fn check_step<'i, CR: CollectResults + Send + Default>(
@@ -285,9 +349,17 @@ impl<'c> ProofChecker<'c> {
         stats: &mut Option<&mut CheckerStatistics<CR>>,
         prelude: &ProblemPrelude,
     ) -> RuleResult {
-        let mut polyeq_time = Duration::ZERO;
+        let time = Instant::now();
 
-        // Collect premises and discharge - this part is iterator-specific
+        if self.config.allowed_rules.contains(&step.rule) {
+            self.is_holey = true;
+            return Ok(());
+        }
+        if !step.discharge.is_empty() && step.rule != "subproof" {
+            return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
+        }
+
+        // Collect premises and discharge
         let premises: Vec<_> = step
             .premises
             .iter()
@@ -302,9 +374,9 @@ impl<'c> ProofChecker<'c> {
             .map(|&i| iter.get_premise(i))
             .collect();
 
-        // TODO: for now, sat refutation and calling external solvers is only supported in
-        // sequential checking mode
-        if step.rule == "sat_refutation" && !self.config.allowed_rules.contains("sat_refutation") {
+        // The sat refutation checking needs the actual premise steps, so we have some special
+        // casing here
+        if step.rule == "sat_refutation" {
             let premises_steps: Vec<_> =
                 step.premises.iter().map(|&p| iter.get_premise(p)).collect();
             return sat_refutation::sat_refutation(
@@ -315,7 +387,8 @@ impl<'c> ProofChecker<'c> {
             );
         }
 
-        // Prepare rule arguments - this is pool-specific
+        // Prepare rule arguments
+        let mut polyeq_time = Duration::ZERO;
         let rule_args = RuleArgs {
             conclusion: &step.clause,
             premises: &premises,
@@ -328,24 +401,87 @@ impl<'c> ProofChecker<'c> {
             automata_cache: &mut self.automata_cache,
             rare_rules: self.rare_rules,
         };
-
-        // Use shared core logic
-        let context = StepCheckContext {
-            config: &self.config,
-            is_end_step: iter.is_end_step(),
-            current_subproof: iter.current_subproof(),
-            subproof_depth: iter.depth(),
-            is_holey: &mut self.is_holey,
-        };
-
-        let result = check_step_core(step, rule_args, context, stats);
-
-        // Update polyeq time in stats (this was previously done in the core,
-        // but polyeq_time is updated via the mutable reference in rule_args)
-        if let Some(s) = stats {
-            s.polyeq_time += polyeq_time;
+        if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
+            return check_external(rule_args.args, custom_checker);
         }
 
-        result
+        let rule = match get_rule(
+            &step.rule,
+            self.config.elaborated,
+            self.config.rup_resolution,
+        ) {
+            Some(r) => r,
+            None if self.config.ignore_unknown_rules => {
+                self.is_holey = true;
+                return Ok(());
+            }
+            None => {
+                return Err(CheckerError::UnknownRule);
+            }
+        };
+
+        if step.rule == "hole" || step.rule == "lia_generic" {
+            self.is_holey = true;
+        }
+
+        // Execute the rule with the provided arguments
+        rule(rule_args)?;
+
+        if iter.is_end_step()
+            && let Some(subproof) = iter.current_subproof()
+        {
+            check_discharge(subproof, iter.depth(), &step.discharge)?;
+        }
+
+        if let Some(s) = stats {
+            let elapsed = time.elapsed();
+            s.results
+                .add_step_measurement(s.file_name, &step.id, &step.rule, elapsed);
+            s.polyeq_time += polyeq_time;
+        }
+        Ok(())
     }
+}
+
+fn check_discharge(
+    subproof: &[ProofCommand],
+    depth: usize,
+    discharge: &[(usize, usize)],
+) -> RuleResult {
+    let discharge: IndexSet<_> = discharge.iter().collect();
+    if let Some((_, not_discharged)) = subproof
+        .iter()
+        .enumerate()
+        .find(|&(i, command)| command.is_assume() && !discharge.contains(&(depth, i)))
+    {
+        Err(CheckerError::Subproof(
+            SubproofError::LocalAssumeNotDischarged(not_discharged.id().to_owned()),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn check_external(args: &[Rc<Term>], checker: &ExternalTool) -> RuleResult {
+    let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
+    let string = format!("(\n{}\n)", args_str.join("\n"));
+
+    let output = checker.call(string.as_bytes())?;
+
+    if !output.status.success() {
+        if let Ok(s) = std::str::from_utf8(&output.stderr)
+            && s.contains("interrupted by timeout.")
+        {
+            return Err(CheckerError::Unspecified);
+        }
+        return Err(CheckerError::Unspecified);
+    }
+    let res = output.stdout.as_slice();
+    if res == b"true\n" {
+        return Ok(());
+    }
+    Err(CheckerError::Explanation(format!(
+        "External checker {} did not validate step",
+        checker
+    )))
 }

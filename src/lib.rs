@@ -63,6 +63,7 @@ use elaborator::error::ElaborationError;
 use parser::{ParserError, Position};
 use std::io;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -182,7 +183,7 @@ pub fn check<'s>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
     if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
@@ -202,7 +203,6 @@ pub fn check<'s>(
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
                 elaboration: run_measures.elaboration,
-                scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
                 assume: checker_stats.assume_time,
@@ -222,7 +222,8 @@ pub fn check<'s>(
 /// Parses and checks an Alethe proof against an SMT-LIB problem, checking steps in parallel.
 ///
 /// This is similar to [`check`], but the proof steps are checked concurrently using `num_threads`
-/// threads. The `stack_size` argument sets the stack size of the worker threads.
+/// threads. The `stack_size` argument, if given, sets the stack size of the worker threads;
+/// otherwise, the platform's default stack size is used.
 #[allow(clippy::too_many_arguments)]
 pub fn check_parallel<'s>(
     problem: parser::Source<'s>,
@@ -232,12 +233,11 @@ pub fn check_parallel<'s>(
     checker_config: checker::Config,
     collect_stats: bool,
     num_threads: usize,
-    stack_size: usize,
+    stack_size: Option<usize>,
 ) -> Result<Status, Error> {
-    use crate::checker::Scheduler;
-    use std::sync::Arc;
     let mut run_measures: RunMeasurement = RunMeasurement::default();
 
+    // Parsing
     let total = Instant::now();
     let (problem, proof, rules, pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
@@ -245,17 +245,7 @@ pub fn check_parallel<'s>(
 
     // Checking
     let checking = Instant::now();
-    let (scheduler, schedule_context_usage) = Scheduler::new(num_threads, &proof);
-    run_measures.scheduling = checking.elapsed();
-    let mut checker = checker::ParallelProofChecker::new(
-        Arc::new(pool),
-        checker_config,
-        &problem.prelude,
-        &schedule_context_usage,
-        stack_size,
-        rules,
-    );
-
+    let mut checker = checker::ParallelChecker::new(Arc::new(pool), &rules, checker_config);
     if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
@@ -264,7 +254,13 @@ pub fn check_parallel<'s>(
             assume_core_time: Duration::ZERO,
             results: OnlineBenchmarkResults::new(),
         };
-        let res = checker.check_with_stats(&problem, &proof, &scheduler, &mut checker_stats);
+        let res = checker.check_with_stats(
+            &problem,
+            &proof,
+            num_threads,
+            stack_size,
+            &mut checker_stats,
+        );
 
         run_measures.checking = checking.elapsed();
         run_measures.total = total.elapsed();
@@ -275,7 +271,6 @@ pub fn check_parallel<'s>(
                 parsing: run_measures.parsing,
                 checking: run_measures.checking,
                 elaboration: run_measures.elaboration,
-                scheduling: run_measures.scheduling,
                 total: run_measures.total,
                 polyeq: checker_stats.polyeq_time,
                 assume: checker_stats.assume_time,
@@ -288,7 +283,7 @@ pub fn check_parallel<'s>(
 
         res
     } else {
-        checker.check(&problem, &proof, &scheduler)
+        checker.check(&problem, &proof, num_threads, stack_size)
     }
 }
 
@@ -308,7 +303,7 @@ pub fn check_and_elaborate<'s>(
     elaborator_config: elaborator::Config,
     pipeline: Vec<elaborator::ElaborationPass>,
     collect_stats: bool,
-) -> Result<(Status, ast::Problem, ast::Proof, ast::pool::PrimitivePool), Error> {
+) -> Result<(Status, ast::Problem, ast::Proof, ast::pool::Pool), Error> {
     let mut run: RunMeasurement = RunMeasurement::default();
 
     // Parsing (Complete rare rules)
@@ -321,7 +316,7 @@ pub fn check_and_elaborate<'s>(
 
     // Checking
     let checking = Instant::now();
-    let mut checker = checker::ProofChecker::new(&mut pool, &rules, checker_config);
+    let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
     let checking_status = if collect_stats {
         let mut checker_stats = CheckerStatistics {
             file_name: "this",
@@ -383,7 +378,7 @@ pub fn generate_lia_smt_instances<'s>(
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     use std::fmt::Write;
-    let (problem, proof, _, mut pool) = parser::parse_instance(problem, proof, rules, config)?;
+    let (problem, proof, _, _) = parser::parse_instance(problem, proof, rules, config)?;
 
     let mut iter = proof.iter();
     let mut result = Vec::new();
@@ -399,17 +394,16 @@ pub fn generate_lia_smt_instances<'s>(
             let mut problem_string = String::new();
             write!(&mut problem_string, "{}", problem.prelude).unwrap();
 
-            let mut bytes = Vec::new();
-            ast::printer::write_clause_smt_problem(
-                &mut pool,
-                &problem.prelude,
-                &mut bytes,
-                &step.clause,
-                use_sharing,
+            let options = ast::printer::DisplayOptions::new()
+                .use_sharing(use_sharing)
+                .sharing_prefix("p_".into())
+                .smt_lib_strict(true);
+            write!(
+                &mut problem_string,
+                "{}",
+                ast::printer::display_clause_smt_problem(&step.clause, options)
             )
             .unwrap();
-            write!(&mut problem_string, "{}", String::from_utf8(bytes).unwrap()).unwrap();
-
             writeln!(&mut problem_string, "(check-sat)").unwrap();
             writeln!(&mut problem_string, "(exit)").unwrap();
 

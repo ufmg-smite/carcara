@@ -304,6 +304,4 @@ impl EunoiaCommand {
     }
 }
 
-// TODO: note that we are allowing here other concepts beyond
-// proof-centric ones
 pub type EunoiaProof = Vec<EunoiaCommand>;

@@ -1,15 +1,12 @@
 use crate::{
-    ast::{
-        ContextStack, ProofNode, Rc, StepNode, build_term, match_term,
-        pool::{PrimitivePool, TermPool},
-    },
+    ast::{ContextStack, ProofNode, Rc, StepNode, build_term, match_term, pool::Pool},
     elaborator::{ElaborationError, IdHelper},
     resolution::{ResolutionTrace, greedy_resolution},
     utils::DedupIterator,
 };
 
 pub fn resolution(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

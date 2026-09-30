@@ -5,7 +5,7 @@ use std::sync::Arc;
 use indexmap::IndexMap;
 
 use crate::{
-    ast::{Constant, Operator, Rc, Term, build_term, pool::TermPool},
+    ast::{Operator, Rc, Term, build_term, pool::Pool},
     automata::Automaton,
     checker::error::{CheckerError, StringError},
 };
@@ -18,7 +18,7 @@ pub enum Orientation {
     Suffix,
 }
 
-/// Extension trait for [`TermPool`] providing helper methods to build common
+/// Extension trait for [`Pool`] providing helper methods to build common
 /// string theory terms (prefixes, suffixes, remainder suffixes, and Skolem unification splits).
 pub trait StringTermBuilder {
     /// Builds a term representing the prefix of `u` of length `n`:
@@ -59,7 +59,7 @@ pub trait StringTermBuilder {
     }
 }
 
-impl<T: TermPool + ?Sized> StringTermBuilder for T {
+impl StringTermBuilder for Pool {
     fn build_str_prefix(&mut self, u: &Rc<Term>, n: &Rc<Term>) -> Rc<Term> {
         build_term!(self, (strsubstr {u.clone()} 0 {n.clone()}))
     }
@@ -99,61 +99,11 @@ impl<T: TermPool + ?Sized> StringTermBuilder for T {
     }
 }
 
-/// A function to calculate the fixed length of a regular expression `r` (size of strings that
-/// match that RE) if it can be inferred.
-///
-/// It takes an `Rc<Term>` and recursively match over the regular expression operators whose length
-/// can be inferred. It throws an error if the term length cannot be evaluated, i.e., if the length
-/// of the term itself or one of its arguments cannot be inferred.
-pub fn str_fixed_len_re(r: &Rc<Term>) -> Result<usize, CheckerError> {
-    fn has_same_length(
-        args: &[Rc<Term>],
-        r: &Rc<Term>,
-        ignore: Operator,
-    ) -> Result<usize, CheckerError> {
-        let should_ignore = |term: &Term| term.as_op().is_some_and(|(op, _)| op == ignore);
-        let mut iter = args
-            .iter()
-            .filter(|a| !should_ignore(a))
-            .map(str_fixed_len_re);
-        let Some(first) = iter.next() else {
-            return Err(CheckerError::LengthCannotBeEvaluated(r.clone()));
-        };
-        let first = first?;
-        for size in iter {
-            let size = size?;
-            if size != first {
-                return Err(CheckerError::LengthCannotBeEvaluated(r.clone()));
-            }
-        }
-        Ok(first)
-    }
-
-    match r.as_ref() {
-        Term::Op(Operator::ReConcat, args) => {
-            let mut lengths = args.iter().map(str_fixed_len_re);
-            lengths.try_fold(0, |acc, x| Ok(acc + x?))
-        }
-        Term::Op(Operator::ReAllChar, _) => Ok(1),
-        Term::Op(Operator::ReRange, _) => Ok(1),
-        Term::Op(Operator::StrToRe, args) => {
-            let s_1 = args.first().unwrap();
-            match s_1.as_ref() {
-                Term::Const(Constant::String(s)) => Ok(s.len()),
-                _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
-            }
-        }
-        Term::Op(Operator::ReUnion, args) => has_same_length(args, r, Operator::ReNone),
-        Term::Op(Operator::ReIntersection, args) => has_same_length(args, r, Operator::ReAll),
-        _ => Err(CheckerError::LengthCannotBeEvaluated(r.clone())),
-    }
-}
-
 /// A function that takes a list of regular expressions and returns the term corresponding to the
 /// application of the concatenation operator to them.
 ///
 /// If the list contains only one regular expression, it returns it directly.
-pub fn singleton_elim(pool: &mut dyn TermPool, r_list: &[Rc<Term>]) -> Rc<Term> {
+pub fn singleton_elim(pool: &mut Pool, r_list: &[Rc<Term>]) -> Rc<Term> {
     match r_list {
         [single] => single.clone(),
         _ => pool.add(Term::Op(Operator::ReConcat, r_list.to_vec())),
@@ -164,7 +114,7 @@ pub fn singleton_elim(pool: &mut dyn TermPool, r_list: &[Rc<Term>]) -> Rc<Term> 
 /// Builds the automaton for a regex term, reusing the per-proof cache: proofs
 /// commonly apply many regex-eval steps to the same (hash-consed) regex.
 pub fn cached_automaton(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     cache: &mut IndexMap<Rc<Term>, Arc<Automaton>>,
     regex: &Rc<Term>,
 ) -> Result<Arc<Automaton>, CheckerError> {
@@ -182,7 +132,7 @@ pub fn cached_automaton(
 /// its corresponding premise `(str.in_re s_i A_i)` and builds the concatenated regular expression
 /// automaton `(re.++ A_0 ... A_n)`.
 pub fn make_automaton_from_string(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     t: &Rc<Term>,
     premise_automatas: Vec<(Rc<Term>, Rc<Term>)>,
 ) -> Result<Automaton, CheckerError> {
@@ -216,11 +166,11 @@ pub fn make_automaton_from_string(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{match_term, pool::PrimitivePool};
+    use crate::ast::{match_term, pool::Pool};
 
     #[test]
     fn test_build_str_prefix() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let str_sort = pool.add_sort(crate::ast::Sort::String);
         let int_sort = pool.add_sort(crate::ast::Sort::Int);
         let u = pool.add(Term::new_var("u", str_sort));
@@ -233,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_build_str_suffix() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let str_sort = pool.add_sort(crate::ast::Sort::String);
         let int_sort = pool.add_sort(crate::ast::Sort::Int);
         let u = pool.add(Term::new_var("u", str_sort));
@@ -246,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_build_str_suffix_rem() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let str_sort = pool.add_sort(crate::ast::Sort::String);
         let int_sort = pool.add_sort(crate::ast::Sort::Int);
         let u = pool.add(Term::new_var("u", str_sort));
@@ -259,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_build_str_unify_split_prefix_and_suffix() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let str_sort = pool.add_sort(crate::ast::Sort::String);
         let t = pool.add(Term::new_var("t", str_sort.clone()));
         let s = pool.add(Term::new_var("s", str_sort));
@@ -284,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_cached_automaton() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let mut cache = IndexMap::new();
 
         let a = pool.add(Term::new_string("a"));
@@ -299,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_make_automaton_from_string_success() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let s1 = pool.add(Term::new_string("a"));
         let s2 = pool.add(Term::new_string("b"));
         let concat = pool.add(Term::Op(Operator::StrConcat, vec![s1.clone(), s2.clone()]));
@@ -314,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_make_automaton_from_string_mismatch() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let s1 = pool.add(Term::new_string("a"));
         let s2 = pool.add(Term::new_string("b"));
         let concat = pool.add(Term::Op(Operator::StrConcat, vec![s1.clone(), s2.clone()]));
@@ -328,7 +278,7 @@ mod tests {
 
     #[test]
     fn test_make_automaton_from_string_invalid_operator() {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let s = pool.add(Term::new_string("a"));
         let result = make_automaton_from_string(&mut pool, &s, vec![]);
         assert!(result.is_err());

@@ -1,8 +1,7 @@
 use super::{Elaborator, IdHelper};
 use crate::{
     ast::{
-        Operator, ProofCommand, ProofNode, ProofStep, Rc, StepNode, Term, build_term,
-        pool::{PrimitivePool, TermPool},
+        Operator, ProofCommand, ProofNode, ProofStep, Rc, StepNode, Term, build_term, pool::Pool,
     },
     external::*,
 };
@@ -69,7 +68,7 @@ fn build_res_step(
 }
 
 fn get_resolution_refutation(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     step: &StepNode,
     premise_to_proof: &HashMap<Rc<Term>, Rc<ProofNode>>,
     cnf_path: String,
@@ -260,11 +259,7 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
                 .iter()
                 .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
                 .collect();
-            let problem = get_problem_string(
-                elaborator.pool,
-                &elaborator.problem.prelude.clone(),
-                &asserts,
-            );
+            let problem = get_problem_string(&elaborator.problem.prelude.clone(), &asserts);
             log::debug!("\tGet proof for lemma {}", i);
 
             let solver_proof_commands =
