@@ -841,14 +841,12 @@ impl<'p, 's> Parser<'p, 's> {
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
         let sort = self.pool.sort(&function);
-        let mut param_function = false;
-        let sorts = {
+        let (params, sorts) = {
             if let Sort::Function(sorts) = sort.as_ref() {
-                sorts
-            } else if let Sort::Par(_, p_sort) = sort.as_ref() {
+                (None, sorts)
+            } else if let Sort::Par(vars, p_sort) = sort.as_ref() {
                 if let Sort::Function(sorts) = p_sort.as_ref() {
-                    param_function = true;
-                    sorts
+                    (Some(vars), sorts)
                 } else {
                     // Parametric function does not have function sort
                     return Err(ParserError::NotAFunction(p_sort.clone()));
@@ -863,8 +861,8 @@ impl<'p, 's> Parser<'p, 's> {
         let mut map = RapidHashMap::new();
         for i in 0..args.len() {
             let arg_sort_i = self.pool.sort(&args[i]);
-            if param_function {
-                if !sorts[i].is_compatible_with_map(&arg_sort_i, &mut map) {
+            if let Some(params) = params {
+                if !sorts[i].match_with(params, &arg_sort_i, &mut map) {
                     return Err(ParserError::IncompatibleSorts(
                         sorts[i].clone(),
                         arg_sort_i.clone(),
@@ -2101,7 +2099,7 @@ impl<'p, 's> Parser<'p, 's> {
                                 .make_var(op_symbol.clone())
                                 .map_err(|err| self.err(err, self.current_position))?;
                             let var_sort = self.pool.sort(&var);
-                            if let Sort::Par(_, f_sort) = var_sort.as_ref()
+                            if let Sort::Par(vars, f_sort) = var_sort.as_ref()
                                 && let Sort::Function(sorts) = f_sort.as_ref()
                             {
                                 let sort = self.parse_sort()?;
@@ -2109,7 +2107,7 @@ impl<'p, 's> Parser<'p, 's> {
                                 // unify return sort with as_sort
                                 let ret_sort = sorts.last().unwrap();
                                 let mut map = RapidHashMap::new();
-                                if !ret_sort.is_compatible_with_map(&sort, &mut map) {
+                                if !ret_sort.match_with(vars, &sort, &mut map) {
                                     return Err(self.err(
                                         ParserError::IncompatibleSorts(
                                             ret_sort.clone(),

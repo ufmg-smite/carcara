@@ -69,6 +69,66 @@ macro_rules! build_term {
     }};
 }
 
+/// A macro to help build sorts.
+///
+/// This macro takes two arguments: the `Pool` with which to build the sort, and an s-expression
+/// representing the sort to be built. It evaluates to an `Rc<Sort>`. Sorts surrounded by `{}` are
+/// evaluated as expressions and should have type `Rc<Sort>`.
+///
+/// # Examples
+///
+/// Building the sort `(par (X) (-> X Int))`:
+/// ```text
+/// # use carcara::{ast::*, build_sort};
+/// let mut pool = Pool::new();
+/// let s = build_sort!(pool, (par (X) (-> X Int)));
+/// ```
+#[cfg(test)]
+macro_rules! build_sort {
+    ($pool:expr, Int) => { $pool.add_sort($crate::ast::Sort::Int) };
+    ($pool:expr, Bool) => { $pool.add_sort($crate::ast::Sort::Bool) };
+    ($pool:expr, Real) => { $pool.add_sort($crate::ast::Sort::Real) };
+    ($pool:expr, String) => { $pool.add_sort($crate::ast::Sort::String) };
+    ($pool:expr, RegLan) => { $pool.add_sort($crate::ast::Sort::RegLan) };
+    ($pool:expr, ParamBitVec) => { $pool.add_sort($crate::ast::Sort::ParamBitVec) };
+    ($pool:expr, Type) => { $pool.add_sort($crate::ast::Sort::Type) };
+    ($pool:expr, (BitVec $width:literal)) => { $pool.add_sort($crate::ast::Sort::BitVec($width)) };
+    ($pool:expr, (par ($($var:ident)*) $body:tt)) => {{
+        let body = build_sort!($pool, $body);
+        let vars = vec![$(stringify!($var).to_owned()),*];
+        $pool.add_sort($crate::ast::Sort::Par(vars, body))
+    }};
+    ($pool:expr, (-> $($arg:tt)+)) => {{
+        let args = vec![$(build_sort!($pool, $arg)),+];
+        $pool.add_sort($crate::ast::Sort::Function(args))
+    }};
+    ($pool:expr, (Array $key:tt $value:tt)) => {{
+        let key = build_sort!($pool, $key);
+        let value = build_sort!($pool, $value);
+        $pool.add_sort($crate::ast::Sort::Array(key, value))
+    }};
+    ($pool:expr, (Set $elem:tt)) => {{
+        let elem = build_sort!($pool, $elem);
+        $pool.add_sort($crate::ast::Sort::Set(elem))
+    }};
+    ($pool:expr, (Tuple $($elem:tt)*)) => {{
+        let elems = vec![$(build_sort!($pool, $elem)),*];
+        $pool.add_sort($crate::ast::Sort::Tuple(elems))
+    }};
+    ($pool:expr, (Atom $name:literal $($arg:tt)*)) => {{
+        let args = vec![$(build_sort!($pool, $arg)),*].into_boxed_slice();
+        $pool.add_sort($crate::ast::Sort::Atom($name.into(), args))
+    }};
+    ($pool:expr, (Datatype $name:literal $($arg:tt)*)) => {{
+        let args = vec![$(build_sort!($pool, $arg)),*];
+        $pool.add_sort($crate::ast::Sort::Datatype { name: $name.into(), args })
+    }};
+    ($pool:expr, {$sort:expr}) => { $sort };
+    ($pool:expr, $var:ident) => {{
+        $pool.add_sort($crate::ast::Sort::Var(stringify!($var).to_owned()))
+    }};
+}
+
 /// Implements `FromStr` and `Display` for an enum, given a mapping from each variant to a string
 /// literal.
 ///
@@ -125,6 +185,8 @@ macro_rules! impl_str_conversion_traits {
     }
 }
 
+#[cfg(test)]
+pub(crate) use build_sort;
 pub(crate) use {build_term, impl_str_conversion_traits, match_term_err};
 
 #[cfg(test)]

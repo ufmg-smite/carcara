@@ -421,11 +421,11 @@ impl Pool {
             },
             Term::App(f, args) => {
                 let func_sort = self.compute_sort(f).clone();
-                let (is_parametric, sorts) = match func_sort.as_ref() {
-                    Sort::Function(sorts) => (false, sorts),
-                    Sort::Par(_, inner) => {
+                let (params, sorts) = match func_sort.as_ref() {
+                    Sort::Function(sorts) => (None, sorts),
+                    Sort::Par(vars, inner) => {
                         if let Sort::Function(sorts) = inner.as_ref() {
-                            (true, sorts)
+                            (Some(vars), sorts)
                         } else {
                             unreachable!()
                         }
@@ -444,10 +444,10 @@ impl Pool {
 
                 // If parametric, match with sorts of args, apply the resulting substitution on
                 // the sort
-                if is_parametric {
+                if let Some(params) = params {
                     let mut map = RapidHashMap::new();
                     for i in 0..args.len() {
-                        if !sorts[i].is_compatible_with_map(self.compute_sort(&args[i]), &mut map) {
+                        if !sorts[i].match_with(params, self.compute_sort(&args[i]), &mut map) {
                             unreachable!();
                         }
                     }
