@@ -483,3 +483,130 @@ fn shortest_path<T: Diffable>(left: &[T], right: &[T]) -> Vec<Move> {
     moves.reverse();
     moves
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use carcara::{
+        ast::pool::Pool,
+        parser::{Config, Parser, Source},
+    };
+
+    const DEFINITIONS: &str = "
+        (declare-const a Int)
+        (declare-const b Int)
+        (declare-fun f (Int Int) Int)
+        (declare-fun g (Int) Int)
+        (declare-datatype List ((nil) (cons (head Int) (tail List))))
+        (declare-const xs List)
+    ";
+
+    fn parse_pair(left: &str, right: &str) -> (Rc<Term>, Rc<Term>) {
+        let mut pool = Pool::new();
+        let mut parser = Parser::new(&mut pool, Config::new(), Source::from(DEFINITIONS)).unwrap();
+        parser.parse_problem().unwrap();
+        let [left, right] = [left, right].map(|s| {
+            parser.reset(Source::from(s)).unwrap();
+            parser.parse_term().unwrap()
+        });
+        (left, right)
+    }
+
+    fn run_tests(cases: &[(&str, &str, &str)]) {
+        for &(left, right, expected) in cases {
+            let (left, right) = parse_pair(left, right);
+            assert_eq!(expected, diff(&left, &right).display(false).to_string(),);
+        }
+    }
+
+    #[test]
+    fn identical() {
+        run_tests(&[
+            ("a", "a", " a\n"),
+            ("(f a b)", "(f a b)", " (f a b)\n"),
+            (
+                "(forall ((x Int)) (> x 0))",
+                "(forall ((x Int)) (> x 0))",
+                " (forall ((x Int)) (> x 0))\n",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn different_leaves() {
+        run_tests(&[
+            ("a", "b", "-a\n+b\n"),
+            ("a", "1", "-a\n+1\n"),
+            (
+                "(forall ((x Int)) (> x 0))",
+                "(> a 0)",
+                "-(forall ((x Int)) (> x 0))\n+(> a 0)\n",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn applications() {
+        run_tests(&[
+            // Different operator, same arguments
+            ("(+ a 1)", "(* a 1)", " (\n-  +\n+  *\n   a\n   1\n )\n"),
+            // Different function, with one argument removed
+            ("(f a b)", "(g a)", " (\n-  f\n+  g\n   a\n-  b\n )\n"),
+            // Argument removed
+            ("(+ a 1 2)", "(+ a 2)", " (+\n   a\n-  1\n   2\n )\n"),
+            // Argument added
+            ("(+ a 2)", "(+ a 1 2)", " (+\n   a\n+  1\n   2\n )\n"),
+            // Nested
+            (
+                "(f (g a) b)",
+                "(f (g b) b)",
+                " (f\n   (g\n-    a\n+    b\n   )\n   b\n )\n",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn binders() {
+        run_tests(&[
+            // Different quantifier, same bindings and body
+            (
+                "(forall ((x Int)) (> x 0))",
+                "(exists ((x Int)) (> x 0))",
+                " (\n-  forall\n+  exists\n   ((x Int))\n   (> x 0)\n )\n",
+            ),
+            // Binding removed
+            (
+                "(forall ((x Int) (y Int)) (> x 0))",
+                "(forall ((x Int)) (> x 0))",
+                " (forall\n   (\n     (x Int)\n-    (y Int)\n   )\n   (> x 0)\n )\n",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn let_terms() {
+        run_tests(&[
+            // Binding changed
+            (
+                "(let ((z 1)) (+ z a))",
+                "(let ((z 2)) (+ z a))",
+                " (let\n   (\n-    (z 1)\n+    (z 2)\n   )\n   (+ z a)\n )\n",
+            ),
+            // Body changed
+            (
+                "(let ((z 1)) (+ z a))",
+                "(let ((z 1)) (+ z b))",
+                " (let\n   ((z 1))\n   (+\n     z\n-    a\n+    b\n   )\n )\n",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn match_terms() {
+        run_tests(&[(
+            "(match xs ((nil 0) ((cons h t) h)))",
+            "(match (cons 1 xs) ((nil 0) ((cons h t) h)))",
+            " (match\n-  xs\n+  (cons 1 xs)\n   (((nil) 0) ((cons h t) h))\n )\n",
+        )]);
+    }
+}
