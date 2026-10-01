@@ -73,7 +73,7 @@ impl<'c> ParallelChecker<'c> {
         stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
         let num_threads = num_threads.min(proof.commands.len()).max(1);
-        let work_queue = ArrayQueue::new(proof.commands.len());
+        let work_queue = ArrayQueue::new(proof.commands.len().max(1));
         for pos in 0..proof.commands.len() {
             work_queue.push(pos).unwrap();
         }
