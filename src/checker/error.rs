@@ -161,10 +161,6 @@ pub enum CheckerError {
     #[error("expected {1} terms in '{0}' term, got {2}")]
     WrongNumberOfTermsInOp(Operator, Range, usize),
 
-    /// A term was expected to appear in an operation term, but did not.
-    #[error("expected term '{1}' to appear in '{0}' term")]
-    TermDoesntAppearInOp(Operator, Rc<Term>),
-
     /// The conclusion clause of a premise had the wrong length.
     #[error("expected {1} terms in clause of step '{0}', got {2}")]
     WrongLengthOfPremiseClause(String, Range, usize),

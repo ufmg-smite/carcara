@@ -67,13 +67,6 @@ impl<T: ?Sized> AsRef<T> for Rc<T> {
     }
 }
 
-impl<T, const N: usize> Rc<[T; N]> {
-    /// Converts an `Rc` of an array into an `Rc` of a slice.
-    pub fn to_rc_of_slice(self) -> Rc<[T]> {
-        Rc(self.0 as _)
-    }
-}
-
 impl<T: ?Sized + fmt::Debug> fmt::Debug for Rc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.0, f)

@@ -1,7 +1,7 @@
 use super::{Rc, Sort, macros::impl_str_conversion_traits, match_term, match_term_err, pool::Pool};
 use crate::{CheckerError, automata::Automaton};
 use rug::{Integer, Rational};
-use std::{collections::HashSet, hash::Hash, ops::Deref};
+use std::{hash::Hash, ops::Deref};
 
 /// A term.
 ///
@@ -1295,12 +1295,6 @@ impl Term {
 }
 
 impl Rc<Term> {
-    /// Returns whether the term is closed, that is, whether it contains no free variables aside
-    /// from global variables.
-    pub fn is_closed(&self, pool: &mut Pool, global_vars: &HashSet<Rc<Term>>) -> bool {
-        pool.free_vars(self).iter().all(|x| global_vars.contains(x))
-    }
-
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
     /// = term)`.
     pub fn remove_negation(&self) -> Option<&Self> {

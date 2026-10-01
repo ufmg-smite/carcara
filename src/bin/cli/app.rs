@@ -145,12 +145,6 @@ pub struct ParsingOptions {
     #[clap(long)]
     pub parse_hole_args: bool,
 
-    /// Buffer the entire file in memory before parsing instead of reading line-by-line.
-    /// This can improve performance in network file systems or cluster environments
-    /// at the cost of increased memory usage.
-    #[clap(long)]
-    pub buffer_entire_file: bool,
-
     /// Enables parsing of the old (SMT-LIB versions < 2.6) syntax for datatype testers, namely
     /// `is-cons` instead of `(_ is cons)`.
     #[clap(long)]

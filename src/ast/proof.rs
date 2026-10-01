@@ -152,21 +152,11 @@ impl AnchorArg {
         }
     }
 
-    /// Returns `true` if the anchor arg is a "variable" style argument.
-    pub fn is_variable(&self) -> bool {
-        matches!(self, Self::Variable(_))
-    }
-
     /// Returns `Some` if the anchor arg is an "assignment" style argument.
     pub fn as_assign(&self) -> Option<(&String, &Rc<Term>)> {
         match self {
             AnchorArg::Variable(_) => None,
             AnchorArg::Assign((name, _), value) => Some((name, value)),
         }
-    }
-
-    /// Returns `true` if the anchor arg is an "assignment" style argument.
-    pub fn is_assign(&self) -> bool {
-        matches!(self, Self::Assign(..))
     }
 }

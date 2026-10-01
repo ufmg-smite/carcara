@@ -45,10 +45,6 @@ pub enum ParserError {
     #[error("empty bitvector literal")]
     EmptyBitvector,
 
-    /// A bitvector literal was too large.
-    #[error("bitvector literal is too large")]
-    TooLargeBitvector,
-
     /// The parser encountered an unexpected token.
     #[error("unexpected token: '{0}'")]
     UnexpectedToken(Token),
@@ -80,14 +76,6 @@ pub enum ParserError {
     /// Expected an integer constant term.
     #[error("expected integer constant, got '{0}'")]
     ExpectedIntegerConstant(Rc<Term>),
-
-    /// Pattern in `match` term is not valid.
-    #[error("invalid pattern '{0}'")]
-    InvalidPattern(Rc<Term>),
-
-    /// Results in `match` term do not have the same type.
-    #[error("invalid match results (different types) '{0} and {1}'")]
-    InvalidMatchResults(Rc<Term>, Rc<Term>),
 
     /// Patterns in `match` term do not cover all constructors.
     #[error("Patterns in match statement do not cover all constructors")]

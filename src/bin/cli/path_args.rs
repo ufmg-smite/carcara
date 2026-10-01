@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::error::CliError;
 use std::{ffi::OsStr, fs, path::PathBuf};
 

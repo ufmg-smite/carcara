@@ -96,9 +96,6 @@ pub enum ExternalError {
     #[error("failed to spawn external tool process")]
     FailedSpawn(io::Error),
 
-    #[error("failed to open external tool stdin")]
-    FailedOpenStdin(io::Error),
-
     #[error("failed to write to external tool stdin")]
     FailedWriteToStdin(io::Error),
 
@@ -119,9 +116,6 @@ pub enum ExternalError {
 
     #[error("proof returned by external tool is holey")]
     InnerProofHoley,
-
-    #[error("couldn't check lemma: '{0}'")]
-    LemmaNotChecked(Rc<Term>),
 }
 
 pub fn get_problem_string(prelude: &ProblemPrelude, assertions: &[Rc<Term>]) -> String {
