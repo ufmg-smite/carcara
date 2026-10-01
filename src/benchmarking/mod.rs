@@ -9,18 +9,21 @@ pub use metrics::*;
 use indexmap::{IndexMap, IndexSet, map::Entry};
 use std::{fmt, fs, hash::Hash, io, sync::Arc, time::Duration};
 
-fn combine_map<S, K, V, M>(mut a: IndexMap<S, M>, b: IndexMap<S, M>) -> IndexMap<S, M>
+fn combine_map<S, K, V>(
+    mut a: IndexMap<S, Metrics<K, V>>,
+    b: IndexMap<S, Metrics<K, V>>,
+) -> IndexMap<S, Metrics<K, V>>
 where
     S: Eq + Hash,
+    K: Clone,
     V: MetricsUnit,
-    M: Metrics<K, V> + Default,
 {
     for (k, v) in b {
         match a.entry(k) {
             Entry::Occupied(mut e) => {
                 // To take the old value from the entry without moving it entirely, we have
-                // to insert something in its place, so we insert an empty `M`
-                let old = e.insert(M::default());
+                // to insert something in its place, so we insert an empty `Metrics`
+                let old = e.insert(Metrics::default());
                 e.insert(old.combine(v));
             }
             Entry::Vacant(e) => {
@@ -79,49 +82,46 @@ pub struct RunMeasurement {
 #[derive(Debug, Default, Clone)]
 pub struct OnlineBenchmarkResults {
     /// The time per run to parse the proof.
-    pub parsing: OnlineMetrics<RunId>,
+    pub parsing: Metrics<RunId>,
 
     /// The time per run to check the proof.
-    pub checking: OnlineMetrics<RunId>,
+    pub checking: Metrics<RunId>,
 
     /// The time per run to elaborate the proof.
-    pub elaborating: OnlineMetrics<RunId>,
+    pub elaborating: Metrics<RunId>,
 
     /// The combined time per run to parse, check, and elaborate.
-    pub total_accounted_for: OnlineMetrics<RunId>,
+    pub total_accounted_for: Metrics<RunId>,
 
     /// The total time spent per run.
-    pub total: OnlineMetrics<RunId>,
+    pub total: Metrics<RunId>,
 
     /// The time spent checking each step.
-    pub step_time: OnlineMetrics<StepId>,
-
-    /// For each file, the time spent checking each step in the file.
-    pub step_time_by_file: IndexMap<String, OnlineMetrics<StepId>>,
+    pub step_time: Metrics<StepId>,
 
     /// For each rule, the time spent checking each step that uses that rule.
-    pub step_time_by_rule: IndexMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_rule: IndexMap<String, Metrics<StepId>>,
 
     /// The time spent checking polyequality.
-    pub polyeq_time: OnlineMetrics<RunId>,
+    pub polyeq_time: Metrics<RunId>,
 
     /// The proportion of the checking time that was spent checking polyequality.
-    pub polyeq_time_ratio: OnlineMetrics<RunId, f64>,
+    pub polyeq_time_ratio: Metrics<RunId, f64>,
 
     /// The time spent on `assume` steps.
-    pub assume_time: OnlineMetrics<RunId>,
+    pub assume_time: Metrics<RunId>,
 
     /// The proportion of the checking time that was spent on `assume` steps.
-    pub assume_time_ratio: OnlineMetrics<RunId, f64>,
+    pub assume_time_ratio: Metrics<RunId, f64>,
 
     /// The time spent comparing `assume`d terms with their premises.
-    pub assume_core_time: OnlineMetrics<RunId>,
+    pub assume_core_time: Metrics<RunId>,
 
     /// The time spent in each elaboration pass.
     pub pipeline_times: Vec<Duration>,
 
     /// The depth of each polyequality check that was performed.
-    pub polyeq_depths: OnlineMetrics<(), usize>,
+    pub polyeq_depths: Metrics<(), usize>,
 
     /// The total number of `assume` steps checked.
     pub num_assumes: usize,
@@ -147,46 +147,6 @@ impl OnlineBenchmarkResults {
         self.total.is_empty()
     }
 
-    /// The time per run to parse the proof.
-    pub fn parsing(&self) -> &OnlineMetrics<RunId> {
-        &self.parsing
-    }
-
-    /// The time per run to check the proof.
-    pub fn checking(&self) -> &OnlineMetrics<RunId> {
-        &self.checking
-    }
-
-    /// The time per run to elaborate the proof.
-    pub fn elaborating(&self) -> &OnlineMetrics<RunId> {
-        &self.elaborating
-    }
-
-    /// The combined time per run to parse, check, and elaborate.
-    pub fn total_accounted_for(&self) -> &OnlineMetrics<RunId> {
-        &self.total_accounted_for
-    }
-
-    /// The total time spent per run. Should be pretty similar to `total_accounted_for`.
-    pub fn total(&self) -> &OnlineMetrics<RunId> {
-        &self.total
-    }
-
-    /// The time spent checking each step.
-    pub fn step_time(&self) -> &OnlineMetrics<StepId> {
-        &self.step_time
-    }
-
-    /// For each file, the time spent checking each step in the file.
-    pub fn step_time_by_file(&self) -> &IndexMap<String, OnlineMetrics<StepId>> {
-        &self.step_time_by_file
-    }
-
-    /// For each rule, the time spent checking each step that uses that rule.
-    pub fn step_time_by_rule(&self) -> &IndexMap<String, OnlineMetrics<StepId>> {
-        &self.step_time_by_rule
-    }
-
     /// Prints the benchmark results
     pub fn print(&self, sort_by_total: bool) {
         let [
@@ -199,11 +159,11 @@ impl OnlineBenchmarkResults {
             assume_core_time,
             polyeq_time,
         ] = [
-            self.parsing(),
-            self.checking(),
-            self.elaborating(),
-            self.total_accounted_for(),
-            self.total(),
+            &self.parsing,
+            &self.checking,
+            &self.elaborating,
+            &self.total_accounted_for,
+            &self.total,
             &self.assume_time,
             &self.assume_core_time,
             &self.polyeq_time,
@@ -228,21 +188,21 @@ impl OnlineBenchmarkResults {
         println!(
             "on assume:           {} ({:.02}% of checking time)",
             assume_time,
-            100.0 * self.assume_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+            100.0 * self.assume_time.mean().as_secs_f64() / self.checking.mean().as_secs_f64(),
         );
         println!("on assume (core):    {}", assume_core_time);
         println!("assume ratio:        {}", self.assume_time_ratio);
         println!(
             "on polyeq:           {} ({:.02}% of checking time)",
             polyeq_time,
-            100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+            100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking.mean().as_secs_f64(),
         );
         println!("polyeq ratio:        {}", self.polyeq_time_ratio);
 
         println!("total accounted for: {}", accounted_for);
         println!("total:               {}", total);
 
-        let data_by_rule = self.step_time_by_rule();
+        let data_by_rule = &self.step_time_by_rule;
         let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
         data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
 
@@ -257,18 +217,18 @@ impl OnlineBenchmarkResults {
         }
 
         println!("worst cases:");
-        if !self.step_time().is_empty() {
-            let worst_step = self.step_time().max();
+        if !self.step_time.is_empty() {
+            let worst_step = self.step_time.max();
             println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
         }
 
-        let worst_file_parsing = self.parsing().max();
+        let worst_file_parsing = self.parsing.max();
         println!(
             "    file (parsing):  {} ({:?})",
             worst_file_parsing.0.0, worst_file_parsing.1
         );
 
-        let worst_file_checking = self.checking().max();
+        let worst_file_checking = self.checking.max();
         println!(
             "    file (checking): {} ({:?})",
             worst_file_checking.0.0, worst_file_checking.1
@@ -288,7 +248,7 @@ impl OnlineBenchmarkResults {
             worst_file_polyeq.1 * 100.0
         );
 
-        let worst_file_total = self.total().max();
+        let worst_file_total = self.total.max();
         println!(
             "    file overall:    {} ({:?})",
             worst_file_total.0.0, worst_file_total.1
@@ -318,20 +278,6 @@ impl OnlineBenchmarkResults {
                 depths.standard_deviation()
             );
         }
-    }
-}
-
-/// The identifier of a single proof step, with its strings interned to improve memory usage.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct InternedStepId {
-    pub(crate) file: Arc<str>,
-    pub(crate) step_id: Arc<str>,
-    pub(crate) rule: Arc<str>,
-}
-
-impl fmt::Display for InternedStepId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{} ({})", self.file, self.step_id, self.rule)
     }
 }
 
@@ -472,18 +418,13 @@ pub trait CollectResults {
 
 impl CollectResults for OnlineBenchmarkResults {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
-        let file = file.to_owned();
         let rule = rule.to_owned();
         let id = StepId {
-            file: file.clone().into_boxed_str(),
+            file: file.into(),
             step_id: step_id.into(),
             rule: rule.clone().into_boxed_str(),
         };
         self.step_time.add_sample(&id, time);
-        self.step_time_by_file
-            .entry(file)
-            .or_default()
-            .add_sample(&id, time);
         self.step_time_by_rule
             .entry(rule)
             .or_default()
@@ -539,7 +480,6 @@ impl CollectResults for OnlineBenchmarkResults {
             total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
             total: a.total.combine(b.total),
             step_time: a.step_time.combine(b.step_time),
-            step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
             step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
 
             polyeq_time: a.polyeq_time.combine(b.polyeq_time),

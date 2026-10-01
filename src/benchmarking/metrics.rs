@@ -122,64 +122,12 @@ impl<T: MetricsUnit> fmt::Display for DisplayUnit<T> {
 
 /// A collection of samples with an associated key, from which aggregate statistics can be
 /// computed.
-pub trait Metrics<K, T: MetricsUnit>: fmt::Display {
-    /// Adds a new sample to the collection.
-    fn add_sample(&mut self, key: &K, value: T);
-
-    /// Combines two collections of samples into one.
-    fn combine(self, other: Self) -> Self;
-
-    /// Returns `true` if the collection contains no samples.
-    fn is_empty(&self) -> bool;
-
-    /// Returns the key and value of the largest sample.
-    fn max(&self) -> &(K, T);
-
-    /// Returns the key and value of the smallest sample.
-    fn min(&self) -> &(K, T);
-
-    /// Returns the sum of all samples.
-    fn total(&self) -> T;
-
-    /// Returns the number of samples.
-    fn count(&self) -> usize;
-
-    /// Returns the mean of the samples.
-    fn mean(&self) -> T::MeanType;
-
-    /// Returns the standard deviation of the samples.
-    fn standard_deviation(&self) -> T::MeanType;
-}
-
-fn display_metrics<K, T, M>(metrics: &M, f: &mut fmt::Formatter) -> fmt::Result
-where
-    T: MetricsUnit,
-    M: Metrics<K, T>,
-{
-    if f.alternate() {
-        write!(
-            f,
-            "{} ({} * {})",
-            DisplayUnit(metrics.total()),
-            DisplayUnit(metrics.mean()),
-            DisplayUnit(metrics.count())
-        )
-    } else {
-        write!(
-            f,
-            "{} ± {}",
-            DisplayUnit(metrics.mean()),
-            DisplayUnit(metrics.standard_deviation())
-        )
-    }
-}
-
-/// Metrics whose aggregate statistics are updated incrementally as samples are added.
 ///
-/// This avoids actually storing all samples, reducing the memory footprint, but at the cost of some
-/// numerical stability.
+/// The aggregate statistics are updated incrementally as samples are added. This avoids actually
+/// storing all samples, reducing the memory footprint, but at the cost of some numerical
+/// stability.
 #[derive(Debug, Clone)]
-pub struct OnlineMetrics<K, T: MetricsUnit = Duration> {
+pub struct Metrics<K, T: MetricsUnit = Duration> {
     total: T,
     count: usize,
     mean: T::MeanType,
@@ -190,14 +138,14 @@ pub struct OnlineMetrics<K, T: MetricsUnit = Duration> {
     pub(super) sum_of_squared_distances: f64,
 }
 
-impl<K, T: MetricsUnit> OnlineMetrics<K, T> {
-    /// Creates a new, empty `OnlineMetrics`.
+impl<K, T: MetricsUnit> Metrics<K, T> {
+    /// Creates a new, empty `Metrics`.
     pub fn new() -> Self {
         Default::default()
     }
 }
 
-impl<K, T: MetricsUnit> Default for OnlineMetrics<K, T> {
+impl<K, T: MetricsUnit> Default for Metrics<K, T> {
     // Ideally, I would like to just `#[derive(Default)]`, but because of a quirk in how `derive`
     // works, that would require the type parameter `K` to always be `Default` as well, even though
     // it is not necessary. Therefore, I have to implement `Default` manually. For more info, see:
@@ -214,18 +162,33 @@ impl<K, T: MetricsUnit> Default for OnlineMetrics<K, T> {
     }
 }
 
-impl<K: Clone, T: MetricsUnit> fmt::Display for OnlineMetrics<K, T> {
+impl<K: Clone, T: MetricsUnit> fmt::Display for Metrics<K, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        display_metrics(self, f)
+        if f.alternate() {
+            write!(
+                f,
+                "{} ({} * {})",
+                DisplayUnit(self.total()),
+                DisplayUnit(self.mean()),
+                DisplayUnit(self.count())
+            )
+        } else {
+            write!(
+                f,
+                "{} ± {}",
+                DisplayUnit(self.mean()),
+                DisplayUnit(self.standard_deviation())
+            )
+        }
     }
 }
 
-impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
+impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
     /// Adds a new sample to the metrics. This updates all the fields of the struct to equal the
     /// new mean, standard deviation, etc. For simplicity, these are calculated every time a new
     /// sample is added, which means you can stop adding samples at any time and the metrics will
     /// always be valid.
-    fn add_sample(&mut self, key: &K, value: T) {
+    pub fn add_sample(&mut self, key: &K, value: T) {
         let old_mean = self.mean;
 
         self.total += value;
@@ -257,7 +220,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
     /// have many data points, or exactly one. If one of the metrics is small, the error in the
     /// variance introduced by using this method (as opposed to using `Metrics::add_sample` on each
     /// data point) can be as high as 30%.
-    fn combine(self, other: Self) -> Self {
+    pub fn combine(self, other: Self) -> Self {
         match (self.count, other.count) {
             (0, _) => return other,
             (_, 0) => return self,
@@ -300,122 +263,39 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OnlineMetrics<K, T> {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    /// Returns `true` if the collection contains no samples.
+    pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
-    fn max(&self) -> &(K, T) {
+    /// Returns the key and value of the largest sample.
+    pub fn max(&self) -> &(K, T) {
         &self.max_min.as_ref().unwrap().0
     }
 
-    fn min(&self) -> &(K, T) {
+    /// Returns the key and value of the smallest sample.
+    pub fn min(&self) -> &(K, T) {
         &self.max_min.as_ref().unwrap().1
     }
 
-    fn total(&self) -> T {
+    /// Returns the sum of all samples.
+    pub fn total(&self) -> T {
         self.total
     }
 
-    fn count(&self) -> usize {
+    /// Returns the number of samples.
+    pub fn count(&self) -> usize {
         self.count
     }
 
-    fn mean(&self) -> T::MeanType {
+    /// Returns the mean of the samples.
+    pub fn mean(&self) -> T::MeanType {
         self.mean
     }
 
-    fn standard_deviation(&self) -> T::MeanType {
+    /// Returns the standard deviation of the samples.
+    pub fn standard_deviation(&self) -> T::MeanType {
         let count = cmp::max(2, self.count) - 1;
         T::from_f64((self.sum_of_squared_distances / count as f64).sqrt())
-    }
-}
-
-/// Metrics that store every sample and compute aggregate statistics on demand.
-///
-/// This is more numerically stable than [`OnlineMetrics`], but can use a lot more memory.
-pub struct OfflineMetrics<K, T = Duration> {
-    data: Vec<(K, T)>,
-}
-
-impl<K, T: MetricsUnit> OfflineMetrics<K, T> {
-    /// Creates a new, empty `OfflineMetrics`.
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Sorts the samples and returns the values at the 5%, 25%, 50%, 75%, and 95% percentiles.
-    pub fn quartiles(&mut self) -> [&(K, T); 5] {
-        assert!(!self.data.is_empty());
-        self.data
-            .sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-        let n = self.data.len();
-        [n / 20, n / 4, n / 2, (n * 3) / 4, (n * 19) / 20].map(|i| &self.data[i])
-    }
-}
-
-impl<K, T: MetricsUnit> Default for OfflineMetrics<K, T> {
-    fn default() -> Self {
-        Self { data: Vec::new() }
-    }
-}
-
-impl<K: Clone, T: MetricsUnit> fmt::Display for OfflineMetrics<K, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        display_metrics(self, f)
-    }
-}
-
-impl<K: Clone, T: MetricsUnit> Metrics<K, T> for OfflineMetrics<K, T> {
-    fn add_sample(&mut self, key: &K, value: T) {
-        self.data.push((key.clone(), value));
-    }
-
-    fn combine(mut self, mut other: Self) -> Self {
-        self.data.append(&mut other.data);
-        self
-    }
-
-    fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-
-    fn max(&self) -> &(K, T) {
-        self.data
-            .iter()
-            .max_by(|a, b| PartialOrd::partial_cmp(&a.1, &b.1).unwrap_or(cmp::Ordering::Equal))
-            .unwrap()
-    }
-
-    fn min(&self) -> &(K, T) {
-        self.data
-            .iter()
-            .min_by(|a, b| PartialOrd::partial_cmp(&a.1, &b.1).unwrap_or(cmp::Ordering::Equal))
-            .unwrap()
-    }
-
-    fn total(&self) -> T {
-        self.data.iter().map(|(_, v)| *v).sum()
-    }
-
-    fn count(&self) -> usize {
-        self.data.len()
-    }
-
-    fn mean(&self) -> T::MeanType {
-        self.total().div_u32(self.count() as u32)
-    }
-
-    fn standard_deviation(&self) -> T::MeanType {
-        let mean = self.mean();
-        let sum_of_squared_distances: f64 = self
-            .data
-            .iter()
-            .map(|&(_, v)| {
-                let delta = v.mean_diff(mean).as_f64();
-                delta * delta
-            })
-            .sum();
-        let variance = sum_of_squared_distances / (cmp::max(2, self.count()) - 1) as f64;
-        T::from_f64(variance.sqrt())
     }
 }
