@@ -443,6 +443,8 @@ fn evaluate() {
         definitions = "
             (declare-const x Int)
             (declare-fun f (Int Int) Int)
+            (declare-datatype Color ((red) (green)))
+            (declare-const c Color)
         ",
         "Booleans" {
             "(step t1 (cl (=
@@ -474,6 +476,24 @@ fn evaluate() {
         "Partial evaluation" {
             "(step t1 (cl (= (+ x (+ 1 1)) (+ x 2))) :rule evaluate)": true,
             "(step t1 (cl (= (f x (+ 1 1)) (f x 2))) :rule evaluate)": false,
+        }
+        "Terms that are currently not evaluated" {
+            "(step t1 (cl (= (let ((y (+ 1 1))) y) (let ((y (+ 1 1))) y))) :rule evaluate)": true,
+
+            "(step t1 (cl (=
+                (match c ((red true) (green false)))
+                (match c ((red true) (green false)))
+            )) :rule evaluate)": true,
+
+            "(step t1 (cl (= (forall ((z Int)) true) (forall ((z Int)) true)))
+                :rule evaluate)": true,
+            "(step t1 (cl (= (choice ((z Int)) (= z 0)) (choice ((z Int)) (= z 0))))
+                :rule evaluate)": true,
+
+            "(step t1 (cl (= (f x (+ 1 1)) (f x (+ 1 1)))) :rule evaluate)": true,
+
+            "(step t1 (cl (= ((as const (Array Int Int)) 0) ((as const (Array Int Int)) 0)))
+                :rule evaluate)": true,
         }
         "Invalid examples" {
             "(step t1 (cl (= 2 (+ 1 1))) :rule evaluate)": false,

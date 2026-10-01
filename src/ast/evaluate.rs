@@ -163,14 +163,16 @@ impl Rc<Term> {
                     Value::into_term,
                 )
             }
-            // TODO: qualified operators
-            Term::AsOp(_, _, _) => self.as_ref().clone(),
-
-            Term::Var(_, _) | Term::App(_, _) | Term::Binder(_, _, _) | Term::Let(_, _) => {
+            // TODO: qualified operators, `match`, `let`
+            Term::Var(_, _)
+            | Term::App(_, _)
+            | Term::Binder(_, _, _)
+            | Term::Let(_, _)
+            | Term::AsOp(_, _, _)
+            | Term::Match(_, _) => {
                 cache.insert(self, self.clone());
                 return cache.get(self).unwrap();
             }
-            Term::Match(_, _) => todo!(), // TODO
         };
         cache.insert(self, pool.add(result));
         cache.get(self).unwrap()
