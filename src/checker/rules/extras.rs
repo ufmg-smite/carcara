@@ -285,25 +285,27 @@ pub fn la_mult_sign(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         .0
         .into_iter()
         .map(|(var, quantity)| {
-            let Some(comp) = map.get(var) else { todo!() };
+            let Some(comp) = map.get(var) else {
+                return Err(CheckerError::LaMultSignMissingComparison(var.clone()));
+            };
             // The contribution for this variable will always be `>` if its power is even
             if quantity % 2 == 0 {
-                Comparison::Greater
+                Ok(Comparison::Greater)
             } else {
-                *comp
+                Ok(*comp)
             }
         })
-        .reduce(|a, b| match (a, b) {
-            // negative * negative = negative
-            (Comparison::Less, Comparison::Less) => Comparison::Greater,
+        .reduce(|a, b| match (a?, b?) {
+            // negative * negative = positive
+            (Comparison::Less, Comparison::Less) => Ok(Comparison::Greater),
 
             // positive * whatever = whatever
-            (Comparison::Greater, other) | (other, Comparison::Greater) => other,
+            (Comparison::Greater, other) | (other, Comparison::Greater) => Ok(other),
 
             // otherwise we don't know the sign
-            (Comparison::NotEq, _) | (_, Comparison::NotEq) => Comparison::NotEq,
+            (Comparison::NotEq, _) | (_, Comparison::NotEq) => Ok(Comparison::NotEq),
         })
-        .unwrap();
+        .unwrap()?;
 
     if got == monomial_comp {
         Ok(())

@@ -369,6 +369,12 @@ fn la_mult_sign() {
                 (not (= (* a b c) 0.0)))
             ) :rule la_mult_sign)": false,
         }
+        "Missing comparison for a monomial variable" {
+            // Regression test: this used to hit a `todo!()` and panic instead of returning a
+            // checker error
+            "(step t1 (cl (=> (> a 0.0) (> (* a b) 0.0))) :rule la_mult_sign)": false,
+            "(step t1 (cl (=> (> a 0.0) (> (* a b b) 0.0))) :rule la_mult_sign)": false,
+        }
     }
 }
 

@@ -144,6 +144,10 @@ pub enum CheckerError {
     #[error("monomial relation does not match expected, got: '{0}'")]
     LaMultSignWrongRelation(Rc<Term>),
 
+    /// The `la_mult_sign` step is missing a comparison for a monomial variable.
+    #[error("missing comparison for monomial variable '{0}'")]
+    LaMultSignMissingComparison(Rc<Term>),
+
     // General errors
     /// A rule received the wrong number of premises.
     #[error("expected {0} premises, got {1}")]
