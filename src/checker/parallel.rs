@@ -6,6 +6,7 @@ use crate::{
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
+    num::NonZero,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -44,7 +45,7 @@ impl<'c> ParallelChecker<'c> {
         &mut self,
         problem: &Problem,
         proof: &Proof,
-        num_threads: usize,
+        num_threads: NonZero<usize>,
         stack_size: Option<usize>,
     ) -> CarcaraResult<Status> {
         let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
@@ -57,7 +58,7 @@ impl<'c> ParallelChecker<'c> {
         &mut self,
         problem: &Problem,
         proof: &Proof,
-        num_threads: usize,
+        num_threads: NonZero<usize>,
         stack_size: Option<usize>,
         stats: &mut CheckerStatistics<CR>,
     ) -> CarcaraResult<Status> {
@@ -68,12 +69,15 @@ impl<'c> ParallelChecker<'c> {
         &mut self,
         problem: &Problem,
         proof: &Proof,
-        num_threads: usize,
+        num_threads: NonZero<usize>,
         stack_size: Option<usize>,
         stats: Option<&mut CheckerStatistics<CR>>,
     ) -> CarcaraResult<Status> {
-        let num_threads = num_threads.min(proof.commands.len()).max(1);
-        let work_queue = ArrayQueue::new(proof.commands.len().max(1));
+        if proof.commands.is_empty() {
+            return Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() });
+        }
+        let num_threads = num_threads.get().min(proof.commands.len());
+        let work_queue = ArrayQueue::new(proof.commands.len());
         for pos in 0..proof.commands.len() {
             work_queue.push(pos).unwrap();
         }

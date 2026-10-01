@@ -138,7 +138,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
     let checker_config = (options.checking, options.tools).into_config();
 
     let collect_stats = options.stats.stats;
-    if options.num_threads == 1 {
+    if options.num_threads.get() == 1 {
         check(
             instance.problem(),
             instance.proof(),
@@ -155,7 +155,7 @@ fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
             parser_config,
             checker_config,
             collect_stats,
-            options.num_threads as usize,
+            options.num_threads,
             options.stack.stack_size,
         )
     }

@@ -62,6 +62,7 @@ use elaborator::ElaborationPass;
 use elaborator::error::ElaborationError;
 use parser::{ParserError, Position};
 use std::io;
+use std::num::NonZero;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -232,7 +233,7 @@ pub fn check_parallel<'s>(
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
-    num_threads: usize,
+    num_threads: NonZero<usize>,
     stack_size: Option<usize>,
 ) -> Result<Status, Error> {
     let mut run_measures: RunMeasurement = RunMeasurement::default();

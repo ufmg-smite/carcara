@@ -4,7 +4,7 @@ use carcara::{
     parser,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use std::error::Error;
+use std::{error::Error, num::NonZero};
 
 const VERSION_STRING: &str = carcara_macros::version_string!();
 
@@ -248,16 +248,8 @@ pub struct CheckCommandOptions {
     pub tools: ToolOptions,
 
     /// Defines the number of cores for proof checking.
-    #[clap(
-        short = 'u',
-        long,
-        required = false,
-        default_value = "1",
-        // This has to be u32 because clap does not have a range value parser for usize. See:
-        // https://github.com/clap-rs/clap/issues/4253
-        value_parser = clap::value_parser!(u32).range(1..)
-    )]
-    pub num_threads: u32,
+    #[clap(short = 'u', long, required = false, default_value = "1")]
+    pub num_threads: NonZero<usize>,
 
     #[clap(flatten)]
     pub stats: StatsOptions,
@@ -306,12 +298,12 @@ pub struct BenchCommandOptions {
     pub tools: ToolOptions,
 
     /// Number of times to run the benchmark for each file.
-    #[clap(short, long, default_value_t = 1)]
-    pub num_runs: usize,
+    #[clap(short, long, default_value = "1")]
+    pub num_runs: NonZero<usize>,
 
     /// Number of jobs to run simultaneously when running the benchmark.
-    #[clap(short = 'j', long, default_value_t = 1)]
-    pub num_jobs: usize,
+    #[clap(short = 'j', long, default_value = "1")]
+    pub num_jobs: NonZero<usize>,
 
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]

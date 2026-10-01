@@ -5,6 +5,7 @@ use carcara::{
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
+    num::NonZero,
     path::{Path, PathBuf},
     thread,
     time::{Duration, Instant},
@@ -114,16 +115,16 @@ fn worker_thread<T: CollectResults + Default + Send>(
 
 pub fn run_benchmark<T: CollectResults + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
-    num_runs: usize,
-    num_jobs: usize,
+    num_runs: NonZero<usize>,
+    num_jobs: NonZero<usize>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
 ) -> T {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
-    let jobs_queue = ArrayQueue::new(instances.len() * num_runs);
-    for run_index in 0..num_runs {
+    let jobs_queue = ArrayQueue::new(instances.len() * num_runs.get());
+    for run_index in 0..num_runs.get() {
         for (problem, proof) in instances {
             let job = JobDescriptor {
                 problem_file: problem,
@@ -140,7 +141,7 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
         // We of course need to `collect` here to ensure we spawn all threads before starting to
         // `join` them
         #[allow(clippy::needless_collect)]
-        let workers: Vec<_> = (0..num_jobs)
+        let workers: Vec<_> = (0..num_jobs.get())
             .map(|_| {
                 let checker_config = checker_config.clone();
                 let elaborator_config = elaborator_config.clone();
@@ -164,8 +165,8 @@ pub fn run_benchmark<T: CollectResults + Default + Send>(
 #[allow(clippy::too_many_arguments)] // TODO: refactor this
 pub fn run_csv_benchmark(
     instances: &[(PathBuf, PathBuf)],
-    num_runs: usize,
-    num_jobs: usize,
+    num_runs: NonZero<usize>,
+    num_jobs: NonZero<usize>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
