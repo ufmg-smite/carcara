@@ -1,7 +1,7 @@
 use carcara::ast::{
     Binder, MatchCase, Operator, ParamOperator, QualifiedOperator, Rc, Sort, SortedVar, Term,
 };
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, Style};
 use rapidhash::{HashMapExt, RapidHashMap};
 use std::fmt;
 
@@ -22,98 +22,149 @@ pub enum TermDiff {
 }
 
 fn indent(f: &mut fmt::Formatter, level: usize) -> fmt::Result {
+    indent_with_char(f, level, ' ')
+}
+
+fn indent_with_char<C: fmt::Display>(
+    f: &mut fmt::Formatter,
+    level: usize,
+    indicator_char: C,
+) -> fmt::Result {
     const INDENT_UNIT: &str = "  ";
+    write!(f, "{}", indicator_char)?;
     for _ in 0..level {
         write!(f, "{}", INDENT_UNIT)?;
     }
     Ok(())
 }
 
+fn addition<T>(f: &mut fmt::Formatter, t: T, level: usize, use_colors: bool) -> fmt::Result
+where
+    T: fmt::Display,
+{
+    let c = if use_colors {
+        Style::new().green().bold()
+    } else {
+        Style::new()
+    };
+    indent_with_char(f, level, '+'.style(c))?;
+    writeln!(f, "{}", t.style(c))
+}
+
+fn removal<T>(f: &mut fmt::Formatter, t: T, level: usize, use_colors: bool) -> fmt::Result
+where
+    T: fmt::Display,
+{
+    let c = if use_colors {
+        Style::new().red().bold()
+    } else {
+        Style::new()
+    };
+    indent_with_char(f, level, '-'.style(c))?;
+    writeln!(f, "{}", t.style(c))
+}
+
+fn plain<T>(f: &mut fmt::Formatter, t: T, level: usize) -> fmt::Result
+where
+    T: fmt::Display,
+{
+    indent(f, level)?;
+    writeln!(f, "{}", t)
+}
+
 impl TermDiff {
-    fn print(&self, f: &mut fmt::Formatter, level: usize) -> fmt::Result {
+    pub fn display(&self, use_colors: bool) -> impl fmt::Display {
+        struct DisplayTermDiff<'a>(&'a TermDiff, bool);
+
+        impl fmt::Display for DisplayTermDiff<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.print(f, 0, self.1)
+            }
+        }
+
+        DisplayTermDiff(self, use_colors)
+    }
+
+    fn print(&self, f: &mut fmt::Formatter, level: usize, use_colors: bool) -> fmt::Result {
         match self {
-            TermDiff::Identical(term) => write!(f, "{}", term),
+            TermDiff::Identical(term) => plain(f, term, level),
             TermDiff::Different(l, r) => {
-                writeln!(f, "{}", l.red())?;
-                indent(f, level)?;
-                write!(f, "{}", r.green())
+                removal(f, l, level, use_colors)?;
+                addition(f, r, level, use_colors)
             }
             TermDiff::App(func, args) => {
                 match func {
-                    UnaryDiff::Identical(func) => writeln!(f, "({}", func)?,
+                    UnaryDiff::Identical(func) => {
+                        indent(f, level)?;
+                        writeln!(f, "({}", func)?;
+                    }
                     UnaryDiff::Different(l, r) => {
-                        writeln!(f, "(")?;
-                        indent(f, level + 1)?;
-                        writeln!(f, "{}", l.red())?;
-                        indent(f, level + 1)?;
-                        writeln!(f, "{}", r.green())?
+                        plain(f, "(", level)?;
+                        removal(f, l, level + 1, use_colors)?;
+                        addition(f, r, level + 1, use_colors)?;
                     }
                 }
                 for a in args {
-                    a.print(f, level + 1)?;
+                    a.print(f, level + 1, use_colors)?;
                 }
-                indent(f, level)?;
-                write!(f, ")")
+                plain(f, ")", level)
             }
             TermDiff::Binder(binder, bindings, inner) => {
                 match binder {
-                    UnaryDiff::Identical(b) => writeln!(f, "({}", b)?,
+                    UnaryDiff::Identical(b) => {
+                        indent(f, level)?;
+                        writeln!(f, "({}", b)?;
+                    }
                     UnaryDiff::Different(l, r) => {
-                        writeln!(f, "(")?;
-                        indent(f, level + 1)?;
-                        writeln!(f, "{}", l.red())?;
-                        indent(f, level + 1)?;
-                        writeln!(f, "{}", r.green())?
+                        plain(f, "(", level)?;
+                        removal(f, l, level + 1, use_colors)?;
+                        addition(f, r, level + 1, use_colors)?;
                     }
                 }
 
-                indent(f, level + 1)?;
-                ElemDiff::print_multiple(f, bindings, level + 1, |(var, sort)| {
-                    format!("({} {})", var, sort)
-                })?;
+                ElemDiff::print_multiple(
+                    f,
+                    bindings,
+                    |(var, sort)| format!("({} {})", var, sort),
+                    level + 1,
+                    use_colors,
+                )?;
 
-                indent(f, level + 1)?;
-                inner.print(f, level + 1)?;
-                writeln!(f)?;
-                indent(f, level)?;
-                write!(f, ")")
+                inner.print(f, level + 1, use_colors)?;
+
+                plain(f, ")", level)
             }
             TermDiff::Let(assignments, inner) => {
-                writeln!(f, "(let")?;
+                plain(f, "(let", level)?;
 
-                indent(f, level + 1)?;
-                ElemDiff::print_multiple(f, assignments, level + 1, |(var, value)| {
-                    format!("({} {})", var, value)
-                })?;
+                ElemDiff::print_multiple(
+                    f,
+                    assignments,
+                    |(var, value)| format!("({} {})", var, value),
+                    level + 1,
+                    use_colors,
+                )?;
 
-                indent(f, level + 1)?;
-                inner.print(f, level + 1)?;
-                writeln!(f)?;
-                indent(f, level)?;
-                write!(f, ")")
+                inner.print(f, level + 1, use_colors)?;
+
+                plain(f, ")", level)
             }
             TermDiff::Match(inner, cases) => {
-                writeln!(f, "(match")?;
+                plain(f, "(match", level)?;
 
-                indent(f, level + 1)?;
-                inner.print(f, level + 1)?;
-                writeln!(f)?;
+                inner.print(f, level + 1, use_colors)?;
 
-                indent(f, level + 1)?;
-                ElemDiff::print_multiple(f, cases, level + 1, |case| {
-                    format!("({} {})", case.pattern, case.body)
-                })?;
+                ElemDiff::print_multiple(
+                    f,
+                    cases,
+                    |case| format!("({} {})", case.pattern, case.body),
+                    level + 1,
+                    use_colors,
+                )?;
 
-                indent(f, level)?;
-                write!(f, ")")
+                plain(f, ")", level)
             }
         }
-    }
-}
-
-impl fmt::Display for TermDiff {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.print(f, 0)
     }
 }
 
@@ -164,16 +215,11 @@ pub enum ArgDiff {
 }
 
 impl ArgDiff {
-    fn print(&self, f: &mut fmt::Formatter, level: usize) -> fmt::Result {
-        indent(f, level)?;
-
+    fn print(&self, f: &mut fmt::Formatter, level: usize, use_colors: bool) -> fmt::Result {
         match self {
-            ArgDiff::Matching(inner) => {
-                inner.print(f, level)?;
-                writeln!(f)
-            }
-            ArgDiff::NovelLeft(t) => writeln!(f, "{}", t.red()),
-            ArgDiff::NovelRight(t) => writeln!(f, "{}", t.green()),
+            ArgDiff::Matching(inner) => inner.print(f, level, use_colors),
+            ArgDiff::NovelLeft(t) => removal(f, t, level, use_colors),
+            ArgDiff::NovelRight(t) => addition(f, t, level, use_colors),
         }
     }
 }
@@ -185,39 +231,44 @@ pub enum ElemDiff<T> {
 }
 
 impl<T> ElemDiff<T> {
-    fn print(&self, f: &mut fmt::Formatter, display: fn(&T) -> String) -> fmt::Result {
+    fn inner(&self) -> &T {
         match self {
-            ElemDiff::Identical(inner) => write!(f, "{}", display(inner)),
-            ElemDiff::NovelLeft(inner) => write!(f, "{}", display(inner).red()),
-            ElemDiff::NovelRight(inner) => write!(f, "{}", display(inner).green()),
+            ElemDiff::Identical(inner)
+            | ElemDiff::NovelLeft(inner)
+            | ElemDiff::NovelRight(inner) => inner,
         }
     }
 
     fn print_multiple(
         f: &mut fmt::Formatter,
         elems: &[Self],
-        level: usize,
         display: fn(&T) -> String,
+        level: usize,
+        use_colors: bool,
     ) -> fmt::Result {
+        indent(f, level)?;
         if elems.is_empty() {
             writeln!(f, "()")
         } else if elems.iter().all(|e| matches!(e, ElemDiff::Identical(_))) {
-            write!(f, "(")?;
-            elems[0].print(f, display)?;
+            write!(f, "({}", display(elems[0].inner()))?;
             for e in &elems[1..] {
-                write!(f, " ")?;
-                e.print(f, display)?;
+                write!(f, " {}", display(e.inner()))?;
             }
             writeln!(f, ")")
         } else {
             writeln!(f, "(")?;
             for e in elems {
-                indent(f, level + 1)?;
-                e.print(f, display)?;
-                writeln!(f)?;
+                match e {
+                    ElemDiff::Identical(inner) => plain(f, display(inner), level + 1)?,
+                    ElemDiff::NovelLeft(inner) => {
+                        removal(f, display(inner), level + 1, use_colors)?
+                    }
+                    ElemDiff::NovelRight(inner) => {
+                        addition(f, display(inner), level + 1, use_colors)?
+                    }
+                }
             }
-            indent(f, level)?;
-            writeln!(f, ")")
+            plain(f, ")", level)
         }
     }
 }

@@ -27,12 +27,13 @@ use clap::Parser;
 
 fn main() {
     let cli = Cli::parse();
-    let colors_enabled = !cli.no_color && std::io::stderr().is_terminal();
+    let stderr_colors = !cli.no_color && std::io::stderr().is_terminal();
+    let stdout_colors = !cli.no_color && std::io::stdout().is_terminal();
 
     ast::printer::USE_SHARING_IN_TERM_DISPLAY
         .store(!cli.no_print_with_sharing, atomic::Ordering::Relaxed);
 
-    logger::init(cli.log_level.into(), colors_enabled);
+    logger::init(cli.log_level.into(), stderr_colors);
 
     let display_options = printer::DisplayOptions::new().use_sharing(!cli.no_print_with_sharing);
     let result = match cli.command {
@@ -47,7 +48,7 @@ fn main() {
                     if cli.print_diffs
                         && let Some(diff) = diff_from_error(&e)
                     {
-                        println!("{}", diff)
+                        eprint!("{}", diff.display(stderr_colors))
                     }
                     println!("invalid");
                     std::process::exit(1);
@@ -66,14 +67,16 @@ fn main() {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
         Command::Translate(options) => translate_command(options),
-        Command::Diff(options) => diff_command(options).map(|d| println!("{}", d)),
+        Command::Diff(options) => {
+            diff_command(options).map(|d| print!("{}", d.display(stdout_colors)))
+        }
     };
     if let Err(e) = result {
         log::error!("{}", e);
         if cli.print_diffs
             && let Some(diff) = diff_from_error(&e)
         {
-            println!("{}", diff)
+            eprint!("{}", diff.display(stderr_colors))
         }
         std::process::exit(1);
     }
