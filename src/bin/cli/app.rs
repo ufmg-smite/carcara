@@ -4,7 +4,7 @@ use carcara::{
     parser,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use std::{error::Error, num::NonZero};
+use std::{error::Error, num::NonZero, path::PathBuf};
 
 const VERSION_STRING: &str = carcara_macros::version_string!();
 
@@ -74,14 +74,14 @@ pub enum Command {
 #[derive(Args)]
 pub struct Input {
     /// The proof file to be checked
-    pub proof_file: String,
+    pub proof_file: PathBuf,
 
     /// The original problem file. If this argument is not present, it will be inferred from the
     /// proof file.
-    pub problem_file: Option<String>,
+    pub problem_file: Option<PathBuf>,
 
     #[clap(long)]
-    pub rare_file: Option<String>,
+    pub rare_file: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -326,7 +326,7 @@ pub struct BenchCommandOptions {
     /// The proof files on which the benchmark will be run. If a directory is passed, the checker
     /// will recursively find all proof files in the directory. The problem files will be
     /// inferred from the proof files.
-    pub files: Vec<String>,
+    pub files: Vec<PathBuf>,
 }
 
 #[derive(Args)]
@@ -391,7 +391,7 @@ pub struct TranslateCommandOptions {
     /// When translating into Eunoia, we need to pass a path to the folder
     /// containing the corresponding mechanization.
     #[clap(long)]
-    pub eunoia_mech: String,
+    pub eunoia_mech: PathBuf,
 
     #[clap(flatten)]
     pub input: Input,
@@ -403,10 +403,10 @@ pub struct TranslateCommandOptions {
 #[derive(Args)]
 pub struct DiffCommandOptions {
     /// The original problem file.
-    pub problem_file: String,
+    pub problem_file: PathBuf,
 
     /// A file containing two terms to be diffed.
-    pub terms_file: String,
+    pub terms_file: PathBuf,
 
     #[clap(flatten)]
     pub parsing: ParsingOptions,

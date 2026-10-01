@@ -10,7 +10,6 @@ pub enum CliError {
     CarcaraError(carcara::Error),
     CantInferProblemFile(PathBuf),
     InvalidSliceId(String),
-    BothFilesStdin,
 }
 
 pub type CliResult<T> = Result<T, CliError>;
@@ -89,7 +88,6 @@ impl fmt::Display for CliError {
             CliError::CantInferProblemFile(p) => {
                 write!(f, "can't infer problem file: {}", p.display())
             }
-            CliError::BothFilesStdin => write!(f, "problem and proof files can't both be `-`"),
             CliError::InvalidSliceId(id) => write!(f, "invalid id for slice: {}", id),
         }
     }

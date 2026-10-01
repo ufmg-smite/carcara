@@ -8,8 +8,8 @@ fn run_parallel_checker_test(
     num_threads: usize,
 ) -> CarcaraResult<()> {
     let (problem, proof, rare_rules, pool) = parser::parse_instance(
-        parser::Source::file(problem_path, &mut String::new())?,
-        parser::Source::file(proof_path, &mut String::new())?,
+        parser::Source::file(problem_path)?,
+        parser::Source::file(proof_path)?,
         None,
         config.0,
     )?;
@@ -32,8 +32,8 @@ fn run_test(
     config: (parser::Config, checker::Config),
 ) -> CarcaraResult<()> {
     let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        parser::Source::file(problem_path, &mut String::new())?,
-        parser::Source::file(proof_path, &mut String::new())?,
+        parser::Source::file(problem_path)?,
+        parser::Source::file(proof_path)?,
         None,
         config.0,
     )?;

@@ -23,68 +23,93 @@ use error::{assert_indexed_op_args_value, assert_num_args, check_relation_sort, 
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use rug::{Integer, Rational};
-use std::{iter::Iterator, path::Path, str::FromStr};
+use std::{
+    borrow::Cow,
+    iter::Iterator,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 pub use error::{ParserError, SortError};
 pub use lexer::{Position, Reserved, Token};
 
 /// A code source for [`Parser`], with a name and contents.
+///
+/// A `Source` might either borrow its name and contents (see [`Source::new`] and the `From<&str>`
+/// implementation), or own them (see [`Source::owned`], [`Source::file`] and [`Source::stdin`]).
 pub struct Source<'s> {
-    name: &'s Path,
-    contents: &'s str,
+    name: Cow<'s, Path>,
+    contents: Cow<'s, str>,
 }
 
 impl<'s> Source<'s> {
-    /// Constructs a new `Source` from `name` and `contents` strings.
+    /// Constructs a new `Source` that borrows its `name` and `contents`.
     pub fn new(name: &'s Path, contents: &'s str) -> Self {
-        Self { name, contents }
+        Self {
+            name: Cow::Borrowed(name),
+            contents: Cow::Borrowed(contents),
+        }
+    }
+
+    /// Returns the name of this source.
+    pub fn name(&self) -> &Path {
+        &self.name
+    }
+
+    /// Returns the contents of this source.
+    pub fn contents(&self) -> &str {
+        &self.contents
+    }
+}
+
+impl Source<'static> {
+    /// Constructs a new `Source` that owns its `name` and `contents`.
+    pub fn owned(name: impl Into<PathBuf>, contents: String) -> Self {
+        Self {
+            name: Cow::Owned(name.into()),
+            contents: Cow::Owned(contents),
+        }
     }
 
     /// Constructs a new `Source` by reading the contents of a file.
-    ///
-    /// Since `Source` does not own its `contents` string, this must take a buffer in which to store
-    /// the file contents.
-    pub fn file(path: &'s Path, buf: &'s mut String) -> CarcaraResult<Self> {
+    pub fn file(path: impl AsRef<Path>) -> CarcaraResult<Self> {
+        let path = path.as_ref();
+        let contents =
+            std::fs::read_to_string(path).map_err(|e| Error::Io { inner: e, file: path.into() })?;
+        Ok(Self::owned(path, contents))
+    }
+
+    /// Constructs a new `Source` by reading the contents of stdin.
+    pub fn stdin() -> CarcaraResult<Self> {
         use std::io::Read;
 
-        std::fs::File::open(path)
-            .and_then(|mut f| f.read_to_string(buf))
-            .map_err(|e| Error::Io {
-                inner: e,
-                file: path.to_str().unwrap().into(),
-            })?;
-        Ok(Self { name: path, contents: buf })
+        let mut contents = String::new();
+        std::io::stdin()
+            .read_to_string(&mut contents)
+            .map_err(|e| Error::Io { inner: e, file: "<stdin>".into() })?;
+        Ok(Self::owned("<stdin>", contents))
     }
 
     /// Constructs a new `Source` by reading the contents of a file, or from stdin if `path` is "-".
-    ///
-    /// Since `Source` does not own its `contents` string, this must take a buffer in which to store
-    /// the file contents.
-    pub fn file_or_stdin(path: &'s Path, buf: &'s mut String) -> CarcaraResult<Self> {
-        use std::io::Read;
-
+    pub fn file_or_stdin(path: impl AsRef<Path>) -> CarcaraResult<Self> {
+        let path = path.as_ref();
         if path == "-" {
-            std::io::stdin()
-                .read_to_string(buf)
-                .map_err(|e| Error::Io { inner: e, file: "<stdin>".into() })?;
+            Self::stdin()
         } else {
-            std::fs::File::open(path)
-                .and_then(|mut f| f.read_to_string(buf))
-                .map_err(|e| Error::Io {
-                    inner: e,
-                    file: path.to_str().unwrap().into(),
-                })?;
+            Self::file(path)
         }
-        Ok(Self { name: path, contents: buf })
     }
 }
 
 impl<'s> From<&'s str> for Source<'s> {
     fn from(value: &'s str) -> Self {
-        Self {
-            name: Path::new("<str>"),
-            contents: value,
-        }
+        Self::new(Path::new("<str>"), value)
+    }
+}
+
+impl From<String> for Source<'static> {
+    fn from(value: String) -> Self {
+        Self::owned("<str>", value)
     }
 }
 
@@ -299,10 +324,15 @@ impl<'p, 's> Parser<'p, 's> {
         Ok(())
     }
 
+    /// Returns the name of the current input source.
+    fn source_name(&self) -> &Path {
+        self.lexer.source.name()
+    }
+
     /// Wraps a `ParserError` into a crate level error, by adding the given position and the current
     /// source name.
     fn err(&self, inner: impl Into<ParserError>, pos: Position) -> Error {
-        Error::Parser(inner.into(), pos, self.lexer.source_name.into())
+        Error::Parser(inner.into(), pos, self.source_name().into())
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -1275,7 +1305,7 @@ impl<'p, 's> Parser<'p, 's> {
         Ok(Proof {
             constant_definitions,
             commands,
-            filename: self.lexer.source_name.into(),
+            filename: self.source_name().into(),
         })
     }
 

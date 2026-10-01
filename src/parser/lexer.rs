@@ -7,10 +7,7 @@ use crate::{
     utils::is_symbol_character,
 };
 use rug::{Integer, Rational, ops::Pow};
-use std::{
-    path::Path,
-    str::{Chars, FromStr},
-};
+use std::str::FromStr;
 
 /// A token in the SMT-LIB and Alethe formats.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -172,40 +169,40 @@ pub type Position = (usize, usize);
 
 /// A lexer for the SMT-LIB, Alethe and Rare lexicons.
 pub struct Lexer<'s> {
-    chars: Chars<'s>,
+    pub source: Source<'s>,
+
+    /// The byte offset of the current character in the source contents.
+    offset: usize,
     line_start: usize,
     lines_read: usize,
-    source_len: usize,
-    pub source_name: &'s Path,
 }
 
 impl<'s> Lexer<'s> {
     /// Constructs a new `Lexer` from a `Source`.
     pub fn new(source: Source<'s>) -> Self {
-        let source_len = source.contents.len();
         Self {
-            chars: source.contents.chars(),
+            source,
+            offset: 0,
             line_start: 0,
             lines_read: 0,
-            source_len,
-            source_name: source.name,
         }
     }
 
     /// Wraps a `ParserError` into a crate level error, by adding the current position and the
     /// current source name.
     fn err(&self, inner: impl Into<ParserError>) -> Error {
-        Error::Parser(inner.into(), self.position(), self.source_name.into())
+        Error::Parser(inner.into(), self.position(), self.source.name().into())
     }
 
     /// Advances the lexer by one character, and returns the previous `current_char`.
     fn next_char(&mut self) -> Option<char> {
-        let got = self.chars.next();
-        if got == Some('\n') {
+        let got = self.current()?;
+        self.offset += got.len_utf8();
+        if got == '\n' {
             self.lines_read += 1;
-            self.line_start = self.source_len - self.chars.as_str().len();
+            self.line_start = self.offset;
         }
-        got
+        Some(got)
     }
 
     /// Advances the lexer by one line, discarding the remaining contents of the current line.
@@ -224,14 +221,13 @@ impl<'s> Lexer<'s> {
     ///
     /// If the lexer is at the end of the input, returns `None`.
     fn current(&self) -> Option<char> {
-        self.chars.clone().next()
+        self.source.contents()[self.offset..].chars().next()
     }
 
     /// Returns the position of the current character.
     fn position(&self) -> Position {
-        let raw = self.source_len - self.chars.as_str().len();
         // + 1 because lines and columns are usually counted starting from 1
-        (self.lines_read + 1, raw - self.line_start + 1)
+        (self.lines_read + 1, self.offset - self.line_start + 1)
     }
 
     /// Reads characters while the given predicate returns `true`, and stores them in a `String`.

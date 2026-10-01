@@ -38,8 +38,8 @@ fn run_job<T: CollectResults + Default + Send>(
 
     let parsing = Instant::now();
     let (problem, proof, rules, mut pool) = parser::parse_instance(
-        parser::Source::file(job.problem_file, &mut String::new())?,
-        parser::Source::file(job.proof_file, &mut String::new())?,
+        parser::Source::file(job.problem_file)?,
+        parser::Source::file(job.proof_file)?,
         None,
         parser_config,
     )?;

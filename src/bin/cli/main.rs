@@ -9,15 +9,17 @@ use app::*;
 use carcara::{
     ast::{self, Proof, printer, rare_rules::Rules},
     benchmarking::OnlineBenchmarkResults,
-    check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
+    check, check_and_elaborate, check_parallel, generate_lia_smt_instances,
+    parser::{self, Source},
+    slice,
     translation::{self, Translator},
 };
 use error::{CliError, CliResult};
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, IsTerminal, Read, Write},
-    path::PathBuf,
+    io::{IsTerminal, Write},
+    path::{Path, PathBuf},
     sync::atomic,
 };
 
@@ -77,93 +79,48 @@ fn main() {
     }
 }
 
-struct Instance {
-    problem: (PathBuf, String),
-    proof: (PathBuf, String),
-    rules: Option<(PathBuf, String)>,
-}
-
-impl Instance {
-    fn problem(&self) -> parser::Source<'_> {
-        parser::Source::new(&self.problem.0, &self.problem.1)
-    }
-
-    fn proof(&self) -> parser::Source<'_> {
-        parser::Source::new(&self.proof.0, &self.proof.1)
-    }
-
-    fn rules(&self) -> Option<parser::Source<'_>> {
-        let (name, contents) = self.rules.as_ref()?;
-        Some(parser::Source::new(name, contents))
-    }
-}
-
-fn get_instance(options: &Input) -> CliResult<Instance> {
-    let file_source = |path: &str| -> Result<(PathBuf, String), carcara::Error> {
-        let contents = std::fs::read_to_string(path)
-            .map_err(|e| carcara::Error::Io { inner: e, file: path.into() })?;
-        Ok((path.into(), contents))
+/// Reads the problem, proof and (optional) Rare rules sources given in the command-line input.
+fn get_instance(
+    options: &Input,
+) -> CliResult<(Source<'static>, Source<'static>, Option<Source<'static>>)> {
+    let problem_file = match &options.problem_file {
+        Some(f) => f.clone(),
+        None => infer_problem_path(&options.proof_file)?,
     };
-    let stdin_source = || -> Result<(PathBuf, String), carcara::Error> {
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .map_err(|e| carcara::Error::Io { inner: e, file: "<stdin>".into() })?;
-        Ok(("<stdin>".into(), buf))
-    };
-
-    let (problem, proof) = match (options.problem_file.as_deref(), options.proof_file.as_str()) {
-        (Some("-"), "-") | (None, "-") => return Err(CliError::BothFilesStdin),
-        (Some(problem), "-") => (file_source(problem)?, stdin_source()?),
-        (Some("-"), proof) => (stdin_source()?, file_source(proof)?),
-        (Some(problem), proof) => (file_source(problem)?, file_source(proof)?),
-        (None, proof) => {
-            let problem = infer_problem_path(proof)?;
-            (file_source(problem.to_str().unwrap())?, file_source(proof)?)
-        }
-    };
-    let rules = options
-        .rare_file
-        .as_ref()
-        .map(|f| file_source(f))
-        .transpose()?;
-
-    Ok(Instance { problem, proof, rules })
+    let problem = Source::file(problem_file)?;
+    let proof = Source::file_or_stdin(&options.proof_file)?;
+    let rules = options.rare_file.as_ref().map(Source::file).transpose()?;
+    Ok((problem, proof, rules))
 }
 
 fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::Pool)> {
-    let instance = get_instance(&options.input)?;
-    let result = parser::parse_instance(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
-        options.parsing.into_config(),
-    )?;
+    let (problem, proof, rules) = get_instance(&options.input)?;
+    let result = parser::parse_instance(problem, proof, rules, options.parsing.into_config())?;
     Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
-    let instance = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input)?;
     let parser_config = options.parsing.into_config();
     let checker_config = (options.checking, options.tools).into_config();
 
     let collect_stats = options.stats.stats;
     if options.num_threads.get() == 1 {
         check(
-            instance.problem(),
-            instance.proof(),
-            instance.rules(),
+            problem,
+            proof,
+            rules,
             parser_config,
             checker_config,
             collect_stats,
         )
     } else {
         check_parallel(
-            instance.problem(),
-            instance.proof(),
-            instance.rules(),
+            problem,
+            proof,
+            rules,
             parser_config,
             checker_config,
             collect_stats,
@@ -177,15 +134,15 @@ fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
 fn elaborate_command(
     options: ElaborateCommandOptions,
 ) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
-    let instance = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input)?;
 
     let checker_config = (options.checking, options.tools.clone()).into_config();
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
     check_and_elaborate(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
+        problem,
+        proof,
+        rules,
         options.parsing.into_config(),
         checker_config,
         elab_config,
@@ -196,7 +153,7 @@ fn elaborate_command(
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
-    let instances = get_instances_from_paths(options.files.iter().map(|s| s.as_str()))?;
+    let instances = get_instances_from_paths(&options.files)?;
     if instances.is_empty() {
         log::warn!("no files passed");
         return Ok(());
@@ -253,13 +210,9 @@ fn slice_command(
     options: SliceCommandOptions,
     no_print_with_sharing: bool,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::pool::Pool)> {
-    let instance = get_instance(&options.input)?;
-    let (problem, proof, _, mut pool) = parser::parse_instance(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
-        options.parsing.into_config(),
-    )?;
+    let (problem, proof, rules) = get_instance(&options.input)?;
+    let (problem, proof, _, mut pool) =
+        parser::parse_instance(problem, proof, rules, options.parsing.into_config())?;
 
     let sliced = {
         let (sliced_proof, sliced_asserts) = slice::slice(
@@ -313,19 +266,21 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     use std::io::Write;
 
     let root_file_name = options.input.proof_file.clone();
-    let instance = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input)?;
     let instances = generate_lia_smt_instances(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
+        problem,
+        proof,
+        rules,
         options.parsing.into_config(),
         use_sharing,
     )?;
     for (id, content) in instances {
-        let file_name = format!("{}-{}.lia_smt2", root_file_name, id);
+        let mut file_name = root_file_name.clone().into_os_string();
+        file_name.push(format!("-{}.lia_smt2", id));
+        let file_name = PathBuf::from(file_name);
         File::create(&file_name)
             .and_then(|mut f| write!(f, "{}", content))
-            .map_err(|inner| carcara::Error::Io { inner, file: file_name.into() })?;
+            .map_err(|inner| carcara::Error::Io { inner, file: file_name })?;
     }
 
     Ok(())
@@ -333,14 +288,10 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 
 // Translation-related commands.
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let instance = get_instance(&options.input)?;
+    let (problem, proof, rules) = get_instance(&options.input)?;
 
-    let (alethe_problem, mut alethe_proof, _, _) = parser::parse_instance(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
-        options.parsing.into_config(),
-    )?;
+    let (alethe_problem, mut alethe_proof, _, _) =
+        parser::parse_instance(problem, proof, rules, options.parsing.into_config())?;
 
     // NOTE: currently supporting only translation into Eunoia.
     match &options.target {
@@ -353,7 +304,7 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
 fn translate_2_eunoia_command(
     alethe_problem: &ast::Problem,
     proof: &mut Proof,
-    eunoia_mech: &str,
+    eunoia_mech: &Path,
 ) -> CliResult<()> {
     use translation::eunoia::DisplayEunoiaProof;
 
@@ -393,11 +344,8 @@ fn diff_from_error(error: &CliError) -> Option<diff::TermDiff> {
 }
 
 fn diff_command(options: DiffCommandOptions) -> CliResult<diff::TermDiff> {
-    let mut problem = String::new();
-    let problem = parser::Source::file(options.problem_file.as_ref(), &mut problem)?;
-
-    let mut terms = String::new();
-    let terms = parser::Source::file_or_stdin(options.terms_file.as_ref(), &mut terms)?;
+    let problem = Source::file(&options.problem_file)?;
+    let terms = Source::file_or_stdin(&options.terms_file)?;
 
     let mut pool = ast::pool::Pool::new();
     let mut parser = parser::Parser::new(&mut pool, options.parsing.into_config(), problem)?;
