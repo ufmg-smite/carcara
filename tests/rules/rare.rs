@@ -184,19 +184,19 @@ fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         let got = check_result.is_ok();
 
         if expected != got {
-            use colored::{Color, Colorize};
+            use owo_colors::{AnsiColors, OwoColorize};
             let (color, expectation) = if expected {
-                (Color::Red, "expected to PASS but FAILED".red())
+                (AnsiColors::Red, "expected to PASS but FAILED")
             } else {
-                (Color::Yellow, "expected to FAIL but PASSED".yellow())
+                (AnsiColors::Yellow, "expected to FAIL but PASSED")
             };
 
             panic!(
                 "{}\nTest '{}' case {}: {}\nOUTCOME: {}",
-                "TEST FAILURE".bold().color(color),
+                "TEST FAILURE".color(color).bold(),
                 test_name.bold(),
                 i.to_string().bold(),
-                expectation,
+                expectation.color(color),
                 error_message
             );
         }

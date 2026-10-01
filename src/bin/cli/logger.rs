@@ -1,25 +1,24 @@
-use ansi_term::{ANSIString, Color, Style};
 use log::{Level, LevelFilter, Log, Metadata, Record};
+use owo_colors::{AnsiColors, OwoColorize};
 
 pub struct Logger {
     colors_enabled: bool,
 }
 
 impl Logger {
-    fn prefix(&self, level: Level) -> ANSIString<'static> {
-        let style = if self.colors_enabled {
-            let color = match level {
-                Level::Error => Color::Red,
-                Level::Warn => Color::Yellow,
-                Level::Info => Color::Cyan,
-                Level::Debug => Color::Purple,
-                Level::Trace => Color::Green,
-            };
-            color.bold()
-        } else {
-            Style::new()
+    fn prefix(&self, level: Level) -> String {
+        let text = format!("{}:", level).to_lowercase();
+        if !self.colors_enabled {
+            return text;
+        }
+        let color = match level {
+            Level::Error => AnsiColors::Red,
+            Level::Warn => AnsiColors::Yellow,
+            Level::Info => AnsiColors::Cyan,
+            Level::Debug => AnsiColors::Magenta,
+            Level::Trace => AnsiColors::Green,
         };
-        style.paint(format!("{}:", level).to_lowercase())
+        text.color(color).bold().to_string()
     }
 }
 

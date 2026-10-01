@@ -1,7 +1,7 @@
-use ansi_term::Color;
 use carcara::ast::{
     Binder, MatchCase, Operator, ParamOperator, QualifiedOperator, Rc, Sort, SortedVar, Term,
 };
+use owo_colors::OwoColorize;
 use rapidhash::{HashMapExt, RapidHashMap};
 use std::fmt;
 
@@ -34,9 +34,9 @@ impl TermDiff {
         match self {
             TermDiff::Identical(term) => write!(f, "{}", term),
             TermDiff::Different(l, r) => {
-                writeln!(f, "{}", Color::Red.paint(format!("{}", l)))?;
+                writeln!(f, "{}", l.red())?;
                 indent(f, level)?;
-                write!(f, "{}", Color::Green.paint(format!("{}", r)))
+                write!(f, "{}", r.green())
             }
             TermDiff::App(func, args) => {
                 match func {
@@ -44,9 +44,9 @@ impl TermDiff {
                     UnaryDiff::Different(l, r) => {
                         writeln!(f, "(")?;
                         indent(f, level + 1)?;
-                        writeln!(f, "{}", Color::Red.paint(format!("{}", l)))?;
+                        writeln!(f, "{}", l.red())?;
                         indent(f, level + 1)?;
-                        writeln!(f, "{}", Color::Green.paint(format!("{}", r)))?
+                        writeln!(f, "{}", r.green())?
                     }
                 }
                 for a in args {
@@ -61,9 +61,9 @@ impl TermDiff {
                     UnaryDiff::Different(l, r) => {
                         writeln!(f, "(")?;
                         indent(f, level + 1)?;
-                        writeln!(f, "{}", Color::Red.paint(format!("{}", l)))?;
+                        writeln!(f, "{}", l.red())?;
                         indent(f, level + 1)?;
-                        writeln!(f, "{}", Color::Green.paint(format!("{}", r)))?
+                        writeln!(f, "{}", r.green())?
                     }
                 }
 
@@ -172,8 +172,8 @@ impl ArgDiff {
                 inner.print(f, level)?;
                 writeln!(f)
             }
-            ArgDiff::NovelLeft(t) => writeln!(f, "{}", Color::Red.paint(format!("{}", t))),
-            ArgDiff::NovelRight(t) => writeln!(f, "{}", Color::Green.paint(format!("{}", t))),
+            ArgDiff::NovelLeft(t) => writeln!(f, "{}", t.red()),
+            ArgDiff::NovelRight(t) => writeln!(f, "{}", t.green()),
         }
     }
 }
@@ -188,8 +188,8 @@ impl<T> ElemDiff<T> {
     fn print(&self, f: &mut fmt::Formatter, display: fn(&T) -> String) -> fmt::Result {
         match self {
             ElemDiff::Identical(inner) => write!(f, "{}", display(inner)),
-            ElemDiff::NovelLeft(inner) => write!(f, "{}", Color::Red.paint(display(inner))),
-            ElemDiff::NovelRight(inner) => write!(f, "{}", Color::Green.paint(display(inner))),
+            ElemDiff::NovelLeft(inner) => write!(f, "{}", display(inner).red()),
+            ElemDiff::NovelRight(inner) => write!(f, "{}", display(inner).green()),
         }
     }
 

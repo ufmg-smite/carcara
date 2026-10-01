@@ -2,7 +2,7 @@ use carcara::{
     ast::{ProofCommand, ProofStep},
     checker, parser,
 };
-use colored::{Color, Colorize};
+use owo_colors::{AnsiColors, OwoColorize};
 
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, &(proof, expected)) in cases.iter().enumerate() {
@@ -50,20 +50,20 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         let got = check_result.is_ok();
 
         if expected == got {
-            println!("{} \"{}\"", "PASSED".bold().color(Color::Green), test_name);
+            println!("{} \"{}\"", "PASSED".green().bold(), test_name);
         } else {
             let (color, expectation) = if expected {
-                (Color::Red, "expected to PASS but FAILED".red())
+                (AnsiColors::Red, "expected to PASS but FAILED")
             } else {
-                (Color::Yellow, "expected to FAIL but PASSED".yellow())
+                (AnsiColors::Yellow, "expected to FAIL but PASSED")
             };
 
             panic!(
                 "{}\nTest '{}' case {}: {}\nOUTCOME: {}",
-                "TEST FAILURE".bold().color(color),
+                "TEST FAILURE".color(color).bold(),
                 test_name.bold(),
                 i.to_string().bold(),
-                expectation,
+                expectation.color(color),
                 error_message
             );
         }
