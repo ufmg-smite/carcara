@@ -456,7 +456,9 @@ fn evaluate() {
         }
         "Arithmetic" {
             "(step t1 (cl (= (+ 1 2 (* 3 (- 1))) 0)) :rule evaluate)": true,
-            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 0)) :rule evaluate)": true,
+            // `mod` uses Euclidean division, so `(mod (- 7) (- 3))` is 2, not -1
+            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 3)) :rule evaluate)": true,
+            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 0)) :rule evaluate)": false,
             "(step t1 (cl (= (/ 1.0 (to_real 7)) 1/7)) :rule evaluate)": true,
         }
         "Bitvectors" {
@@ -472,6 +474,12 @@ fn evaluate() {
 
             // Regression
             "(step t1 (cl (= ((_ extract 0 0) (_ bv1 1)) #b1)) :rule evaluate)": true,
+            "(step t1 (cl (= (bvslt #b1111 #b0001) true)) :rule evaluate)": true,
+            "(step t1 (cl (= (bvslt #b1111 #b0001) false)) :rule evaluate)": false,
+        }
+        "Strings" {
+            "(step t1 (cl (= (str.< \"a\" \"b\") true)) :rule evaluate)": true,
+            "(step t1 (cl (= (str.< \"a\" \"b\") false)) :rule evaluate)": false,
         }
         "Partial evaluation" {
             "(step t1 (cl (= (+ x (+ 1 1)) (+ x 2))) :rule evaluate)": true,
