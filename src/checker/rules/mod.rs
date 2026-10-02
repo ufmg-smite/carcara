@@ -27,6 +27,11 @@ pub struct RuleArgs<'a> {
     pub(super) discharge: &'a [&'a ProofCommand],
 
     pub(super) polyeq_time: &'a mut Duration,
+
+    // Automatons built from regex terms by the regex-eval rules, cached across steps: proofs
+    // commonly apply many such steps to the same (hash-consed) regex.
+    pub(super) automata_cache:
+        &'a mut indexmap::IndexMap<Rc<Term>, std::sync::Arc<crate::automata::Automaton>>,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -309,18 +314,6 @@ pub fn get_rule(rule_name: &str, elaborated: bool, prefer_rup: bool) -> Option<R
         "arrays_row_contra" => arrays::row_contra,
         "arrays_ext" => arrays::ext,
 
-        "concat_eq" => strings::concat_eq,
-        "concat_unify" => strings::concat_unify,
-        "concat_conflict" => strings::concat_conflict,
-        "concat_csplit_prefix" => strings::concat_csplit_prefix,
-        "concat_csplit_suffix" => strings::concat_csplit_suffix,
-        "concat_split_prefix" => strings::concat_split_prefix,
-        "concat_split_suffix" => strings::concat_split_suffix,
-        "concat_lprop_prefix" => strings::concat_lprop_prefix,
-        "concat_lprop_suffix" => strings::concat_lprop_suffix,
-        "concat_cprop_prefix" => strings::concat_cprop_prefix,
-        "concat_cprop_suffix" => strings::concat_cprop_suffix,
-
         // pseudo-boolean bitblasting
         "pbblast_bveq" => pb_blasting::pbblast_bveq,
         "pbblast_bvult" => pb_blasting::pbblast_bvult,
@@ -346,16 +339,43 @@ pub fn get_rule(rule_name: &str, elaborated: bool, prefer_rup: bool) -> Option<R
         "cp_literal" => cutting_planes::cp_literal,
         "cp_normalize" => cutting_planes::cp_normalize,
 
+        // CPC rules
+        "concat_eq" => strings::concat_eq,
+        "concat_unify" => strings::concat_unify,
+        "concat_conflict" => strings::concat_conflict,
+        "concat_csplit_prefix" => strings::concat_csplit_prefix,
+        "concat_csplit_suffix" => strings::concat_csplit_suffix,
+        "concat_split_prefix" => strings::concat_split_prefix,
+        "concat_split_suffix" => strings::concat_split_suffix,
+        "concat_lprop_prefix" => strings::concat_lprop_prefix,
+        "concat_lprop_suffix" => strings::concat_lprop_suffix,
+        "concat_cprop_prefix" => strings::concat_cprop_prefix,
+        "concat_cprop_suffix" => strings::concat_cprop_suffix,
         "string_decompose" => strings::string_decompose,
         "string_length_pos" => strings::string_length_pos,
         "string_length_non_empty" => strings::string_length_non_empty,
-
         "re_inter" => strings::re_inter,
         "re_kleene_star_unfold_pos" => strings::re_kleene_star_unfold_pos,
         "re_concat_unfold_pos" => strings::re_concat_unfold_pos,
         "re_unfold_neg" => strings::re_unfold_neg,
         "re_unfold_neg_concat_fixed_prefix" => strings::re_unfold_neg_concat_fixed_prefix,
         "re_unfold_neg_concat_fixed_suffix" => strings::re_unfold_neg_concat_fixed_suffix,
+
+        // RCP rules
+        "re_convert" => strings::re_convert,
+        "re_empty_intersection" => strings::re_empty_intersection,
+        "re_intersection" => strings::re_intersection,
+        "re_forward_prop" => strings::re_forward_prop,
+        "concat_bwd_propagation" => strings::concat_bwd_propagation,
+        "concat_aut_bwd_propagation" => strings::concat_aut_bwd_propagation,
+
+        // Other String rules
+        "str_indexof_re_eval" => strings::str_indexof_re_eval,
+        "str_replace_re_eval" => strings::str_replace_re_eval,
+        "str_replace_re_all_eval" => strings::str_replace_re_all_eval,
+        "str_in_re_eval" => strings::str_in_re_eval,
+        "str_concat_len" => strings::str_concat_len,
+
         // Drup format rules
         "drup" => |x| crate::checker::rules::drup::drup(false, x),
         // Drat format rules
