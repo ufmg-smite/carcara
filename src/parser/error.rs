@@ -24,6 +24,10 @@ pub enum ParserError {
     #[error("division by zero in numerical literal: '{0}'")]
     DivisionByZeroInLiteral(String),
 
+    /// The lexer encountered a numerical literal with no denominator, e.g. `5/`.
+    #[error("missing denominator in numerical literal: '{0}/'")]
+    MissingDenominatorInLiteral(String),
+
     /// The lexer encountered a `\` character while reading a quoted symbol.
     #[error("quoted symbol contains backslash")]
     BackslashInQuotedSymbol,

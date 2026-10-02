@@ -33,8 +33,13 @@ pub fn parse_term(pool: &mut Pool, input: &str) -> Rc<Term> {
 /// Tries to parse a term from a `&str`, expecting it to fail. Returns the error encountered, or
 /// panics if no error is encountered.
 pub fn parse_term_err(input: &str) -> Error {
+    parse_term_err_with_config(TEST_CONFIG, input)
+}
+
+/// Same as [`parse_term_err`], but uses the given parser configuration.
+pub fn parse_term_err_with_config(config: Config, input: &str) -> Error {
     let mut pool = Pool::new();
-    Parser::new(&mut pool, TEST_CONFIG, input.into())
+    Parser::new(&mut pool, config, input.into())
         .and_then(|mut p| p.parse_term())
         .expect_err("expected error")
 }
@@ -753,6 +758,27 @@ fn test_bitvectors() {
         assert_eq!(proof.commands.len(), 1);
         assert_eq!(&proof.commands[0], &expected_value);
     }
+
+    assert!(matches!(
+        parse_term_err("(_ bv 4)"),
+        Error::Parser(ParserError::WrongNumberOfArgs(_, 1), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(_ bvfoo 4)"),
+        Error::Parser(ParserError::InvalidIndexedOp(_), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(_ bv5 0)"),
+        Error::Parser(ParserError::WrongValueOfArgs(_, _), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(_ bv5 99999999999999999999999)"),
+        Error::Parser(ParserError::WrongValueOfArgs(_, _), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("((as const (Array Int (_ BitVec 99999999999999999999999))) #b0)"),
+        Error::Parser(ParserError::WrongValueOfArgs(_, _), _, _),
+    ));
 }
 
 #[test]
@@ -787,6 +813,16 @@ fn test_indexed_operators() {
         assert_eq!(proof.commands.len(), 1);
         assert_eq!(&proof.commands[0], &expected_value);
     }
+
+    let config = TEST_CONFIG.allow_higher_order_indexed_ops(true);
+    assert!(matches!(
+        parse_term_err_with_config(config, "(extract 3)"),
+        Error::Parser(ParserError::WrongNumberOfArgs(_, 1), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err_with_config(config, "(bv (+ 1 2) 4)"),
+        Error::Parser(ParserError::ExpectedIntegerConstant(_), _, _),
+    ));
 }
 
 #[test]

@@ -383,6 +383,10 @@ impl<'s> Lexer<'s> {
             }
             let r = match delimiter {
                 '/' => {
+                    if second_part.is_empty() {
+                        let e = ParserError::MissingDenominatorInLiteral(first_part);
+                        return Err(self.err(e));
+                    }
                     let [numer, denom] =
                         [first_part, second_part].map(|s| s.parse::<Integer>().unwrap());
                     if denom.is_zero() {
@@ -635,6 +639,14 @@ mod tests {
         assert!(matches!(
             lex_one("1/0"),
             Err(Error::Parser(ParserError::DivisionByZeroInLiteral(_), _, _))
+        ));
+        assert!(matches!(
+            lex_one("5/"),
+            Err(Error::Parser(
+                ParserError::MissingDenominatorInLiteral(_),
+                _,
+                _
+            ))
         ));
     }
 

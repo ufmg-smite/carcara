@@ -670,8 +670,8 @@ impl<'p, 's> Parser<'p, 's> {
             }
             Operator::Cl => {}
             Operator::Delete => {
-                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
                 assert_num_args(&args, 1)?;
+                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
             }
             Operator::BvAdd
             | Operator::BvMul
@@ -1764,7 +1764,10 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(ParamOperator, Vec<Rc<Term>>)> {
         let op_symbol = self.expect_symbol()?;
 
-        if let Some(value) = op_symbol.strip_prefix("bv") {
+        if let Some(value) = op_symbol.strip_prefix("bv")
+            && !value.is_empty()
+            && value.chars().all(|c| c.is_ascii_digit())
+        {
             let parsed_value = value.parse::<Integer>().unwrap();
             let args = self.parse_sequence(Self::parse_term, true)?;
             let mut constant_args = Vec::new();
@@ -1824,10 +1827,13 @@ impl<'p, 's> Parser<'p, 's> {
             ParamOperator::BvConst => {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
+                if let Some(arg) = op_args.iter().find(|a| a.as_integer().is_none()) {
+                    return Err(ParserError::ExpectedIntegerConstant(arg.clone()));
+                }
+                assert_indexed_op_args_value(&op_args[..1], 0..)?;
+                assert_indexed_op_args_value(&op_args[1..], 1..)?;
                 let value = op_args[0].as_integer().unwrap();
                 let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
-                assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
-                assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             ParamOperator::BvExtract => {
@@ -2017,6 +2023,8 @@ impl<'p, 's> Parser<'p, 's> {
                 let op = ParamOperator::from_str(s).unwrap();
                 self.next_token()?;
                 let mut op_args = self.parse_sequence(Self::parse_term, true)?;
+                assert_num_args(&op_args, op.num_op_args()..)
+                    .map_err(|err| self.err(err, head_pos))?;
                 let args = op_args.split_off(op.num_op_args());
                 self.make_indexed_op(op, op_args, args)
                     .map_err(|err| self.err(err, head_pos))
@@ -2249,6 +2257,7 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
                 }
                 let sort = if let Some(width) = args[0].as_integer() {
+                    assert_indexed_op_args_value(&args, 0..)?;
                     Sort::BitVec(width.to_usize().unwrap())
                 } else {
                     // TODO: used to be an error. maybe still should be an error outside rare files
