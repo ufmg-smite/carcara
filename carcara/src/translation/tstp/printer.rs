@@ -20,8 +20,15 @@ impl<'a> AnnotatedFormulaFormatter<'a> {
     fn print_sequence<T>(seq: &[T], func: fn(&T) -> String) -> String {
         let mut result = func(&seq[0]);
         for item in &seq[1..] {
-            result += ", ";
-            result += &func(item);
+            let next_field = &func(item);
+
+            if next_field != "" {
+                result += ", ";
+                result += next_field;
+            } else {
+                // { next_field == "" }
+                break;
+            }
         }
         result
     }
@@ -149,7 +156,7 @@ impl<'a> TstpPrinter<'a> {
             TstpFormula::FunctorApp(functor, arguments) => {
                 // TODO: unnecessary clone
                 format!(
-                    "{} ({})",
+                    "{}({})",
                     TstpPrinter::operator_to_concrete_syntax(&TstpOperator::Functor(
                         functor.clone(),
                     )),
