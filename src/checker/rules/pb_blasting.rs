@@ -26,8 +26,8 @@ fn check_pbblast_sum(pool: &mut Pool, bitvector: &Rc<Term>, sum: &[Rc<Term>]) ->
         width >= sum.len(),
         CheckerError::Explanation(format!(
             "Mismatched number of summands {} and bits {}",
+            sum.len(),
             width,
-            sum.len()
         ))
     );
 

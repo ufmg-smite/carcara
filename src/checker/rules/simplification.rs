@@ -429,7 +429,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     if numer == denom {
         rassert!(
             right.as_signed_number_err()? == 1,
-            CheckerError::ExpectedNumber(Rational::new(), right.clone())
+            CheckerError::ExpectedNumber(1.into(), right.clone())
         );
         Ok(())
     } else if denom.as_number().is_some_and(|n| n == 1) {
@@ -587,7 +587,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         if t_1 == t_2 {
             rassert!(
                 u.as_number_err()? == 0,
-                CheckerError::ExpectedNumber(Rational::from(1), u.clone()),
+                CheckerError::ExpectedNumber(0.into(), u.clone()),
             );
             return Ok(());
         }
