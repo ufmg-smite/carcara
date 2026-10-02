@@ -50,7 +50,6 @@ pub fn tstp_full_translation_test(alethe_problem: &str, alethe_certificate: &str
 
     assert_eq!(tstp_problem, std::str::from_utf8(&buf_problem).unwrap());
 
-    // let commands = ProofNode::from_commands(proof_ast.commands);
     let tstp_certificate_translated = tstp_translator.translate(&mut proof_ast);
 
     printer_proof.write_proof(tstp_certificate_translated).unwrap();

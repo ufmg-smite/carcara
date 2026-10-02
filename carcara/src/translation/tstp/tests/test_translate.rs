@@ -81,33 +81,17 @@ tff(axiom_4, axiom, ( ~ p1 | ( p2 & p3 ) )).
 tff(axiom_5, axiom, ( ~ p3 | ~ ( f(a, c) = f(b, d) ) )).
 ";
 
-    let tstp_certificate = "tff(t0,plain,
-    ( ( ( a = b )
-      & ( c = d ) )
-    | ( a != b )
-    | ( c != d ) ),
-    introduced(tautology,[and_neg],[]) ).
-tff(t1,plain,
-    ( ( ( ( a = b )
-        & ( c = d ) )
-     => ( f(a,c) = f(b,d) ) )
-    | ( ( a = b )
-      & ( c = d ) ) ),
-    introduced(tautology,[implies_neg1],[]) ).
-tff(t2.a0,assumption,
-    a = b,
-    introduced(assumption,[],[]) ).
-tff(t2.a1,assumption,
-    c = d,
-    introduced(assumption,[],[]) ).
-tff(t2.t0,plain,
-    f(a,c) = f(b,d),
-    inference(cong,[status(thm),assumptions(['t2.a0','t2.a1'])],['t2.a0','t2.a1']) ).
-tff(t2,plain,
-    ( ( a != b )
-    | ( c != d )
-    | ( f(a,c) = f(b,d) ) ),
-    inference(subproof,[status(thm),discharge(subproof,['t2.a0','t2.a1'])],['t2.a0','t2.a1','t2.t0']) ).
+    let tstp_certificate = "tff(axiom_6, axiom, ( a = b )).
+tff(axiom_7, axiom, ( c = d )).
+tff(axiom_8, axiom, ( p1 & $true )).
+tff(axiom_9, axiom, ( ~ p1 | ( p2 & p3 ) )).
+tff(axiom_10, axiom, ( ~ p3 | ~ ( f(a, c) = f(b, d) ) )).
+tff(t0, plain, ( ( ( ( a = b ) & ( c = d ) ) | ~ ( a = b ) ) | ~ ( c = d ) ), introduced(tautology, [and_neg], [])).
+tff(t1, plain, ( ( ( ( a = b ) & ( c = d ) ) => ( f(a, c) = f(b, d) ) ) | ( ( a = b ) & ( c = d ) ) ), introduced(tautology, [implies_neg1], [])).
+tff(t2.a0, assumption, ( a = b ), introduced(assumption, [], [])).
+tff(t2.a1, assumption, ( c = d ), introduced(assumption, [], [])).
+tff(t2.t0, plain, ( $false | ( f(a, c) = f(b, d) ) ), inference(cong, [status(thm), assumptions([t2.a0, t2.a1])], [t2.a0, t2.a1])).
+tff(t2, plain, ( ( ~ ( a = b ) | ~ ( c = d ) ) | ( f(a, c) = f(b, d) ) ), inference(subproof, [status(thm), subproof(discharge, [t2.a0, t2.a1])], [t2.a0, t2.a1])).
 tff(t3,plain,
     ( ~ ( ( a = b )
         & ( c = d ) )
@@ -322,28 +306,28 @@ tff(t3_rigid_z_generalize,axiom,
     ( t3_rigid_z = a
    => ! [Z:$int] : Z = a ) ).
 
-tff('t3.t1',assumption,
+tff(t3.t1,assumption,
     a = t3_rigid_z,
     introduced(assumption,[refl],[]) ).
 
-tff('t3.t2',plain,
+tff(t3.t2,plain,
     ( a = t3_rigid_z <=> a = a ),
-    inference(cong,[status(thm),assumptions(['t3.t1'])],['t3.t1']) ).
+    inference(cong,[status(thm),assumptions([t3.t1])],[t3.t1]) ).
 
-tff('t3.t3',assumption,
+tff(t3.t3,assumption,
     a = t3_rigid_z,
     introduced(assumption,[refl],[]) ).
 
-tff('t3.t4',plain,
+tff(t3.t4,plain,
     (t3_rigid_z = $sum(a,t3_rigid_y) <=> a = $sum(a,t3_rigid_y) ),
-    inference(cong,[status(thm),assumptions(['t3.t3'])],['t3.t3']) ).
+    inference(cong,[status(thm),assumptions([t3.t3])],[t3.t3]) ).
 
-tff('t3.t5',plain,
+tff(t3.t5,plain,
     ( ( a = t3_rigid_z 
      => t3_rigid_z = $sum(a,t3_rigid_y) )
   <=> ( a = a
      => a = $sum(a,t3_rigid_y) ) ),
-    inference(cong,[status(thm),assumptions(['t3.t1','t3.t3'])],['t3.t2','t3.t4']) ).
+    inference(cong,[status(thm),assumptions([t3.t1,t3.t3])],[t3.t2,t3.t4]) ).
 
 tff(t3,plain,
     ( ! [Y: $int,Z: $int] :
@@ -352,7 +336,7 @@ tff(t3,plain,
   <=> ! [Y: $int] :
         ( a = a
        => a = $sum(a,Y) ) ),
-    inference(onepoint,[status(thm),discharge(onepoint,['t3.t1','t3.t3'])],[t3_rigid_z_generalize,'t3.t1','t3.t3','t3.t5']) ).
+    inference(onepoint,[status(thm),discharge(onepoint,[t3.t1,t3.t3])],[t3_rigid_z_generalize,t3.t1,t3.t3,t3.t5]) ).
 
 tff(t4,plain,
     ( ( ! [Y:$int,Z:$int] :
@@ -387,25 +371,25 @@ tff(t6_rigid_y_generalize,axiom,
     ( t6_rigid_y = t6_rigid_veriT_vr0
    => ! [Y:$int] : Y = t6_rigid_veriT_vr0 ) ).
 
-tff('t6.t1',assumption,
+tff(t6.t1,assumption,
     t6_rigid_y = t6_rigid_veriT_vr0,
     introduced(assumption,[refl],[]) ).
 
-tff('t6.t2',plain,
+tff(t6.t2,plain,
     $sum(a,t6_rigid_y) = $sum(a,t6_rigid_veriT_vr0),
-    inference(cong,[status(thm),assumptions(['t6.t1'])],['t6.t1']) ).
+    inference(cong,[status(thm),assumptions([t6.t1])],[t6.t1]) ).
 
-tff('t6.t3',plain,
+tff(t6.t3,plain,
     ( a = $sum(a,t6_rigid_y)
   <=> a = $sum(a,t6_rigid_veriT_vr0) ),
-    inference(cong,[status(thm),assumptions(['t6.t1'])],['t6.t2']) ).
+    inference(cong,[status(thm),assumptions([t6.t1])],[t6.t2]) ).
 
-tff('t6.t4',plain,
+tff(t6.t4,plain,
     ( ( a = a
      => a = $sum(a,t6_rigid_y) )
   <=> ( a = a
      => a = $sum(a,t6_rigid_veriT_vr0) ) ),
-   inference(cong,[status(thm),assumptions(['t6.t1'])],['t6.t3']) ).
+   inference(cong,[status(thm),assumptions([t6.t1])],[t6.t3]) ).
 
 tff(t6,plain,
     ( ! [Y:$int] : 
@@ -414,7 +398,7 @@ tff(t6,plain,
   <=> ! [VeriT_vr0:$int] :
         ( a = a
        => a = $sum(a,VeriT_vr0) ) ),
-    inference(bind,[status(thm),discharge(bind,['t6.t1'])],[t6_rigid_y_generalize,'t6.t1','t6.t4']) ).
+    inference(bind,[status(thm),discharge(bind,[t6.t1])],[t6_rigid_y_generalize,t6.t1,t6.t4]) ).
 
 
 tff(t7,plain,
@@ -450,31 +434,31 @@ tff(t9_rigid_veriT_vr0_generalize,axiom,
     ( t9_rigid_veriT_vr0 = t9_rigid_veriT_vr0
    => ! [VeriT_vr0:$int] : VeriT_vr0 = t9_rigid_veriT_vr0 ) ).
 
-tff('t9.t1',plain,
+tff(t9.t1,plain,
     a = a,
     introduced(tautology,[eq_simplify],[]) ).
 
 
-tff('t9.t2',plain,
+tff(t9.t2,plain,
     ( ( a = a
      => a = $sum(a,t9_rigid_veriT_vr0) )
   <=> ( $true
      => a = $sum(a,t9_rigid_veriT_vr0) ) ),
-    inference(cong,[status(thm)],['t9.t1']) ).
+    inference(cong,[status(thm)],[t9.t1]) ).
 
 
-tff('t9.t3',plain,
+tff(t9.t3,plain,
     ( ( $true
      => a = $sum(a,t9_rigid_veriT_vr0) )
   <=> a = $sum(a,t9_rigid_veriT_vr0) ),
     introduced(tautology,[implies_simplify],[]) ).
 
 
-tff('t9.t4',plain,
+tff(t9.t4,plain,
     ( ( a = a
      => a = $sum(a,t9_rigid_veriT_vr0) )
   <=> a = $sum(a,t9_rigid_veriT_vr0) ),
-    inference(trans,[status(thm)],['t9.t2','t9.t3']) ).
+    inference(trans,[status(thm)],[t9.t2,t9.t3]) ).
 
 
 tff(t9,plain,
@@ -482,7 +466,7 @@ tff(t9,plain,
         ( a = a
        => a = $sum(a,VeriT_vr0) )
   <=> ! [VeriT_vr0:$int] : a = $sum(a,VeriT_vr0) ),
-    inference(bind,[status(thm)],['t9.t4']) ).
+    inference(bind,[status(thm)],[t9.t4]) ).
 
 
 tff(t10,plain,
@@ -510,26 +494,26 @@ tff(t12_y_generalize,axiom,
    => ! [VeriT_vr0:$int] : VeriT_vr0 = t12_rigid_veriT_vr1 ) ).
 
 
-tff('t12.t1',plain,
+tff(t12.t1,plain,
     t12_rigid_veriT_vr0 = t12_rigid_veriT_vr1,
     introduced(assumption,[refl],[]) ).
 
 
-tff('t12.t2',plain,
+tff(t12.t2,plain,
     $sum(a,t12_rigid_veriT_vr0) = $sum(a,t12_rigid_veriT_vr1),
-    inference(cong,[status(thm),asumptions(['t12.t1'])],['t12.t1']) ).
+    inference(cong,[status(thm),asumptions([t12.t1])],[t12.t1]) ).
 
 
-tff('t12.t3',plain,
+tff(t12.t3,plain,
     ( a = $sum(a,t12_rigid_veriT_vr0)
   <=> a = $sum(a,t12_rigid_veriT_vr1) ),
-    inference(cong,[status(thm),asumptions(['t12.t1'])],['t12.t2']) ).
+    inference(cong,[status(thm),asumptions([t12.t1])],[t12.t2]) ).
 
 
 tff(t12,plain,
     ( ! [VeriT_vr0:$int] : a = $sum(a,VeriT_vr0)
   <=> ! [VeriT_vr1:$int] : a = $sum(a,VeriT_vr1) ),
-    inference(bind,[status(thm),discharge(bind,['t12.t1'])],[t12_y_generalize,'t12.t1','t12.t3']) ).
+    inference(bind,[status(thm),discharge(bind,[t12.t1])],[t12_y_generalize,t12.t1,t12.t3]) ).
 
 tff(t13,plain,
     ( ( ! [VeriT_vr0:$int] : a = $sum(a,VeriT_vr0)
@@ -554,35 +538,35 @@ tff(t16,plain,
     | a = $sum(a,0) ),
     introduced(tautology,[forall_inst],[]) ).
 
-tff('t17.h1',assumption,
+tff(t17.h1,assumption,
     a = $sum(a,0),
     introduced(assumption,[],[]) ).
 
 
-tff('t17.t2',plain,
+tff(t17.t2,plain,
     a = $sum(a,0),
     introduced(tautology,[sum_simplify],[]) ).
 
 
-tff('t17.t3',plain,
+tff(t17.t3,plain,
     ( a = $sum(a,0)
   <=> a = a ),
-    inference(cong,[status(thm)],['t17.t2']) ).
+    inference(cong,[status(thm)],[t17.t2]) ).
 
 
-tff('t17.t4',plain,
+tff(t17.t4,plain,
     ( a = a
   <=> $true ),
     introduced(tautology,[eq_simplify],[]) ).
 
 
-tff('t17.t5',plain,
+tff(t17.t5,plain,
     ( a = $sum(a,0)
   <=> $true ),
-    inference(trans,[status(thm)],['t17.t3','t17.t4']) ).
+    inference(trans,[status(thm)],[t17.t3,t17.t4]) ).
 
 
-tff('t17.t6',plain,
+tff(t17.t6,plain,
     ( ( a = $sum(a,0)
     <~> $true )
     | a != $sum(a,0)
@@ -590,15 +574,15 @@ tff('t17.t6',plain,
     introduced(tautology,[equiv_pos2],[]) ).
 
 
-tff('t17.t7',plain,
+tff(t17.t7,plain,
     $true,
-    inference(th_resolution,[status(thm),assumptions(['t17.h1'])],['t17.h1','t17.t5','t17.t6']) ).
+    inference(th_resolution,[status(thm),assumptions([t17.h1])],[t17.h1,t17.t5,t17.t6]) ).
 
 
 tff(t17,plain,
     ( a = $sum(a,0)
     | $true ),
-    inference(subproof,[status(thm),discharge(subproof,['t17.h1'])],['t17.h1','t17.t7']) ).
+    inference(subproof,[status(thm),discharge(subproof,[t17.h1])],[t17.h1,t17.t7]) ).
 
 
 tff(t18,plain,

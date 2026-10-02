@@ -22,7 +22,7 @@ impl<'a> AnnotatedFormulaFormatter<'a> {
         for item in &seq[1..] {
             let next_field = &func(item);
 
-            if next_field != "" {
+            if !next_field.is_empty() {
                 result += ", ";
                 result += next_field;
             } else {
@@ -330,12 +330,13 @@ impl<'a> TstpPrinter<'a> {
 
     /// Prints a formula name. It follows the concrete syntax rules of name atoms, of TPTP.
     fn formula_name_to_concrete_syntax(name: &Symbol) -> String {
+        // TPTP grammar rules:
         // <name>                 ::= <atomic_word> | <integer>
         // <atomic_word>   ::= <lower_word> | <single_quoted>
         // <lower_word>     ::- <lower_alpha><alpha_numeric>*
         // <single_quoted> ::- <single_quote><sq_char><sq_char>*<single_quote>
-        // For the moment, just converting everything to lowercase.
 
+        // For the moment, just converting everything to lowercase.
         str::to_lowercase(name)
     }
 

@@ -166,9 +166,11 @@ impl TstpTranslator {
                         .expect("BinaryOperator applied over no operand!")
                 } else {
                     // { operands_tstp.len() == 1 }
-                    // We should be translating just a unit clause
+                    // It should be the case that we are translating just a unit
+                    // clause.
                     assert!(operator == Operator::Or);
 
+                    // Since we need to have 2 operands, we add `TstpNullaryOperator::False`.
                     TstpFormula::BinaryOperatorApp(
                         binary_op.clone(),
                         Box::new(TstpFormula::NullaryOperatorApp(TstpNullaryOperator::False)),
