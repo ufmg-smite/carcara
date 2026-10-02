@@ -758,6 +758,19 @@ fn is_assoc(op: Operator) -> bool {
     )
 }
 
+/// Operators that are idempotent, that is, where `(<op> a a) = a`
+fn is_idempotent(op: Operator) -> bool {
+    matches!(
+        op,
+        Operator::And | Operator::Or | Operator::BvAnd | Operator::BvOr
+    )
+}
+
+/// Operators that are commutative, that is, where `(<op> a b) = (<op> b a)`
+fn is_commutative(op: Operator) -> bool {
+    is_assoc(op) && !matches!(op, Operator::BvConcat | Operator::StrConcat)
+}
+
 // Term is given as argument as well because if the operator is
 // parametric, such as a BV operator, the width of the arguments will
 // be relevant.
@@ -834,7 +847,7 @@ pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     };
     match (t11.as_ref(), t22.as_ref()) {
         (Term::Op(op1, args1), Term::Op(op2, args2))
-            if is_assoc(*op1) && *op1 != Operator::BvConcat && op1 == op2 =>
+            if is_assoc(*op1) && is_commutative(*op1) && op1 == op2 =>
         {
             let args1_multiset: MultiSet<_> = args1.iter().collect();
             let args2_multiset: MultiSet<_> = args2.iter().collect();
@@ -863,7 +876,7 @@ fn apply_aci_simp(
     let result = match term.as_ref() {
         // flatten and remove duplicate on the result
         Term::Op(opp, args) if *opp == op => {
-            let args: Vec<_> = args
+            let args = args
                 .iter()
                 .flat_map(|term| {
                     let term = apply_aci_simp(pool, cache, term, op, identity);
@@ -872,13 +885,17 @@ fn apply_aci_simp(
                         _ => vec![term.clone()],
                     }
                 })
-                .dedup()
-                .filter(|t| identity.is_none() || *t.as_ref() != identity.clone().unwrap())
-                .collect();
-            if args.len() == 1 {
-                args[0].clone()
+                .filter(|t| identity.as_ref() != Some(t.as_ref()));
+            // We can only dedup if the operator is idempotent
+            let args: Vec<_> = if is_idempotent(op) {
+                args.dedup().collect()
             } else {
-                pool.add(Term::Op(op, args))
+                args.collect()
+            };
+            match args.as_slice() {
+                [] => pool.add(identity.clone().unwrap()),
+                [a] => a.clone(),
+                _ => pool.add(Term::Op(op, args)),
             }
         }
         _ => term.clone(),
