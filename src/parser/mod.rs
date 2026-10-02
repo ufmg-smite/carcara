@@ -165,11 +165,7 @@ pub fn parse_instance_with_pool<'s>(
     if let Some(rules) = rules {
         parser.reset(rules)?;
         parser.config.allow_higher_order_indexed_ops = true;
-        let rules = parser.parse_rare();
-        let rules = match rules {
-            Ok(t) => Ok(t),
-            Err(v) => Err(v),
-        }?;
+        let rules = parser.parse_rare()?;
         return Ok((problem, proof, rules));
     }
     Ok((problem, proof, RareStatements { rules: IndexMap::new() }))
