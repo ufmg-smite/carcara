@@ -117,7 +117,7 @@ pub fn bind(
 
     let (l_bindings, r_bindings): (IndexSet<_>, IndexSet<_>) = (
         l_bindings.difference(&r_bindings).cloned().collect(),
-        r_bindings.difference(&r_bindings).cloned().collect(),
+        r_bindings.difference(&l_bindings).cloned().collect(),
     );
 
     // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`

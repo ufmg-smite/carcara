@@ -130,6 +130,11 @@ fn bind() {
             (step t1.t1 (cl (= (= x1 x2) (= y1 y2))) :rule hole)
             (step t1 (cl (= (forall ((x2 Real)) (= x1 x2))
                 (forall ((y1 Real) (y2 Real)) (= y1 y2)))) :rule bind)": false,
+
+            // Right-hand binding is not in the context
+            "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
+            (step t1.t1 (cl (= p q)) :rule hole)
+            (step t1 (cl (= (forall ((x Real)) p) (forall ((w Real)) q))) :rule bind)": false,
         }
     }
 }
