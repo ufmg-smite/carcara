@@ -532,7 +532,9 @@ impl<'p, 's> Parser<'p, 's> {
                     self.check_sort_all_eq(&sorts)?;
                 }
 
-                if let Some(r) = self.interpret_div_as_real_lit(&args[0], &args[1]) {
+                if let [a, b] = args.as_slice()
+                    && let Some(r) = self.interpret_div_as_real_lit(a, b)
+                {
                     return Ok(r);
                 }
             }

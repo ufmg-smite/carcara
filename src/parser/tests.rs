@@ -25,7 +25,12 @@ pub fn parse_terms<const N: usize>(
 }
 
 pub fn parse_term(pool: &mut Pool, input: &str) -> Rc<Term> {
-    Parser::new(pool, TEST_CONFIG, input.into())
+    parse_term_with_config(pool, TEST_CONFIG, input)
+}
+
+/// Same as [`parse_term`], but uses the given parser configuration.
+pub fn parse_term_with_config(pool: &mut Pool, config: Config, input: &str) -> Rc<Term> {
+    Parser::new(pool, config, input.into())
         .and_then(|mut parser| parser.parse_term())
         .expect(ERROR_MESSAGE)
 }
@@ -154,6 +159,18 @@ fn test_arithmetic_ops() {
     assert!(matches!(
         parse_term_err("(+ (- 1 2) (* 3.0 4.2))"),
         Error::Parser(ParserError::SortError(_), _, _),
+    ));
+
+    // A division of two integer constants is interpreted as a rational literal, but only if it
+    // has exactly two arguments
+    let config = TEST_CONFIG.allow_int_real_subtyping(true);
+    assert_eq!(
+        *parse_term_with_config(&mut p, config, "(/ 1 2)"),
+        Term::new_real(Rational::from((1, 2))),
+    );
+    assert!(matches!(
+        parse_term_with_config(&mut p, config, "(/ 1 2 5)").as_ref(),
+        Term::Op(Operator::RealDiv, args) if args.len() == 3,
     ));
 }
 

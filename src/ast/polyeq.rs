@@ -185,6 +185,10 @@ impl Polyeq {
         b_inner: &Rc<Term>,
     ) -> bool {
         if let Some(de_bruijn_map) = self.de_bruijn_map.as_mut() {
+            if a_binds.len() != b_binds.len() {
+                return false;
+            }
+
             // First, we push new scopes into the De Bruijn map and the cache stack
             de_bruijn_map.push();
             self.cache.push_scope();
@@ -406,36 +410,12 @@ impl PolyeqComparable for Term {
             (Term::Const(Constant::Real(r)), Term::Op(Operator::RealDiv, args)) => {
                 // if a is a rational and b a division literal, check
                 // if they are the same
-                match (args[0].as_ref(), args[1].as_ref()) {
-                    (Term::Const(Constant::Real(r1)), Term::Const(Constant::Real(r2)))
-                        if r1.is_integer() && r2.is_integer() =>
-                    {
-                        Rational::from((r1.numer(), r2.numer())) == r.clone()
-                    }
-                    _ => false,
-                }
+                as_div_literal(args).is_some_and(|value| value == *r)
             }
             (Term::Op(Operator::RealDiv, args), Term::Const(Constant::Real(r))) => {
                 // if a is a rational and b a division literal, check
                 // if they are the same
-                match (args[0].as_ref(), args[1].as_ref()) {
-                    (Term::Const(Constant::Real(r1)), Term::Const(Constant::Real(r2)))
-                        if r.is_positive() && r1.is_integer() && r2.is_integer() =>
-                    {
-                        Rational::from((r1.numer(), r2.numer())) == r.clone()
-                    }
-                    (Term::Op(Operator::Sub, args), Term::Const(Constant::Integer(r2)))
-                    | (Term::Const(Constant::Integer(r2)), Term::Op(Operator::Sub, args))
-                        if r.is_negative() && args.len() == 1 =>
-                    {
-                        if let Term::Const(Constant::Integer(r1)) = args[0].as_ref() {
-                            Rational::from((r1, r2)) == r.clone().abs()
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                }
+                r.is_positive() && as_div_literal(args).is_some_and(|value| value == *r)
             }
             (Term::Const(Constant::Integer(i1)), Term::Op(Operator::Sub, args))
             | (Term::Op(Operator::Sub, args), Term::Const(Constant::Integer(i1)))
@@ -455,14 +435,7 @@ impl PolyeqComparable for Term {
             {
                 match args[0].as_ref() {
                     Term::Op(Operator::RealDiv, sub_args) => {
-                        match (sub_args[0].as_ref(), sub_args[1].as_ref()) {
-                            (Term::Const(Constant::Real(r1)), Term::Const(Constant::Real(r2)))
-                                if r1.is_integer() && r2.is_integer() =>
-                            {
-                                Rational::from((r1.numer(), r2.numer())) == r.clone().abs()
-                            }
-                            _ => false,
-                        }
+                        as_div_literal(sub_args).is_some_and(|value| value == *r.as_abs())
                     }
                     Term::Const(Constant::Real(r1)) => r1.clone() == r.clone().abs(),
                     _ => false,
@@ -470,6 +443,22 @@ impl PolyeqComparable for Term {
             }
             _ => false,
         }
+    }
+}
+
+/// Returns `Some` if `args` are the arguments of a division operator that may be interpreted as a
+/// rational literal.
+fn as_div_literal(args: &[Rc<Term>]) -> Option<Rational> {
+    match args {
+        [n, d] => match (n.as_ref(), d.as_ref()) {
+            (Term::Const(Constant::Real(n)), Term::Const(Constant::Real(d)))
+                if n.is_integer() && d.is_integer() && !d.is_zero() =>
+            {
+                Some(Rational::from((n.numer(), d.numer())))
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 

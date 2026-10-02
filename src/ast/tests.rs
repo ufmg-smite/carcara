@@ -42,7 +42,7 @@ fn test_polyeq() {
         ModNary,
     }
 
-    fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType) {
+    fn run_tests(definitions: &str, cases: &[(&str, &str)], test_type: TestType, expected: bool) {
         let mut pool = Pool::new();
         for (i, (a, b)) in cases.iter().enumerate() {
             let [a, b] = parse_terms(&mut pool, definitions, [a, b]);
@@ -51,7 +51,11 @@ fn test_polyeq() {
                 TestType::AlphaEquiv => Polyeq::new().mod_reordering(true).alpha_equiv(true),
                 TestType::ModNary => Polyeq::new().mod_nary(true),
             };
-            assert!(comp.eq(&a, &b), "test case #{i} failed: `{a}` != `{b}`");
+            assert_eq!(
+                comp.eq(&a, &b),
+                expected,
+                "test case #{i} failed: `{a}` vs `{b}`, expected {expected}"
+            );
         }
     }
     let definitions = "
@@ -77,6 +81,7 @@ fn test_polyeq() {
             ),
         ],
         TestType::ModReordering,
+        true,
     );
     run_tests(
         definitions,
@@ -101,6 +106,23 @@ fn test_polyeq() {
             ),
         ],
         TestType::AlphaEquiv,
+        true,
+    );
+    run_tests(
+        definitions,
+        &[
+            // Binding lists of different lengths
+            (
+                "(forall ((x Int) (y Int)) (= x y))",
+                "(forall ((x Int)) (= x y))",
+            ),
+            (
+                "(forall ((x Int)) (= x y))",
+                "(forall ((x Int) (y Int)) (= x y))",
+            ),
+        ],
+        TestType::AlphaEquiv,
+        false,
     );
     run_tests(
         definitions,
@@ -123,6 +145,28 @@ fn test_polyeq() {
             ("(and (and p q))", "(and p q)"),
         ],
         TestType::ModNary,
+        true,
+    );
+
+    // Division literals
+    run_tests(
+        definitions,
+        &[("(/ 1.0 2.0)", "0.5"), ("0.5", "(/ 1.0 2.0)")],
+        TestType::ModReordering,
+        true,
+    );
+    run_tests(
+        definitions,
+        &[
+            // n-ary division
+            ("(/ 1.0 2.0 5.0)", "0.5"),
+            ("0.5", "(/ 1.0 2.0 5.0)"),
+            // Division by zero
+            ("(/ 1.0 0.0)", "0.5"),
+            ("0.5", "(/ 1.0 0.0)"),
+        ],
+        TestType::ModReordering,
+        false,
     );
 }
 
