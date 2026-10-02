@@ -91,7 +91,7 @@ impl<T: Hash> Hash for HashCache<T> {
 impl<T: Eq + Hash> HashCache<T> {
     /// Creates a new `HashCache`, computing and storing the hash of `value`.
     pub fn new(value: T) -> Self {
-        let mut hasher = std::collections::hash_map::DefaultHasher::default();
+        let mut hasher = rapidhash::fast::RapidHasher::default_const();
         value.hash(&mut hasher);
         Self { hash: hasher.finish(), value }
     }

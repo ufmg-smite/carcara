@@ -10,6 +10,11 @@ use rapidhash::{HashMapExt, RapidHashMap};
 use std::sync::Arc;
 use storage::Storage;
 
+type RapidIndexMap<K, V> = IndexMap<K, V, rapidhash::fast::RandomState>;
+
+/// A set of terms, as returned by [`Pool::free_vars`] and [`Pool::choice_subterms`].
+pub type TermSet = IndexSet<Rc<Term>, rapidhash::fast::RandomState>;
+
 /// A user-defined datatype.
 #[derive(Debug, Clone)]
 pub struct Datatype {
@@ -42,9 +47,9 @@ pub struct Pool {
     parent: Option<Arc<Pool>>,
     pub(crate) terms: Storage<Term>,
     pub(crate) sorts: Storage<Sort>,
-    free_vars_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
-    sorts_cache: IndexMap<Rc<Term>, Rc<Sort>>,
-    choice_subterms_cache: IndexMap<Rc<Term>, IndexSet<Rc<Term>>>,
+    free_vars_cache: RapidIndexMap<Rc<Term>, TermSet>,
+    sorts_cache: RapidIndexMap<Rc<Term>, Rc<Sort>>,
+    choice_subterms_cache: RapidIndexMap<Rc<Term>, TermSet>,
     datatypes: IndexMap<String, Datatype>,
 }
 
@@ -132,7 +137,7 @@ impl Pool {
     ///
     /// This method uses a cache, so there is no additional cost to computing the free variables of
     /// a term multiple times.
-    pub fn free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a IndexSet<Rc<Term>> {
+    pub fn free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a TermSet {
         if self
             .parent
             .as_ref()
@@ -144,7 +149,7 @@ impl Pool {
     }
 
     /// Returns an `IndexSet` containing all `choice` subterms of the given term.
-    pub fn choice_subterms(&mut self, term: &Rc<Term>) -> &IndexSet<Rc<Term>> {
+    pub fn choice_subterms(&mut self, term: &Rc<Term>) -> &TermSet {
         if self
             .parent
             .as_ref()
@@ -528,7 +533,7 @@ impl Pool {
     }
 
     /// Computes the free variables of `term` and stores it in the cache.
-    fn compute_free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a IndexSet<Rc<Term>> {
+    fn compute_free_vars<'a>(&'a mut self, term: &Rc<Term>) -> &'a TermSet {
         if self.free_vars_cache.contains_key(term) {
             return &self.free_vars_cache[term];
         }
@@ -542,7 +547,7 @@ impl Pool {
                 set
             }
             Term::Op(_, args) | Term::ParamOp { args, .. } | Term::AsOp(_, _, args) => {
-                let mut set = IndexSet::new();
+                let mut set = TermSet::default();
                 for a in args {
                     set.extend(self.compute_free_vars(a).iter().cloned());
                 }
@@ -578,18 +583,18 @@ impl Pool {
                 vars
             }
             Term::Var(..) => {
-                let mut set = IndexSet::with_capacity(1);
+                let mut set = TermSet::with_capacity_and_hasher(1, Default::default());
                 set.insert(term.clone());
                 set
             }
-            Term::Const(_) => IndexSet::new(),
+            Term::Const(_) => TermSet::default(),
         };
         self.free_vars_cache.insert(term.clone(), set);
         &self.free_vars_cache[term]
     }
 
     /// Computes the set of `choice` subterms of `term` and stores it in the cache.
-    fn compute_choice_subterms(&mut self, term: &Rc<Term>) -> &IndexSet<Rc<Term>> {
+    fn compute_choice_subterms(&mut self, term: &Rc<Term>) -> &TermSet {
         if self.choice_subterms_cache.contains_key(term) {
             return &self.choice_subterms_cache[term];
         }
@@ -598,14 +603,14 @@ impl Pool {
             | Term::Op(_, args)
             | Term::ParamOp { args, .. }
             | Term::AsOp(_, _, args) => {
-                let mut set = IndexSet::new();
+                let mut set = TermSet::default();
                 for a in args {
                     set.extend(self.choice_subterms(a).iter().cloned());
                 }
                 set
             }
             Term::Binder(Binder::Choice, _, inner) => {
-                let mut set = IndexSet::from([term.clone()]);
+                let mut set = TermSet::from_iter([term.clone()]);
                 set.extend(self.choice_subterms(inner).iter().cloned());
                 set
             }
@@ -617,7 +622,7 @@ impl Pool {
                 }
                 set
             }
-            Term::Var(..) | Term::Const(_) => IndexSet::new(),
+            Term::Var(..) | Term::Const(_) => TermSet::default(),
         };
         self.choice_subterms_cache.insert(term.clone(), set);
         &self.choice_subterms_cache[term]
