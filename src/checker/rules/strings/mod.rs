@@ -1208,15 +1208,17 @@ pub fn re_unfold_neg_concat_fixed_suffix(
 
 // RCP Rules
 pub fn re_convert(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
+
     let (w1, a1) = match_term_err!((not (strinre w a1)) = &conclusion[0])?;
     let (w2, a2) = match_term_err!((strinre w a2) = &conclusion[1])?;
 
     assert_eq(w1, w2)?;
 
     let a1 = Automaton::determinize(&Automaton::create_from_regex_operators(pool, a1)?);
-    let a2 = Automaton::determinize(&a2.as_automaton_err()?);
+    let a2 = Automaton::determinize(a2.as_automaton_err()?);
 
-    if !operations::is_equivalent(a1.clone(), a2.clone()) {
+    if !operations::is_equivalent(&a1, &a2) {
         return Err(StringError::ExpectedEquivalentAutomata(a1, a2).into());
     }
 
@@ -1224,6 +1226,8 @@ pub fn re_convert(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 }
 
 pub fn re_empty_intersection(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 2)?;
+
     let (w1, a1) = match_term_err!((not (strinre w a1)) = &conclusion[0])?;
     let (w2, a2) = match_term_err!((not (strinre w a2)) = &conclusion[1])?;
 
@@ -1270,7 +1274,7 @@ pub fn re_intersection(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleR
         }
 
         if !has_empty_premise {
-            premise_automatas.push(a);
+            premise_automatas.push(a.clone());
         }
     }
 
@@ -1303,7 +1307,7 @@ pub fn re_intersection(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleR
     }
 
     let conc_automaton = Automaton::determinize(&conc_automaton);
-    if !operations::is_equivalent(expected.clone(), conc_automaton.clone()) {
+    if !operations::is_equivalent(&expected, &conc_automaton) {
         return Err(StringError::ExpectedEquivalentAutomata(expected, conc_automaton).into());
     }
 
@@ -1326,9 +1330,9 @@ pub fn re_forward_prop(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) ->
     }
 
     let expected = Automaton::determinize(&make_automaton_from_string(pool, s, premise_automatas)?);
-    let conc_automaton = Automaton::determinize(&conc_automaton.as_automaton_err()?);
+    let conc_automaton = Automaton::determinize(conc_automaton.as_automaton_err()?);
 
-    if !operations::is_equivalent(expected.clone(), conc_automaton.clone()) {
+    if !operations::is_equivalent(&expected, &conc_automaton) {
         return Err(
             StringError::ExpectedEquivalentAutomata(expected, conc_automaton.clone()).into(),
         );
@@ -1411,8 +1415,8 @@ pub fn concat_aut_bwd_propagation(RuleArgs { premises, conclusion, .. }: RuleArg
             assert_eq(&ws[idx], w)?;
 
             let aut = aut.as_automaton_err()?;
-            if !is_subautomaton(aut.clone(), a.clone()) {
-                return Err(StringError::ExpectedSubautomaton(aut, a).into());
+            if !is_subautomaton(&aut, &a) {
+                return Err(StringError::ExpectedSubautomaton(aut.clone(), a.clone()).into());
             }
         }
     }

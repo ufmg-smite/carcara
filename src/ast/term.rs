@@ -1276,9 +1276,9 @@ impl Term {
     }
 
     /// Tries to unwrap an [`Automaton`] from a term. Returns `None` if the term is not a `RegLan` term.
-    pub fn as_automaton(&self) -> Option<Automaton> {
+    pub fn as_automaton(&self) -> Option<&Automaton> {
         match self {
-            Term::Const(Constant::RegLan(_, a)) => Some(a.clone()),
+            Term::Const(Constant::RegLan(_, a)) => Some(a),
             _ => None,
         }
     }
@@ -1426,7 +1426,7 @@ impl Rc<Term> {
     }
 
     /// Similar to `Term::as_automaton`, but returns a `CheckerError` on failure.
-    pub fn as_automaton_err(&self) -> Result<Automaton, CheckerError> {
+    pub fn as_automaton_err(&self) -> Result<&Automaton, CheckerError> {
         self.as_automaton()
             .ok_or_else(|| CheckerError::ExpectedAutomaton(self.clone()))
     }
