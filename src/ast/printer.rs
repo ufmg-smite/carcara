@@ -325,7 +325,7 @@ impl Print for Proof {
 
                     if let [head, tail @ ..] = step.discharge.as_slice() {
                         let id = iter.get_premise(*head).id();
-                        write!(f, " :discharge ({}", id)?;
+                        write!(f, " :discharge ({}", quote_symbol(id))?;
                         for discharge in tail {
                             let id = iter.get_premise(*discharge).id();
                             write!(f, " {}", quote_symbol(id))?;
@@ -462,7 +462,9 @@ impl Print for Term {
                 write!(f, ")")
             }
             Term::Match(term, cases) => {
-                write!(f, "(match {} ", term)?;
+                write!(f, "(match ")?;
+                term.print(f, p)?;
+                write!(f, " ")?;
                 p.binder_depth += 1;
                 match cases.as_slice() {
                     [head, tail @ ..] => p.s_expr(f, head, tail)?,
