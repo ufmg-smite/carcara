@@ -1,4 +1,4 @@
-use super::{RuleArgs, RuleResult, assert_eq, assert_num_args};
+use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_args};
 use crate::{
     ast::{Binder, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
     checker::{error::CheckerError, rules::cutting_planes::split_summation},
@@ -16,20 +16,30 @@ fn get_bit_width(x: &Rc<Term>, pool: &mut Pool) -> Result<usize, CheckerError> {
     Ok(n)
 }
 
-// Helper to check that a summation has the expected shape
-fn check_pbblast_sum(pool: &mut Pool, bitvector: &Rc<Term>, sum: &[Rc<Term>]) -> RuleResult {
-    // Obtain the bitvector width from the pool.
-    let width = get_bit_width(bitvector, pool)?;
-
-    // The summation must have at most as many summands as the bitvector has bits.
+/// Helper to check that a summation has one summand for each bit of a bitvector of the given
+/// width. If `signed` is true, the sign bit is excluded.
+fn check_num_summands(width: usize, sum: &[Rc<Term>], signed: bool) -> RuleResult {
+    let expected = if signed { width - 1 } else { width };
     rassert!(
-        width >= sum.len(),
+        sum.len() == expected,
         CheckerError::Explanation(format!(
             "Mismatched number of summands {} and bits {}",
             sum.len(),
-            width,
+            expected,
         ))
     );
+    Ok(())
+}
+
+// Helper to check that a summation has the expected shape
+fn check_pbblast_sum(
+    pool: &mut Pool,
+    bitvector: &Rc<Term>,
+    sum: &[Rc<Term>],
+    signed: bool,
+) -> RuleResult {
+    let width = get_bit_width(bitvector, pool)?;
+    check_num_summands(width, sum, signed)?;
 
     for (i, element) in sum.iter().enumerate() {
         // Try to match (* c ((_ @int_of idx) bv))
@@ -77,16 +87,12 @@ fn check_pbblast_sum(pool: &mut Pool, bitvector: &Rc<Term>, sum: &[Rc<Term>]) ->
 
 // Helper to check that a summation has the expected shape
 // when the bitvector is a @pbbterm application "short-circuiting"
-fn check_pbblast_sum_short_circuit(pbbterm: &[Rc<Term>], sum: &[Rc<Term>]) -> RuleResult {
-    // The summation must have at most as many summands as the bitvector has bits.
-    rassert!(
-        pbbterm.len() >= sum.len(),
-        CheckerError::Explanation(format!(
-            "Mismatched number of summands {} and bits {}",
-            pbbterm.len(),
-            sum.len()
-        ))
-    );
+fn check_pbblast_sum_short_circuit(
+    pbbterm: &[Rc<Term>],
+    sum: &[Rc<Term>],
+    signed: bool,
+) -> RuleResult {
+    check_num_summands(pbbterm.len(), sum, signed)?;
 
     for (i, element) in sum.iter().enumerate() {
         // Try to match (* c bv))
@@ -117,21 +123,23 @@ fn check_pbblast_sum_short_circuit(pbbterm: &[Rc<Term>], sum: &[Rc<Term>]) -> Ru
 /// A helper that checks the two summations that occur in a pseudo–Boolean constraint.
 /// Here, `left_sum` and `right_sum` come from two bitvectors `left_bv` and `right_bv` respectively.
 /// (The overall constraint is something like `(>= (- (+ left_sum) (+ right_sum)) constant)`.)
+/// If `signed` is true, the sums do not include the sign bit.
 fn check_pbblast_constraint(
     pool: &mut Pool,
     left_bv: &Rc<Term>,
     right_bv: &Rc<Term>,
     left_sum: &[Rc<Term>],
     right_sum: &[Rc<Term>],
+    signed: bool,
 ) -> RuleResult {
     if let Some(pbb_l) = match_term!((pbbterm ...) = left_bv) {
         // Case when x is application of `@pbbterm` so we must short-circuit the indexing
         let pbb_r = match_term_err!((pbbterm ...) = right_bv)?;
-        check_pbblast_sum_short_circuit(pbb_l, left_sum)?;
-        check_pbblast_sum_short_circuit(pbb_r, right_sum)
+        check_pbblast_sum_short_circuit(pbb_l, left_sum, signed)?;
+        check_pbblast_sum_short_circuit(pbb_r, right_sum, signed)
     } else {
-        check_pbblast_sum(pool, left_bv, left_sum)?;
-        check_pbblast_sum(pool, right_bv, right_sum)
+        check_pbblast_sum(pool, left_bv, left_sum, signed)?;
+        check_pbblast_sum(pool, right_bv, right_sum, signed)
     }
 }
 
@@ -139,6 +147,7 @@ fn check_pbblast_constraint(
 /// The expected shape is:
 ///    `(= (= x y) (= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_x, sum_y) = match_term_err!((= (= x y) (= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -147,13 +156,14 @@ pub fn pbblast_bveq(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
 
     // Check that the summations have the correct structure.
     // (For equality the order is: sum_x for x and sum_y for y.)
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, false)
 }
 
 /// Implements the unsigned-less-than rule.
 /// The expected shape is:
 ///    `(= (bvult x y) (>= (- (+ sum_y) (+ sum_x)) 1))`
 pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_y, sum_x) =
         match_term_err!((= (bvult x y) (>= (- sum_y sum_x) 1)) = &conclusion[0])?;
 
@@ -162,7 +172,7 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let sum_y = split_summation(sum_y);
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, false)
 }
 
 /// Implements the unsigned-greater-than rule.
@@ -170,6 +180,7 @@ pub fn pbblast_bvult(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvugt x y) (>= (- (+ sum_x) (+ sum_y)) 1))`
 pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_x, sum_y) =
         match_term_err!((= (bvugt x y) (>= (- sum_x sum_y) 1)) = &conclusion[0])?;
 
@@ -178,7 +189,7 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let sum_y = split_summation(sum_y);
 
     // For bvugt the summations appear in the same order as in equality.
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, false)
 }
 
 /// Implements the unsigned-greater-or-equal rule.
@@ -186,6 +197,7 @@ pub fn pbblast_bvugt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvuge x y) (>= (- (+ sum_x) (+ sum_y)) 0))`
 pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_x, sum_y) =
         match_term_err!((= (bvuge x y) (>= (- sum_x sum_y) 0)) = &conclusion[0])?;
 
@@ -193,7 +205,7 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let sum_x = split_summation(sum_x);
     let sum_y = split_summation(sum_y);
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, false)
 }
 
 /// Implements the unsigned-less-or-equal rule.
@@ -201,6 +213,7 @@ pub fn pbblast_bvuge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvule x y) (>= (- (+ sum_y) (+ sum_x)) 0))`
 pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_y, sum_x) =
         match_term_err!((= (bvule x y) (>= (- sum_y sum_x) 0)) = &conclusion[0])?;
 
@@ -208,11 +221,16 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     let sum_x = split_summation(sum_x);
     let sum_y = split_summation(sum_y);
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, false)
 }
 
 /// Helper that checks the the `sign` term has the format -(2<sup>n-1</sup>) x<sub>n-1</sub>
 fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>) -> RuleResult {
+    rassert!(
+        n > 0,
+        CheckerError::Explanation("Signed relation on bitvector of width 0".into())
+    );
+
     // Short-circuited
     if let Some(pbb) = match_term!((pbbterm ...) = bitvector) {
         let last = pbb
@@ -260,6 +278,7 @@ fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>
 /// The expected shape is:
 ///    `(= (bvslt x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 1))`
 pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_y, sign_y, sign_x, sum_x) = match_term_err!((= (bvslt x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -273,7 +292,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
 
     // For bvult the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, true)
 }
 
 /// Implements the signed-greater-than rule.
@@ -281,6 +300,7 @@ pub fn pbblast_bvslt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsgt x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 1))`
 pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_x, sign_x, sign_y, sum_y) = match_term_err!((= (bvsgt x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 1)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -294,7 +314,7 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
     check_pbblast_signed_relation(n, sign_y, y)?;
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, true)
 }
 
 /// Implements the signed-greater-equal rule.
@@ -302,6 +322,7 @@ pub fn pbblast_bvsgt(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsge x y) (>= (+ (- x_sum (* 2^(n-1) x_n-1))) (- (* 2^(n-1) y_n-1) y_sum)) 0))`
 pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_x, sign_x, sign_y, sum_y) = match_term_err!((= (bvsge x y) (>= (+ (- sum_x sign_x) (- sign_y sum_y)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -315,7 +336,7 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
     check_pbblast_signed_relation(n, sign_y, y)?;
 
-    check_pbblast_constraint(pool, x, y, sum_x, sum_y)
+    check_pbblast_constraint(pool, x, y, sum_x, sum_y, true)
 }
 
 /// Implements the signed-less-equal rule.
@@ -323,6 +344,7 @@ pub fn pbblast_bvsge(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// The expected shape is:
 ///    `(= (bvsle x y) (>= (+ (- y_sum (* 2^(n-1) y_n-1))) (- (* 2^(n-1) x_n-1) x_sum)) 0))`
 pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, sum_y, sign_y, sign_x, sum_x) = match_term_err!((= (bvsle x y) (>= (+ (- sum_y sign_y) (- sign_x sum_x)) 0)) = &conclusion[0])?;
 
     // Get the summation lists
@@ -337,11 +359,12 @@ pub fn pbblast_bvsle(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
     check_pbblast_signed_relation(n, sign_x, x)?;
 
     // For bvsle the summations occur in reverse: the "left" sum comes from y and the "right" from x.
-    check_pbblast_constraint(pool, y, x, sum_y, sum_x)
+    check_pbblast_constraint(pool, y, x, sum_y, sum_x, true)
 }
 
 /// Implements the blasting of a bitvector variable
 pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, pbs) = match_term_err!((= x (pbbterm ...)) = &conclusion[0])?;
 
     for (i, pb) in pbs.iter().enumerate() {
@@ -366,6 +389,7 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 
 /// Implements the blasting of a constant
 pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (bv, pbs) = match_term_err!((= bv (pbbterm ...)) = &conclusion[0])
         .map_err(|_| CheckerError::Explanation("Malformed @pbbterm equality".into()))?;
 
@@ -442,6 +466,7 @@ fn get_bitvector_terms(bv: &Rc<Term>, pool: &mut Pool) -> Vec<Rc<Term>> {
 
 /// Implements the bitwise exclusive or operation.
 pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, bit_constraints) = match_term_err!((= (bvxor x y) (pbbterm ...)) = &conclusion[0])?;
 
     let xs = get_bitvector_terms(x, pool);
@@ -504,6 +529,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
 /// Implements the bitwise and operation.
 pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     let (x, y, bit_constraints) = match_term_err!((= (bvand x y) (pbbterm ...)) = &conclusion[0])?;
 
     let xs = get_bitvector_terms(x, pool);
@@ -559,6 +585,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvxor rule
 pub fn pbblast_bvxor_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     assert_num_args(args, 2)?;
     let x = &args[0];
     let y = &args[1];
@@ -605,6 +632,7 @@ pub fn pbblast_bvxor_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) 
 /// In which ri is the choice element from the pseudo boolean bit blasting
 /// of the bvand rule
 pub fn pbblast_bvand_ith_bit(RuleArgs { args, pool, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     assert_num_args(args, 2)?;
     let x = &args[0];
     let y = &args[1];
