@@ -668,12 +668,11 @@ impl Operator {
 
             // Strings
             Operator::StrConcat
-            | Operator::StrLessThan
-            | Operator::StrLessEq
             | Operator::ReConcat
             | Operator::ReUnion
             | Operator::ReIntersection
             | Operator::ReDiff => Some(NaryCase::LeftAssoc),
+            Operator::StrLessThan | Operator::StrLessEq => Some(NaryCase::Chainable),
             Operator::StrLen
             | Operator::CharAt
             | Operator::Substring
