@@ -5,6 +5,7 @@ fn cp_addition() {
             (declare-fun x1 () Int)
             (declare-fun x2 () Int)
             (declare-fun x3 () Int)
+            (declare-fun ~x1 () Int)
         ",
         "Addition with Reduction" {
             r#"(assume c1 (>= (* 1 (- 1 x1)) 1))
@@ -92,6 +93,24 @@ fn cp_addition() {
                (step t1 (cl (>= (+ (* 2 x1) (* 3 x2) 0) 2)) :rule cp_addition :premises (c1 c2))"#: false,
 
         }
+        "Repeated literals" {
+            r#"(assume c1 (>= (+ (* 1 x1) (* -1 x1)) 0))
+               (assume c2 (>= (* 1 x1) 1))
+               (step t1 (cl (>= (* 1 x1) 1)) :rule cp_addition :premises (c1 c2))"#: true,
+
+            r#"(assume c1 (>= (+ (* 1 x1) (* -1 x1)) 0))
+               (assume c2 (>= (* 1 x1) 1))
+               (step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))"#: false,
+        }
+        "Variable named like a negated literal" {
+            r#"(assume c1 (>= (* 1 x1) 1))
+               (assume c2 (>= (* 1 ~x1) 1))
+               (step t1 (cl (>= (+ (* 1 x1) (* 1 ~x1)) 2)) :rule cp_addition :premises (c1 c2))"#: true,
+
+            r#"(assume c1 (>= (* 1 x1) 1))
+               (assume c2 (>= (* 1 ~x1) 1))
+               (step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))"#: false,
+        }
     }
 }
 
@@ -149,6 +168,10 @@ fn cp_multiplication() {
                (step t1 (cl (>= (+ (* 2 x1) (* 4 x2) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
             r#"(assume c1 (>= (+ (* 1 x1) (* 2 (- 1 x2)) (* 3 x3) 0) 1))
                (step t1 (cl (>= (+ (* 2 x1) (* 4 (- 1 x2)) (* 6 x3) 0) 2)) :rule cp_multiplication :premises (c1) :args (2))"#: false,
+        }
+        "Negative scalar" {
+            r#"(assume c1 (>= (* 1 x1) 0))
+               (step t1 (cl (>= (* -1 x1) 0)) :rule cp_multiplication :premises (c1) :args (-1))"#: false,
         }
 
     }
@@ -213,6 +236,10 @@ fn cp_division() {
              r#"(assume c1 (>= (* 2 x1) 2))
                (step t1 (cl (>= (+ (* 1 x1) (* 1 x2)) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
        }
+       "Premise clause with more than one literal" {
+            r#"(step c1 (cl (>= (* 2 x1) 2) (>= (* 2 x2) 2)) :rule hole)
+               (step t1 (cl (>= (* 1 x1) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+       }
        "Trailing Zero" {
             r#"(assume c1 (>= (+ (* 2 x1) 0) 2))
                (step t1 (cl (>= (+ (* 1 x1) 0) 1)) :rule cp_division :premises (c1) :args (2) )"#: false,
@@ -255,6 +282,17 @@ fn cp_saturation() {
             r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3)) 3))
                (step t1 (cl (>= (+ (* 3 x1) (* 3 x2) (* 2 x3)) 3)) :rule cp_saturation :premises (c1))"#: false,
 
+        }
+        "Premise clause with more than one literal" {
+            r#"(step c1 (cl (>= (* 2 x1) 1) (>= (* 2 x2) 1)) :rule hole)
+               (step t1 (cl (>= (* 1 x1) 1)) :rule cp_saturation :premises (c1))"#: false,
+        }
+        "Negative coefficient or constant" {
+            r#"(assume c1 (>= (+ (* 5 x1) (* -3 x2)) 2))
+               (step t1 (cl (>= (+ (* 2 x1) (* -3 x2)) 2)) :rule cp_saturation :premises (c1))"#: false,
+
+            r#"(assume c1 (>= (+ (* 1 x1) (* 1 x2)) -1))
+               (step t1 (cl (>= (+ (* -1 x1) (* -1 x2)) -1)) :rule cp_saturation :premises (c1))"#: false,
         }
         "Missing terms" {
             r#"(assume c1 (>= (+ (* 3 x1) (* 4 x2) (* 5 x3)) 3))
@@ -300,9 +338,14 @@ fn cp_literal() {
             r#"(step t1 (cl (>= (* 1 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
             r#"(step t1 (cl (>= (* 2 neg_l) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
 
-            // ! THIS SHOULD BE AVOIDED WHEN l is a PSEUDO BOOLEAN
-            r#"(step t1 (cl (>= (* 1 (* 2 l)) 0)) :rule cp_literal :args ((* 2 l)))"#: true,
-            r#"(step t1 (cl (>= (* 1 (* 2 neg_l)) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: true,
+            // The argument must be a literal
+            r#"(step t1 (cl (>= (* 1 (* 2 l)) 0)) :rule cp_literal :args ((* 2 l)))"#: false,
+            r#"(step t1 (cl (>= (* 1 (* 2 neg_l)) 0)) :rule cp_literal :args ((* 2 neg_l)))"#: false,
+            r#"(step t1 (cl (>= (- 0 1) 0)) :rule cp_literal :args ((- 0 1)))"#: false,
+        }
+        "cp_literal invalid (conclusion)" {
+            r#"(step t1 (cl) :rule cp_literal :args (l))"#: false,
+            r#"(step t1 (cl (>= l 0) (>= l 0)) :rule cp_literal :args (l))"#: false,
         }
         "cp_literal invalid (number of args)" {
             r#"(step t1 (cl (>= (* 1 l) 0)) :rule cp_literal)"#: false,
