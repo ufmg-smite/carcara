@@ -19,7 +19,7 @@ use std::{
 ///
 /// This checker splits the proof's top-level commands among a number of worker threads, such that
 /// commands inside the same subproof are checked by the same worker thread. Each thread has a local
-/// `Pool`, with the global pool as a parent, and a local context. The work is split dinamically
+/// `Pool`, with the global pool as a parent, and a local context. The work is split dynamically
 /// using a work queue.
 pub struct ParallelChecker<'c> {
     global_pool: Arc<Pool>,

@@ -407,7 +407,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// Return whether we should interpret integer constants as `Real`s.
     ///
     /// If we are working with a logic that contains reals but does not contain integers, and if we
-    /// are parsing the problem and not the poof, this will be true.
+    /// are parsing the problem and not the proof, this will be true.
     fn interpret_ints_as_reals(&self) -> bool {
         self.is_real_only_logic && self.problem.is_some()
     }

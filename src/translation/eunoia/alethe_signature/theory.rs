@@ -100,7 +100,7 @@ impl AletheTheory {
             implies: "=>",
             ite: "ite",
 
-            // Arithemtic
+            // Arithmetic
             add: "+",
             sub: "-",
             mult: "*",

@@ -73,7 +73,7 @@ impl ContextStack {
         /// This may be surprising, but in some pathological benchmarks with very deep subproof
         /// nesting, the upkeep of using a cache causes a significant overhead, outweighing the
         /// benefit that the cache brings. Still, disabling the cache unconditionally would harm
-        /// performance in most other benchmarks. So, we use this heursitic to try and detect these
+        /// performance in most other benchmarks. So, we use this heuristic to try and detect these
         /// cases---if the total subproof depth of this context is beyond this value, we disable
         /// the cache.
         ///

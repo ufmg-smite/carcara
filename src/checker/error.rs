@@ -284,7 +284,7 @@ pub enum CheckerError {
     RareRuleExpectedLiteral(Rc<Term>),
 
     /// A `rare` rule with the given name was not found.
-    #[error("the rule {0} wasn`t found")]
+    #[error("the rule {0} was not found")]
     RareRuleNotFound(String),
 
     /// A `rare` rule received an unexpected number of premises.

@@ -181,7 +181,7 @@ pub enum ParserError {
     #[error("not a valid rule attribute: '{0}'")]
     InvalidRareRuleAttribute(String),
 
-    /// The parser encountered a Rare ruel with no conclusion.
+    /// The parser encountered a Rare rule with no conclusion.
     #[error("the rule '{0}' has no conclusion")]
     UndefinedRareConclusion(String),
 }

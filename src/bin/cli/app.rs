@@ -136,8 +136,11 @@ pub struct ParsingOptions {
 
     /// Enables strict parsing.
     ///
-    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed;
-    #[clap(short, long = "strict-parsing")]
+    /// When this flag is enabled:
+    /// - unary `and`, `or` and `xor` terms are not allowed
+    /// - anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed;
+    ///   the new syntax (`(:= (<symbol> <sort>) <term>)`) must be used instead
+    #[clap(short, long = "strict-parsing", verbatim_doc_comment)]
     pub strict: bool,
 
     /// If `true`, Carcara will parse arguments to the `hole` rule, expecting them to be valid

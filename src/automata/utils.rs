@@ -123,7 +123,7 @@ pub fn totalize(states: Vec<State>) -> Vec<State> {
 mod tests {
     use super::*;
 
-    // Auxiliar functions
+    // Auxiliary functions
     fn range_to_sink(state: &State, sink_id: usize) -> Vec<(u32, u32)> {
         state
             .transitions

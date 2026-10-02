@@ -143,7 +143,7 @@ impl Sort {
     /// Computes whether this sort is compatible with another.
     ///
     /// That is, this method returns `true` if there exists a substitution to the sort variables of
-    /// `self` that will make it equal to `target`.
+    /// `self` that will make it equal to `other`.
     pub fn is_compatible(&self, other: &Self) -> bool {
         fn all_compatible(xs: &[Rc<Sort>], ys: &[Rc<Sort>]) -> bool {
             xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.is_compatible(y))

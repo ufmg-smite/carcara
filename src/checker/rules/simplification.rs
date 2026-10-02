@@ -170,7 +170,7 @@ fn generic_and_or_simplify(
     assert_clause_len(conclusion, 1)?;
 
     // The "skip term" is the term that represents the empty conjunction or disjunction, and can be
-    // skipped. This is `false` for conjunctions and `true` disjunctions
+    // skipped. This is `true` for conjunctions and `false` for disjunctions
     let skip_term = match rule_kind {
         Operator::And => true,
         Operator::Or => false,
@@ -178,7 +178,7 @@ fn generic_and_or_simplify(
     };
 
     // The "short-circuit term" is the term that can short-circuit the conjunction or disjunction.
-    // This is `true` for conjunctions and `false` for disjunctions
+    // This is `false` for conjunctions and `true` for disjunctions
     let short_circuit_term = !skip_term;
 
     let (phis, result_term) = match_term_err!((= phi psi) = &conclusion[0])?;

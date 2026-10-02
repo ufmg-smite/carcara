@@ -24,7 +24,7 @@ pub fn get_rules() -> Vec<(RewriteTerm, RewriteTerm)> {
     //
     // Bitvector n-ary operators have width-dependent nil terminators that cannot be written as a
     // static constant, so they only get flatten + singleton rules here; the empty -> nil case is
-    // synthesized from the operand width in `finish_op` / `bv_nil`.
+    // synthesized from the operand width in `bv_nil_if_empty`.
     vec![
         build_equation!((RareList ..x..) ~> x),
         // Booleans
@@ -58,7 +58,7 @@ pub fn get_rules() -> Vec<(RewriteTerm, RewriteTerm)> {
         build_equation!((ReIntersection (RareList ..x..)) ~> (ReIntersection x)),
         build_equation!((ReIntersection x) ~> x),
         build_equation!((ReIntersection) ~> (ReAll)),
-        // Bitvectors (empty -> nil handled in `finish_op`/`bv_nil`)
+        // Bitvectors (empty -> nil handled in `bv_nil_if_empty`)
         build_equation!((BvAnd (RareList ..x..)) ~> (BvAnd x)),
         build_equation!((BvAnd x) ~> x),
         build_equation!((BvOr (RareList ..x..)) ~> (BvOr x)),

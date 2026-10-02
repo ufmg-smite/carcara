@@ -21,7 +21,7 @@ pub enum EunoiaTypeAttr {
 
     // :requires (<term> <term>)
     // TODO: Internally, (! T :requires (t s)) is syntax sugar for
-    // (eo::requires t s T) where eo::requires is an operator that evalutes to
+    // (eo::requires t s T) where eo::requires is an operator that evaluates to
     // its third argument if and only if its first two arguments are equivalent
     // (details on this operator are given in computation). Furthermore, the
     // function type (-> (eo::requires t s T) S) is treated as
