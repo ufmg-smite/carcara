@@ -153,11 +153,18 @@ impl<'c> Checker<'c> {
         let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
         let status =
             self.check_commands(problem, &proof.filename, &proof.commands, 0, null_stats)?;
-        if self.reached_empty_clause {
+
+        let result = if self.reached_empty_clause {
             Ok(status)
         } else {
             Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
-        }
+        };
+
+        // Restore checker state to default
+        self.reached_empty_clause = false;
+        self.is_holey = false;
+
+        result
     }
 
     /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
