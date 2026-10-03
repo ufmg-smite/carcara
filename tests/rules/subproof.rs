@@ -207,6 +207,8 @@ fn onepoint() {
             (declare-const t Int)
             (declare-const u Int)
             (declare-const v Int)
+            (declare-fun P (Int) Bool)
+            (declare-fun Q (Int) Bool)
         ",
         "Simple working examples" {
             "(anchor :step t1 :args ((:= (x Int) t)))
@@ -288,6 +290,50 @@ fn onepoint() {
                 (forall ((?x Int)) (=> (not (= 0 ?x)) (=> (= 2 2) (=> (= 0 ?x) (= 1 2)))))
                 (=> (not (= 0 0)) (=> (= 2 2) (=> (= 0 0) (= 1 2))))
             )) :rule onepoint)": true,
+        }
+        "Variable shadowing" {
+            "(anchor :step t1 :args ((:= (x Int) t)))
+            (step t1.t1 (cl (= (or (not (= x t)) (forall ((x Int)) (Q x)))
+                               (or (not (= t t)) (forall ((x Int)) (Q x))))) :rule hole)
+            (step t1 (cl (=
+                (forall ((x Int)) (or (not (= x t)) (forall ((x Int)) (Q x))))
+                (or (not (= t t)) (forall ((x Int)) (Q x)))
+            )) :rule onepoint)": true,
+
+            // The only equality `(= x t)` is on the inner `x`, so it is not a point for the outer
+            // `x`
+            "(anchor :step t1 :args ((:= (x Int) t)))
+            (step t1.t1 (cl (=
+                (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x))))
+                (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x))))
+            )) :rule hole)
+            (step t1 (cl (=
+                (forall ((x Int)) (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x)))))
+                (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x))))
+            )) :rule onepoint)": false,
+
+            // Regression: cache invalidation issue
+            "(anchor :step t1 :args ((:= (x Int) t)))
+            (step t1.t1 (cl (=
+                (or (forall ((x Int)) (or (not (= x t)) (Q x))) (not (= x t)) (P x))
+                (or (forall ((x Int)) (or (not (= x t)) (Q x))) (not (= t t)) (P t))
+            )) :rule hole)
+            (step t1 (cl (=
+                (forall ((x Int)) (or (forall ((x Int)) (or (not (= x t)) (Q x))) (not (= x t)) (P x)))
+                (or (forall ((x Int)) (or (not (= x t)) (Q x))) (not (= t t)) (P t))
+            )) :rule onepoint)": true,
+
+            // The `u` in `(= x u)` is bound by the inner quantifier, so it is not a point for `x`
+            // with the free constant `u`
+            "(anchor :step t1 :args ((:= (x Int) u)))
+            (step t1.t1 (cl (=
+                (or (P x) (forall ((u Int)) (or (not (= x u)) (Q u))))
+                (or (P u) (forall ((z Int)) (or (not (= u z)) (Q z))))
+            )) :rule hole)
+            (step t1 (cl (=
+                (forall ((x Int)) (or (P x) (forall ((u Int)) (or (not (= x u)) (Q u)))))
+                (or (P u) (forall ((z Int)) (or (not (= u z)) (Q z))))
+            )) :rule onepoint)": false,
         }
     }
 }
