@@ -6,7 +6,10 @@ use super::{
 };
 use crate::{
     ast::*,
-    checker::{error::CongruenceError, rules::assert_operation_len},
+    checker::{
+        error::CongruenceError,
+        rules::{assert_alpha_equiv, assert_operation_len},
+    },
     utils::{MultiSet, MultiSetDifference},
 };
 use std::collections::HashMap;
@@ -392,7 +395,7 @@ pub fn evaluate(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_eq(&term.evaluate(pool), value)
 }
 
-pub fn beta_equiv(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
+pub fn beta_equiv(RuleArgs { conclusion, pool, polyeq_time, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     let (left, right) = match_term_err!((= left right) = &conclusion[0])?;
 
@@ -402,28 +405,32 @@ pub fn beta_equiv(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
             left.clone(),
         ));
     };
-    let (left_bindings, left) = match_term_err!((lambda ... body) = lambda)?;
-
-    let (right_bindings, right) = if args.len() == left_bindings.len() {
-        (BindingList::EMPTY, right)
-    } else {
-        match_term_err!((lambda ... body) = right)?
-    };
+    let (left_bindings, left_inner) = match_term_err!((lambda ... body) = lambda)?;
 
     let remaining_bindings = &left_bindings[args.len()..];
-    if remaining_bindings != right_bindings.as_slice() {
-        // We avoid calling `to_vec` until we know for sure the rule will fail
-        let list = BindingList(remaining_bindings.to_vec());
-        return Err(EqualityError::ExpectedEqual(list, right_bindings.clone()).into());
-    }
+
+    // To correctly deal with application capturing a remaining argument , we apply the substitution
+    // to the entire lambda term, not just the body, which allows the substitution to detect if a
+    // binding needs renaming. For example, in the term ((λx, y. x + y) y), the y binding needs to
+    // be renamed.
+    let left = if !remaining_bindings.is_empty() {
+        &pool.add(Term::Binder(
+            Binder::Lambda,
+            BindingList(remaining_bindings.to_vec()),
+            left_inner.clone(),
+        ))
+    } else {
+        left_inner
+    };
 
     let substitution = left_bindings
         .iter()
         .zip(args)
         .map(|(var, value)| (pool.add(var.clone().into()), value.clone()))
         .collect();
+
     let reduced = Substitution::new(pool, substitution)?.apply(pool, left);
-    assert_eq(&reduced, right)
+    assert_alpha_equiv(&reduced, right, polyeq_time)
 }
 
 pub fn div_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {

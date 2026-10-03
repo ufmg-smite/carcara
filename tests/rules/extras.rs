@@ -523,7 +523,7 @@ fn evaluate() {
 #[test]
 fn beta_equiv() {
     test_cases! {
-        definitions = "",
+        definitions = "(declare-fun y () Int)",
         "Simple working examples" {
             "(step t1 (cl (= ((lambda ((a Int) (b Int) (c Int)) (+ a b c)) 1 2 3) (+ 1 2 3)))
                 :rule beta_equiv)": true,
@@ -539,17 +539,28 @@ fn beta_equiv() {
                 (lambda ((a Int) (b Int) (c Int)) (+ a b c))
             )) :rule beta_equiv)": false,
         }
-        "Wrong arg names" {
+        "Alpha equivalence" {
             "(step t1 (cl (=
                 ((lambda ((a Int) (b Int) (c Int)) (+ a b c)) 1)
                 (lambda ((c Int) (b Int)) (+ 1 c b))
-            )) :rule beta_equiv)": false,
+            )) :rule beta_equiv)": true,
         }
         "Wrong body" {
             "(step t1 (cl (=
                 ((lambda ((a Int) (b Int) (c Int)) (+ a b c)) 1)
                 (lambda ((b Int) (c Int)) (+ 1 c b))
             )) :rule beta_equiv)": false,
+        }
+        "Argument captured by a remaining binding" {
+            "(step t1 (cl (=
+                ((lambda ((x Int) (y Int)) (+ x y)) y)
+                (lambda ((y Int)) (+ y y))
+            )) :rule beta_equiv)": false,
+
+            "(step t1 (cl (=
+                ((lambda ((x Int) (y Int)) (+ x y)) y)
+                (lambda ((w Int)) (+ y w))
+            )) :rule beta_equiv)": true,
         }
     }
 }
