@@ -1208,7 +1208,11 @@ impl Term {
         fn as_unsigned_fraction(term: &Term) -> Option<Rational> {
             match term {
                 Term::Op(Operator::IntDiv | Operator::RealDiv, args) if args.len() == 2 => {
-                    Some(args[0].as_signed_number()? / args[1].as_signed_number()?)
+                    let denom = args[1].as_signed_number()?;
+                    if denom.is_zero() {
+                        return None;
+                    }
+                    Some(args[0].as_signed_number()? / denom)
                 }
                 _ => term.as_number(),
             }
