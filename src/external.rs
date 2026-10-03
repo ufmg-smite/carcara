@@ -11,7 +11,6 @@ use crate::{
 use std::{
     borrow::ToOwned,
     collections::{HashMap, HashSet},
-    convert::Infallible,
     fmt, fs,
     io::{self, BufRead, Write},
     path::Path,
@@ -44,21 +43,20 @@ impl fmt::Display for ExternalTool {
 }
 
 impl FromStr for ExternalTool {
-    type Err = Infallible;
+    type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::new(s))
+        let mut iter = s.split_whitespace();
+        let command = iter
+            .next()
+            .ok_or("external tool command is empty")?
+            .to_owned();
+        let args = iter.map(ToOwned::to_owned).collect();
+        Ok(Self { command, args })
     }
 }
 
 impl ExternalTool {
-    pub fn new(s: &str) -> Self {
-        let mut iter = s.split_whitespace();
-        let command = iter.next().unwrap().to_owned();
-        let args = iter.map(ToOwned::to_owned).collect();
-        Self { command, args }
-    }
-
     pub fn call(&self, stdin: &[u8]) -> Result<Output, ExternalError> {
         self.call_with_extra_args([], stdin)
     }
