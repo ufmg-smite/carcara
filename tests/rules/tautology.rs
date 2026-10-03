@@ -77,6 +77,9 @@ fn and_pos() {
             "(step t1 (cl (not (and p q r)) s) :rule and_pos)": false,
             "(step t1 (cl (not (and p (not q) r)) q) :rule and_pos)": false,
         }
+        "Index does not fit in a usize" {
+            "(step t1 (cl (not (and p q r)) r) :rule and_pos :args (99999999999999999999999))": false,
+        }
     }
 }
 

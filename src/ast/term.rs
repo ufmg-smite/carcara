@@ -1342,12 +1342,9 @@ impl Rc<Term> {
 
     /// Similar to `Term::as_integer_err`, but also checks if non-negative.
     pub fn as_usize_err(&self) -> Result<usize, CheckerError> {
-        if let Some(i) = self.as_integer()
-            && i >= 0
-        {
-            return Ok(i.to_usize().unwrap());
-        }
-        Err(CheckerError::ExpectedNonnegInteger(self.clone()))
+        self.as_integer()
+            .and_then(|i| i.to_usize())
+            .ok_or_else(|| CheckerError::ExpectedNonnegInteger(self.clone()))
     }
 
     /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
