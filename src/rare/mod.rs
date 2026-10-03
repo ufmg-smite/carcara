@@ -2,7 +2,7 @@ use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 
 use crate::ast::{
-    Operator, Rc, Sort, Term,
+    MatchCase, Operator, Rc, Sort, Term,
     pool::Pool,
     rare_rules::{RewriteTerm, build_equation, pseudo_term},
 };
@@ -368,7 +368,17 @@ fn rewrite_meta_terms_inner(
                 .collect::<Vec<_>>();
             pool.add(Term::AsOp(*op, sort.clone(), new_args))
         }
-        Term::Match(_, _) => todo!(), // TODO
+        Term::Match(scrutinee, cases) => {
+            let new_scrutinee = rewrite_meta_terms_inner(pool, scrutinee.clone(), rules, ctx);
+            let new_cases = cases
+                .iter()
+                .map(|case| MatchCase {
+                    pattern: case.pattern.clone(),
+                    body: rewrite_meta_terms_inner(pool, case.body.clone(), rules, ctx),
+                })
+                .collect();
+            pool.add(Term::Match(new_scrutinee, new_cases))
+        }
     };
 
     ctx.in_progress.shift_remove(&term);
