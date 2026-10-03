@@ -68,6 +68,12 @@ fn la_generic() {
                 (not (<= m 1))
             ) :rule la_generic :args (1 1 1 1))": true,
         }
+        "Strengthening is only applied if all variables are integers" {
+            "(step t1 (cl (not (> n 0)) (not (< n 1))) :rule la_generic :args (1 1))": true,
+            "(step t1 (cl (not (> a 0.0)) (not (< a 1.0))) :rule la_generic :args (1.0 1.0))": false,
+            "(step t1 (cl (not (> (+ a b) 0.0)) (not (< (+ a b) 1.0)))
+                :rule la_generic :args (1.0 1.0))": false,
+        }
     }
 }
 

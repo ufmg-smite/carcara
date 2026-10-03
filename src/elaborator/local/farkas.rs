@@ -10,7 +10,7 @@ pub fn bounded_farkas(
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
     let mut trace = Some(Vec::new());
-    la_generic_partial(&step.clause, &step.args, &mut trace)?;
+    la_generic_partial(pool, &step.clause, &step.args, &mut trace)?;
 
     let inferred = trace
         .unwrap()
