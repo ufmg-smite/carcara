@@ -46,6 +46,17 @@ fn drup() {
             (step t0 (cl a b) :rule or :premises (a3))
             (step t1 (cl) :rule drup :premises (a1 t0) :args ((cl)))": false,
         }
+        "Deleting unit clauses" {
+            "(assume a1 (not a))
+            (assume a3 (or a b))
+            (step t0 (cl a b) :rule or :premises (a3))
+            (step t1 (cl b) :rule drup :premises (a1 t0) :args ((cl b)))": true,
+
+            "(assume a1 (not a))
+            (assume a3 (or a b))
+            (step t0 (cl a b) :rule or :premises (a3))
+            (step t1 (cl b) :rule drup :premises (a1 t0) :args ((@d (cl (not a))) (cl b)))": false,
+        }
     }
 }
 

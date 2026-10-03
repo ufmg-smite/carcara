@@ -237,11 +237,7 @@ pub fn check_drup(
     let mut drup_history: DRupStory = vec![];
     for t in args {
         if let Some(terms) = match_term!((delete (cl ...)) = &t) {
-            let clause_term = if terms.is_empty() {
-                terms[0].clone()
-            } else {
-                build_term!(pool, (cl[terms.to_vec()]))
-            };
+            let clause_term = build_term!(pool, (cl[terms.to_vec()]));
             premises.remove(&hash_term(pool, &clause_term));
             drup_history.push(DRupProofAction::Delete(clause_term));
             continue;
