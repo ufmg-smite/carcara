@@ -277,31 +277,25 @@ impl Substitution {
                 let new_cases = cases
                     .iter()
                     .map(|case| {
-                        let (new_bindings, mut renaming) =
-                            self.rename_binding_list(pool, case.bindings());
-                        let pattern = if renaming.is_empty() {
-                            case.pattern.clone()
-                        } else {
-                            // To apply the renaming to the pattern, we just use the renamed
-                            // bindings returned by `rename_binding_list`
-                            match &case.pattern {
-                                MatchPattern::Wildcard => MatchPattern::Wildcard,
-                                MatchPattern::Variable(_) => {
-                                    MatchPattern::Variable(new_bindings.last().unwrap().clone())
-                                }
-                                MatchPattern::Cons(cons, _) => {
-                                    MatchPattern::Cons(cons.clone(), new_bindings.0)
-                                }
+                        let (new_bindings, new_body) = match self.apply_to_binder(
+                            pool,
+                            case.bindings(),
+                            &case.body,
+                            use_cache,
+                        ) {
+                            Some((bs, t)) => (bs.0, t),
+                            None => (case.bindings().to_vec(), case.body.clone()),
+                        };
+                        let pattern = match &case.pattern {
+                            MatchPattern::Wildcard => MatchPattern::Wildcard,
+                            MatchPattern::Variable(_) => {
+                                MatchPattern::Variable(new_bindings.last().unwrap().clone())
+                            }
+                            MatchPattern::Cons(cons, _) => {
+                                MatchPattern::Cons(cons.clone(), new_bindings)
                             }
                         };
-
-                        let body = if renaming.is_empty() {
-                            self.apply_impl(pool, &case.body, use_cache)
-                        } else {
-                            let renamed = renaming.apply(pool, &case.body);
-                            self.apply_impl(pool, &renamed, use_cache)
-                        };
-                        MatchCase { pattern, body }
+                        MatchCase { pattern, body: new_body }
                     })
                     .collect();
                 pool.add(Term::Match(new_term, new_cases))
@@ -343,7 +337,7 @@ impl Substitution {
     fn apply_to_binder<T: BindingValue>(
         &mut self,
         pool: &mut Pool,
-        binding_list: &BindingList<T>,
+        binding_list: &[(String, T)],
         inner: &Rc<Term>,
         use_cache: bool,
     ) -> Option<(BindingList<T>, Rc<Term>)> {
@@ -642,6 +636,50 @@ mod tests {
                 "(forall ((y_renamed Bool)) (and y_renamed (> y 0)))",
 
             // TODO: Add tests for `choice`, `let`, and `lambda` terms
+        }
+    }
+
+    #[test]
+    fn test_match_substitutions() {
+        run_tests! {
+            definitions = "
+                (declare-datatype IntList ((nil) (cons (head Int) (tail IntList))))
+                (declare-fun x () Int)
+                (declare-fun y () Int)
+                (declare-fun h () Int)
+                (declare-fun k () IntList)
+                (declare-fun l () IntList)
+                (declare-fun m () IntList)
+            ",
+            "(match l ((nil (> x 0)) ((cons h r) (> h x))))" [x -> y] =>
+                "(match l ((nil (> y 0)) ((cons h r) (> h y))))",
+
+            // The matched term is not in the scope of the pattern variables
+            "(match k ((nil true) (k (= k l))))" [k -> m] => "(match m ((nil true) (k (= k l))))",
+
+            // Pattern variables shadow the substitution
+            "(match l (((cons x r) (> x 0)) (_ true)))" [x -> y] =>
+                "(match l (((cons x r) (> x 0)) (_ true)))",
+            "(match l ((nil (= k l)) (k (= k l))))" [k -> m] =>
+                "(match l ((nil (= m l)) (k (= k l))))",
+
+            // Shadowing only applies to the case that binds the variable
+            "(match l (((cons x r) (> x 0)) (_ (> x 0))))" [x -> y] =>
+                "(match l (((cons x r) (> x 0)) (_ (> y 0))))",
+
+            // Shadowing must also work when a binder was seen before the `match` term
+            "(forall ((z Int)) (match l (((cons x r) (> x z)) (_ (> x z)))))" [x -> y] =>
+                "(forall ((z Int)) (match l (((cons x r) (> x z)) (_ (> y z)))))",
+
+            // The cached result for a term outside the case must not be reused inside it
+            "(and (> x 0) (match l (((cons x r) (> x 0)) (_ true))))" [x -> y] =>
+                "(and (> y 0) (match l (((cons x r) (> x 0)) (_ true))))",
+
+            // Capture-avoidance
+            "(match l (((cons h r) (> h x)) (_ true)))" [x -> h] =>
+                "(match l (((cons h_renamed r) (> h_renamed h)) (_ true)))",
+            "(match l ((nil (= k l)) (m (= m k))))" [k -> m] =>
+                "(match l ((nil (= m l)) (m_renamed (= m_renamed m))))",
         }
     }
 }
