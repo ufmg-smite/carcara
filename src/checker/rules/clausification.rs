@@ -351,7 +351,7 @@ pub fn apply_bfun_elim(
                     return Ok(result);
                 }
             };
-            let mut args = Vec::with_capacity(2usize.pow(bindings.len() as u32));
+            let mut args = Vec::new();
             bfun_elim_first_step(pool, bindings.as_slice(), inner, &mut args)?;
 
             let op_term = if args.len() == 1 {
