@@ -840,6 +840,9 @@ fn test_indexed_operators() {
         parse_term_err_with_config(config, "(bv (+ 1 2) 4)"),
         Error::Parser(ParserError::ExpectedIntegerConstant(_), _, _),
     ));
+
+    let term = parse_term(&mut p, "((_ tuple.select 1) (tuple 1 true))");
+    assert_eq!(*p.sort(&term), Sort::Bool);
 }
 
 #[test]

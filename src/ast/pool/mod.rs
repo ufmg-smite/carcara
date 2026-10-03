@@ -525,8 +525,11 @@ impl Pool {
             ParamOperator::BvIntOf => Sort::Int,
             ParamOperator::RePower | ParamOperator::ReLoop => Sort::RegLan,
             ParamOperator::TupleSelect => {
-                let i = op_args[0].as_integer()?.to_usize().unwrap();
-                return Some(self.compute_sort(&args[i]).clone());
+                let i = op_args[0].as_integer().unwrap().to_usize().unwrap();
+                let Sort::Tuple(elems) = self.compute_sort(&args[0]).as_ref() else {
+                    unreachable!()
+                };
+                return Some(elems[i].clone());
             }
         };
         Some(self.add_sort(res))
