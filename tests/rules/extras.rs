@@ -298,6 +298,8 @@ fn la_mult_pos() {
             (declare-fun b () Int)
             (declare-fun x () Real)
             (declare-fun y () Real)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
         ",
         "Simple working examples" {
             "(step t1 (cl (=> (and (> 2 0) (> a b)) (> (* 2 a) (* 2 b))))
@@ -306,6 +308,9 @@ fn la_mult_pos() {
                 (and (> (/ 10.0 13.0) 0.0) (= x y))
                 (= (* (/ 10.0 13.0) x) (* (/ 10.0 13.0) y)))
             ) :rule la_mult_pos)": true,
+        }
+        "Not a comparison" {
+            "(step t1 (cl (=> (and (> 2 0) (or p q)) (or p q))) :rule la_mult_pos)": false,
         }
     }
 }
@@ -318,7 +323,12 @@ fn la_mult_neg() {
             (declare-fun b () Int)
             (declare-fun x () Real)
             (declare-fun y () Real)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
         ",
+        "Not a comparison" {
+            "(step t1 (cl (=> (and (< (- 2) 0) (or p q)) (or p q))) :rule la_mult_neg)": false,
+        }
         "Simple working examples" {
             "(step t1 (cl (=> (and (< (- 2) 0) (>= a b)) (<= (* (- 2) a) (* (- 2) b))))
                 :rule la_mult_neg)": true,

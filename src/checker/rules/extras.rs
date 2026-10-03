@@ -189,7 +189,7 @@ fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
             Operator::GreaterThan => match_term_err!((> a b) = term),
             Operator::LessEq => match_term_err!((<= a b) = term),
             Operator::GreaterEq => match_term_err!((>= a b) = term),
-            _ => unreachable!(),
+            _ => Err(CheckerError::InvalidComparisonOperator(op)),
         }
     }
 
@@ -219,7 +219,7 @@ fn la_mult_generic(conclusion: &[Rc<Term>], is_pos: bool) -> RuleResult {
             Operator::GreaterThan => Operator::LessThan,
             Operator::LessEq => Operator::GreaterEq,
             Operator::GreaterEq => Operator::LessEq,
-            _ => unreachable!(),
+            _ => return Err(CheckerError::InvalidComparisonOperator(op)),
         }
     };
 

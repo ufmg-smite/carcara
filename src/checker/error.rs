@@ -148,6 +148,10 @@ pub enum CheckerError {
     #[error("missing comparison for monomial variable '{0}'")]
     LaMultSignMissingComparison(Rc<Term>),
 
+    /// The operator in a `la_mult_pos` or `la_mult_neg` step is not a comparison operator.
+    #[error("'{0}' is not a comparison operator")]
+    InvalidComparisonOperator(Operator),
+
     // General errors
     /// A rule received the wrong number of premises.
     #[error("expected {0} premises, got {1}")]
