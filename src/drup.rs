@@ -31,14 +31,12 @@ pub type DRupStory = Vec<DRupProofAction>;
 pub enum DrupFormatError {
     #[error("couldn't find conclusion term in the premise clauses")]
     NoConclusionInPremise,
+
     #[error(
         "couldn't elaborate drup because bottom wasn't derived from the premises and the argument"
     )]
     NoFinalBottomInDrup,
-    #[error("couldn't elaborate drup because the argument might not be in RUP")]
-    PotentialNoDrupFormat,
-    #[error("a clause in RAT should be non-empty")]
-    CheckingRatInEmptyClause,
+
     #[error("the clause isn't in RAT format")]
     NotInRatFormat,
 }

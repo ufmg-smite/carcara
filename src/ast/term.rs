@@ -1401,17 +1401,6 @@ impl Rc<Term> {
 }
 
 impl Constant {
-    /// Returns the sort of a constant. In case it's a `BitVec`, we only return the width.
-    pub fn sort(&self) -> Sort {
-        match self {
-            Constant::Integer(_) => Sort::Int,
-            Constant::Real(_) => Sort::Real,
-            Constant::String(_) => Sort::String,
-            Constant::RegLan(_, _) => Sort::RegLan,
-            Constant::BitVec(_, width) => Sort::BitVec(*width),
-        }
-    }
-
     /// If this is an integer constant, returns its value as an [`Integer`]. Otherwise, returns
     /// `None`.
     pub fn as_integer(&self) -> Option<Integer> {

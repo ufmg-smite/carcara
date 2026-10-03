@@ -3,7 +3,7 @@ use crate::{
         Binder, BindingList, Operator, ProblemPrelude, ProofCommand, Rc, Sort, Substitution, Term,
         build_term, match_term, match_term_err, pool::Pool, printer,
     },
-    checker::{SatRefConfig, error::CheckerError, rules::RuleResult},
+    checker::{SatRefConfig, check_external, error::CheckerError, rules::RuleResult},
     external,
 };
 use rapidhash::{HashMapExt, RapidHashMap};
@@ -71,27 +71,7 @@ fn sat_refutation_external_check(
     write!(File::create(lemmas_path.clone()).unwrap(), "{}", lemmas_str).unwrap();
     log::info!("[sat_refutation check] Invoke oracle");
 
-    let string = format!("(\n{}\n{}\n{}\n)", cnf_path, prelude_path, lemmas_path);
-
-    let output = checker.call(string.as_bytes())?;
-
-    if !output.status.success() {
-        if let Ok(s) = std::str::from_utf8(&output.stderr)
-            && s.contains("interrupted by timeout.")
-        {
-            return Err(CheckerError::Unspecified);
-        }
-        return Err(CheckerError::Unspecified);
-    }
-    let res = output.stdout.as_slice();
-
-    if res == b"true\n" {
-        return Ok(());
-    }
-    Err(CheckerError::Explanation(format!(
-        "External checker {} did not validate step",
-        checker
-    )))
+    check_external(&[cnf_path, prelude_path, lemmas_path], checker)
 }
 
 pub fn sat_refutation(

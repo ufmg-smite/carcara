@@ -33,7 +33,7 @@ pub use parallel::ParallelChecker;
 
 /// Benchmarking statistics collected while checking a proof.
 #[derive(Clone)]
-pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {
+pub struct CheckerStatistics<'s, CR> {
     /// The name of the proof file being checked.
     pub file_name: &'s str,
 
@@ -51,7 +51,19 @@ pub struct CheckerStatistics<'s, CR: CollectResults + Send + Default> {
     pub results: CR,
 }
 
-impl<CR: CollectResults + Send + Default> fmt::Debug for CheckerStatistics<'_, CR> {
+impl<'s, CR: Default> CheckerStatistics<'s, CR> {
+    pub fn new(file_name: &'s str) -> Self {
+        Self {
+            file_name,
+            polyeq_time: Duration::ZERO,
+            assume_time: Duration::ZERO,
+            assume_core_time: Duration::ZERO,
+            results: CR::default(),
+        }
+    }
+}
+
+impl<CR> fmt::Debug for CheckerStatistics<'_, CR> {
     // Since `self.results` does not implement `Debug`, we can't just `#[derive(Debug)]` and instead
     // have to implement it manually, removing that field.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -466,7 +478,7 @@ fn check_discharge(
     }
 }
 
-fn check_external(args: &[Rc<Term>], checker: &ExternalTool) -> RuleResult {
+fn check_external(args: &[impl std::fmt::Display], checker: &ExternalTool) -> RuleResult {
     let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
     let string = format!("(\n{}\n)", args_str.join("\n"));
 

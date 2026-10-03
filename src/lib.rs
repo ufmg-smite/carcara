@@ -174,43 +174,34 @@ pub fn check<'s>(
     checker_config: checker::Config,
     collect_stats: bool,
 ) -> Result<Status, Error> {
-    let mut run_measures: RunMeasurement = RunMeasurement::default();
-
     // Parsing
-    let total = Instant::now();
+    let start = Instant::now();
     let (problem, proof, rules, mut pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
-    run_measures.parsing = total.elapsed();
+
+    let parsing = start.elapsed();
 
     // Checking
     let checking = Instant::now();
     let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
     if collect_stats {
-        let mut checker_stats = CheckerStatistics {
-            file_name: "this",
-            polyeq_time: Duration::ZERO,
-            assume_time: Duration::ZERO,
-            assume_core_time: Duration::ZERO,
-            results: OnlineBenchmarkResults::new(),
-        };
+        // TODO: use actual proof file name
+        let mut checker_stats = CheckerStatistics::<OnlineBenchmarkResults>::new("this");
         let res = checker.check_with_stats(&problem, &proof, &mut checker_stats);
 
-        run_measures.checking = checking.elapsed();
-        run_measures.total = total.elapsed();
-
-        checker_stats.results.add_run_measurement(
-            &("this".to_owned(), 0),
-            RunMeasurement {
-                parsing: run_measures.parsing,
-                checking: run_measures.checking,
-                elaboration: run_measures.elaboration,
-                total: run_measures.total,
-                polyeq: checker_stats.polyeq_time,
-                assume: checker_stats.assume_time,
-                assume_core: checker_stats.assume_core_time,
-                elaboration_pipeline: Vec::new(),
-            },
-        );
+        let run = RunMeasurement {
+            parsing,
+            checking: checking.elapsed(),
+            elaboration: Duration::ZERO,
+            total: start.elapsed(),
+            polyeq: checker_stats.polyeq_time,
+            assume: checker_stats.assume_time,
+            assume_core: checker_stats.assume_core_time,
+            elaboration_pipeline: Vec::new(),
+        };
+        checker_stats
+            .results
+            .add_run_measurement(&("this".to_owned(), 0), run);
         // Print the statistics
         checker_stats.results.print(false);
 
@@ -236,25 +227,19 @@ pub fn check_parallel<'s>(
     num_threads: NonZero<usize>,
     stack_size: Option<usize>,
 ) -> Result<Status, Error> {
-    let mut run_measures: RunMeasurement = RunMeasurement::default();
-
     // Parsing
-    let total = Instant::now();
+    let start = Instant::now();
     let (problem, proof, rules, pool) =
         parser::parse_instance(problem, proof, rules, parser_config)?;
-    run_measures.parsing = total.elapsed();
+
+    let parsing = start.elapsed();
 
     // Checking
     let checking = Instant::now();
     let mut checker = checker::ParallelChecker::new(Arc::new(pool), &rules, checker_config);
     if collect_stats {
-        let mut checker_stats = CheckerStatistics {
-            file_name: "this",
-            polyeq_time: Duration::ZERO,
-            assume_time: Duration::ZERO,
-            assume_core_time: Duration::ZERO,
-            results: OnlineBenchmarkResults::new(),
-        };
+        // TODO: use actual proof file name
+        let mut checker_stats = CheckerStatistics::<OnlineBenchmarkResults>::new("this");
         let res = checker.check_with_stats(
             &problem,
             &proof,
@@ -263,22 +248,19 @@ pub fn check_parallel<'s>(
             &mut checker_stats,
         );
 
-        run_measures.checking = checking.elapsed();
-        run_measures.total = total.elapsed();
-
-        checker_stats.results.add_run_measurement(
-            &("this".to_owned(), 0),
-            RunMeasurement {
-                parsing: run_measures.parsing,
-                checking: run_measures.checking,
-                elaboration: run_measures.elaboration,
-                total: run_measures.total,
-                polyeq: checker_stats.polyeq_time,
-                assume: checker_stats.assume_time,
-                assume_core: checker_stats.assume_core_time,
-                elaboration_pipeline: Vec::new(),
-            },
-        );
+        let run = RunMeasurement {
+            parsing,
+            checking: checking.elapsed(),
+            elaboration: Duration::ZERO,
+            total: start.elapsed(),
+            polyeq: checker_stats.polyeq_time,
+            assume: checker_stats.assume_time,
+            assume_core: checker_stats.assume_core_time,
+            elaboration_pipeline: Vec::new(),
+        };
+        checker_stats
+            .results
+            .add_run_measurement(&("this".to_owned(), 0), run);
         // Print the statistics
         checker_stats.results.print(false);
 

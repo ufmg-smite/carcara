@@ -256,7 +256,6 @@ pub fn collect_premise_clauses(
     choice_terms: &mut HashSet<Rc<Term>>,
 ) -> Vec<Vec<Rc<Term>>> {
     let mut premise_clauses: Vec<Vec<_>> = Vec::new();
-    let mut _or_lits: Vec<Rc<Term>> = Vec::new();
     premise_steps.iter().for_each(|p| {
         match p {
             ProofCommand::Step(step) => {

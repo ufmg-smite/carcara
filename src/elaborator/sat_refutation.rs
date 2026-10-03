@@ -285,9 +285,6 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
             .filter_map(|premise| {
                 let id = premise.id();
                 if !step_id_to_lemma_proof.contains_key(id) {
-                    // println!("Storing proof for {}", elaborator
-                    //         .pool
-                    //         .add(Term::Op(Operator::RareList, premise.clause().to_vec())));
                     Some((
                         elaborator
                             .pool
@@ -295,9 +292,6 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
                         premise.clone(),
                     ))
                 } else if let Some(proof) = &step_id_to_lemma_proof[id] {
-                    // println!("Storing proof for {}", elaborator
-                    //         .pool
-                    //         .add(Term::Op(Operator::RareList, proof.clause().to_vec())));
                     Some((
                         elaborator
                             .pool

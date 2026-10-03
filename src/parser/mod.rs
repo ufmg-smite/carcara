@@ -1722,7 +1722,7 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
     /// consumed.
-    fn parse_let_term(&mut self) -> CarcaraResult<Rc<Term>> {
+    fn parse_let_term(&mut self, expand: bool) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
 
         // Since the let binding semantics is *simultaneous*, we first parse all bindings, and only
@@ -1749,7 +1749,7 @@ impl<'p, 's> Parser<'p, 's> {
 
         self.state.symbol_table.pop_scope();
 
-        if self.config.expand_lets {
+        if expand {
             let substitution = bindings
                 .into_iter()
                 .map(|(name, value)| {
@@ -2045,7 +2045,7 @@ impl<'p, 's> Parser<'p, 's> {
                     Reserved::Choice => self.parse_binder(Binder::Choice),
                     Reserved::Lambda => self.parse_binder(Binder::Lambda),
                     Reserved::Bang => self.parse_annotated_term(),
-                    Reserved::Let => self.parse_let_term(),
+                    Reserved::Let => self.parse_let_term(self.config.expand_lets),
                     Reserved::Cl => {
                         let args = self.parse_sequence(Self::parse_term, false)?;
                         self.make_op(Operator::Cl, args)
@@ -2084,45 +2084,12 @@ impl<'p, 's> Parser<'p, 's> {
                     .map_err(|err| self.err(err, head_pos))
             }
             Token::Symbol(s) if s == "eo" => {
-                // "Let" constructions unfold
                 self.expect_token(Token::Symbol("eo".to_owned()))?;
-                self.expect_keyword()?;
+                self.expect_token(Token::Keyword("".to_owned()))?;
                 self.expect_token(Token::Keyword("define".to_owned()))?;
-                self.expect_token(Token::OpenParen)?;
-                let args = self.parse_sequence(
-                    |parser| {
-                        parser.expect_token(Token::OpenParen)?;
-                        let let_arg = parser.expect_symbol()?;
-                        let body = parser.parse_term()?;
-                        parser.expect_token(Token::CloseParen)?;
-                        Ok((let_arg, body))
-                    },
-                    true,
-                )?;
 
-                self.state.symbol_table.push_scope();
-                for (name, value) in &args {
-                    let sort = self.pool.sort(value);
-                    self.declare_symbol(name.clone(), sort);
-                }
-
-                let inner = self.parse_term()?;
-                self.expect_token(Token::CloseParen)?;
-
-                self.state.symbol_table.pop_scope();
-                let substitution = args
-                    .into_iter()
-                    .map(|(name, value)| {
-                        let var = Term::new_var(name, self.pool.sort(&value));
-                        (self.pool.add(var), value)
-                    })
-                    .collect();
-
-                let result = Substitution::new(self.pool, substitution)
-                    .unwrap()
-                    .apply(self.pool, &inner);
-
-                Ok(result)
+                // `eo::define` is basically an alias to `let`, but always expands
+                self.parse_let_term(true)
             }
             Token::Symbol(s) if self.state.function_defs.contains_key(s) => {
                 let head_pos = self.current_position;
