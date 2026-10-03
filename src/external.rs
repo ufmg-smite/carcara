@@ -265,12 +265,11 @@ pub fn collect_premise_clauses(
                 // unities. If they are not singleton clauses, we add the
                 // whole clause as a clause
                 if step.rule == "hole" {
-                    let th_id = if step.args.len() == 2
-                        && step.args[0].as_string().unwrap() == "THEORY_LEMMA"
-                    {
-                        step.args[1].as_string().unwrap()
-                    } else {
-                        "none".to_owned()
+                    let th_id = match step.args.as_slice() {
+                        [kind, id] if kind.as_string().as_deref() == Some("THEORY_LEMMA") => {
+                            id.as_string().unwrap_or_else(|| "none".to_owned())
+                        }
+                        _ => "none".to_owned(),
                     };
                     let lemma_opt = match &step.clause[..] {
                         [term] => match term.as_ref() {
