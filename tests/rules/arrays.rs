@@ -121,5 +121,9 @@ fn ext() {
             (step t2 (cl (not (= (select A 0) (select B 0))))
                 :rule arrays_ext :premises (h1))": false,
         }
+        "Empty conclusion" {
+            "(assume h1 (not (= A B)))
+            (step t2 (cl) :rule arrays_ext :premises (h1))": false,
+        }
     }
 }
