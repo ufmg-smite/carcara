@@ -3,7 +3,7 @@ use super::{
     assert_is_bool_constant,
 };
 use crate::{
-    ast::{Constant, Operator, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
+    ast::{Operator, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
     utils::{DedupIterator, MultiSet},
 };
 use indexmap::{IndexMap, IndexSet};
@@ -415,10 +415,8 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // a rational constant. So we check that l is the same as r in
     // this case
     if left.is_const() {
-        if let Term::Const(Constant::Real(_)) = right.as_ref() {
-            return assert_eq(left, right);
-        }
-        return Err(CheckerError::ExpectedNumber(Rational::new(), right.clone()));
+        right.as_number_err()?;
+        return assert_eq(left, right);
     }
 
     let ((numer, denom), is_int_div) = match match_term!((div n d) = left) {

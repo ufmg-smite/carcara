@@ -110,7 +110,7 @@ pub enum ParserError {
     WrongNumberOfArgs(Range, usize),
 
     /// The argument values are not in the expected range.
-    #[error("expected argument value to be greater than {0}, got {1}")]
+    #[error("expected argument value to be {0}, got {1}")]
     WrongValueOfArgs(Range, Integer),
 
     /// Constant arguments given to `extract` do not follow required restrictions.
