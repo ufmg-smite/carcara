@@ -14,7 +14,7 @@ use std::{
     fmt, fs,
     io::{self, BufRead, Write},
     path::Path,
-    process::{Command, Output, Stdio},
+    process::{Command, ExitStatus, Output, Stdio},
     str::FromStr,
 };
 use thiserror::Error;
@@ -108,6 +108,12 @@ pub enum ExternalError {
 
     #[error("external tool timed out")]
     Timeout,
+
+    #[error("external tool exited unsuccessfully ({0})")]
+    FailedExit(ExitStatus),
+
+    #[error("external checker '{0}' did not validate step")]
+    StepNotValidated(ExternalTool),
 
     #[error("error in inner proof: {0}")]
     InnerProofError(Box<crate::Error>),

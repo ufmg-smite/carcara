@@ -11,7 +11,7 @@ use crate::{
         Rc, Term, pool::Pool, rare_rules::Rules,
     },
     benchmarking::{CollectResults, OnlineBenchmarkResults},
-    external::{ExternalTool, SatTools},
+    external::{ExternalError, ExternalTool, SatTools},
 };
 
 use carcara_macros::GenerateSetters;
@@ -418,7 +418,8 @@ impl<'c> Checker<'c> {
             rare_rules: self.rare_rules,
         };
         if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
-            return check_external(rule_args.args, custom_checker);
+            check_external(rule_args.args, custom_checker)?;
+            return Ok(());
         }
 
         let rule = match get_rule(
@@ -478,7 +479,10 @@ fn check_discharge(
     }
 }
 
-fn check_external(args: &[impl std::fmt::Display], checker: &ExternalTool) -> RuleResult {
+fn check_external(
+    args: &[impl std::fmt::Display],
+    checker: &ExternalTool,
+) -> Result<(), ExternalError> {
     let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
     let string = format!("(\n{}\n)", args_str.join("\n"));
 
@@ -488,16 +492,13 @@ fn check_external(args: &[impl std::fmt::Display], checker: &ExternalTool) -> Ru
         if let Ok(s) = std::str::from_utf8(&output.stderr)
             && s.contains("interrupted by timeout.")
         {
-            return Err(CheckerError::Unspecified);
+            return Err(ExternalError::Timeout);
         }
-        return Err(CheckerError::Unspecified);
+        return Err(ExternalError::FailedExit(output.status));
     }
     let res = output.stdout.as_slice();
     if res == b"true\n" {
         return Ok(());
     }
-    Err(CheckerError::Explanation(format!(
-        "External checker {} did not validate step",
-        checker
-    )))
+    Err(ExternalError::StepNotValidated(checker.clone()))
 }

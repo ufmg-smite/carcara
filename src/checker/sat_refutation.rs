@@ -21,7 +21,7 @@ fn sat_refutation_external_check(
     checker: &external::ExternalTool,
     lemmas: &[Rc<Term>],
     lemmas_to_th_ids: &HashMap<Rc<Term>, String>,
-) -> RuleResult {
+) -> Result<(), external::ExternalError> {
     use std::fmt::Write;
 
     let prelude_path = format!("prelude_{}.smt2", process::id());
@@ -340,7 +340,8 @@ pub fn sat_refutation(
                 checker,
                 &lemmas,
                 &rw_lemmas_to_th_ids,
-            )
+            )?;
+            Ok(())
         }
         SatRefConfig::Sat(external::SatTools {
             sat_solver,
