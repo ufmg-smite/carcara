@@ -39,6 +39,9 @@ pub enum DrupFormatError {
 
     #[error("the clause isn't in RAT format")]
     NotInRatFormat,
+
+    #[error("expected a clause or a clause deletion as argument, got '{0}'")]
+    InvalidArgument(Rc<Term>),
 }
 
 pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut Pool, term: T) -> u64 {
@@ -241,7 +244,9 @@ pub fn check_drup(
             continue;
         }
 
-        let terms = match_term!((cl ...) = &t).unwrap();
+        let Some(terms) = match_term!((cl ...) = &t) else {
+            return Err(DrupFormatError::InvalidArgument(t.clone()));
+        };
         let mut unit_history = rup(pool, premises.borrow(), terms);
         if unit_history.is_none() && !terms.is_empty() && check_rat {
             unit_history = check_drat(pool, premises.borrow(), terms);
