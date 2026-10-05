@@ -8,7 +8,7 @@ mod path_args;
 use app::*;
 use carcara::{
     ast::{self, Proof, printer, rare_rules::Rules},
-    benchmarking::{CsvStats, SummaryStats},
+    benchmarking::{CollectStats, CsvStats, SummaryStats},
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances,
     parser::{self, Source},
     slice,
@@ -102,43 +102,69 @@ fn parse_command(
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
+    if options.stats.stats {
+        let mut results = SummaryStats::new();
+        let status = check_command_impl(options, &mut results)?;
+        results.print(false);
+        Ok(status)
+    } else {
+        check_command_impl(options, &mut ())
+    }
+}
+
+fn check_command_impl<S: CollectStats + Send + Default>(
+    options: CheckCommandOptions,
+    stats: &mut S,
+) -> CliResult<carcara::Status> {
     let input = get_input(&options.input)?;
     let parser_config = options.parsing.into_config();
     let checker_config = (options.checking, options.tools).into_config();
 
-    let collect_stats = options.stats.stats;
-    if options.num_threads.get() == 1 {
-        check(input, parser_config, checker_config, collect_stats)
+    let status = if options.num_threads.get() == 1 {
+        check(input, parser_config, checker_config, stats)
     } else {
         check_parallel(
             input,
             parser_config,
             checker_config,
-            collect_stats,
             options.num_threads,
             options.stack.stack_size,
+            stats,
         )
-    }
-    .map_err(Into::into)
+    }?;
+    Ok(status)
 }
 
 fn elaborate_command(
     options: ElaborateCommandOptions,
+) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
+    if options.stats.stats {
+        let mut results = SummaryStats::new();
+        let result = elaborate_command_impl(options, &mut results)?;
+        results.print(false);
+        Ok(result)
+    } else {
+        elaborate_command_impl(options, &mut ())
+    }
+}
+
+fn elaborate_command_impl<S: CollectStats>(
+    options: ElaborateCommandOptions,
+    stats: &mut S,
 ) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
     let input = get_input(&options.input)?;
 
     let checker_config = (options.checking, options.tools.clone()).into_config();
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
-    check_and_elaborate(
+    Ok(check_and_elaborate(
         input,
         options.parsing.into_config(),
         checker_config,
         elab_config,
         pipeline,
-        options.stats.stats,
-    )
-    .map_err(CliError::CarcaraError)
+        stats,
+    )?)
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {

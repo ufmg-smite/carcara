@@ -1,14 +1,10 @@
-use carcara::{
-    ast,
-    benchmarking::{CollectStats, RunMeasurement},
-    checker, elaborator, parser,
-};
+use carcara::{benchmarking::CollectStats, checker, elaborator, parser};
 use crossbeam_queue::ArrayQueue;
 use std::{
     num::NonZero,
     path::{Path, PathBuf},
     thread,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -46,84 +42,52 @@ impl<S: CollectStats> BenchResult<S> {
     }
 }
 
-fn run_job<T: CollectStats + Default + Send>(
-    results: &mut T,
+fn run_job<S: CollectStats>(
+    results: &mut S,
     job: JobDescriptor,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
 ) -> Result<carcara::Status, carcara::Error> {
-    let proof_file_name = job.proof_file.to_str().unwrap();
-    let mut checker_stats = checker::CheckerStatistics {
-        file_name: proof_file_name,
-        polyeq_time: Duration::ZERO,
-        assume_time: Duration::ZERO,
-        assume_core_time: Duration::ZERO,
-        results: std::mem::take(results),
+    let mut run = carcara::benchmarking::RunStats::new();
+
+    // Parsing
+    let input = carcara::Input {
+        problem: parser::Source::file(job.problem_file)?,
+        proof: parser::Source::file(job.proof_file)?,
+        rare_rules: None,
     };
+    let parsing_time = Instant::now();
+    let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
+    run.parsing = parsing_time.elapsed();
 
-    let total = Instant::now();
-
-    let parsing = Instant::now();
-    let (problem, proof, rules, mut pool) = parser::parse(
-        carcara::Input {
-            problem: parser::Source::file(job.problem_file)?,
-            proof: parser::Source::file(job.proof_file)?,
-            rare_rules: None,
-        },
-        parser_config,
-    )?;
-    let parsing = parsing.elapsed();
-
+    // Checking
     let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
+    let (checking_status, checking) = checker.check_with_stats(&problem, &proof, results)?;
+    run.checking = checking;
 
-    let checking = Instant::now();
+    // Elaborating
+    if let Some((elab_config, pipeline)) = elaborator_config {
+        let node = carcara::ast::ProofNodeForest::from_commands(proof.commands);
+        let (_, times) = elaborator::Elaborator::new(&mut pool, &problem, elab_config)
+            .elaborate_with_stats(node, &proof.filename, pipeline)?;
+        run.elaboration = times;
+    }
 
-    let checking_result = checker.check_with_stats(&problem, &proof, &mut checker_stats);
-    let checking = checking.elapsed();
-
-    let (elaboration, pipeline_durations) = if let Some((config, pipeline)) = elaborator_config {
-        let elaboration = Instant::now();
-        let node = ast::ProofNodeForest::from_commands(proof.commands);
-        let (elaborated, pipeline_durations) = elaborator::Elaborator::new(
-            &mut pool, &problem, config,
-        )
-        .elaborate_with_stats(node, &proof.filename, pipeline)?;
-        elaborated.into_commands();
-        (elaboration.elapsed(), pipeline_durations)
-    } else {
-        (Duration::ZERO, Vec::new())
-    };
-
-    let total = total.elapsed();
-
-    checker_stats.results.add_run_measurement(
-        &(proof_file_name.to_string(), job.run_index),
-        RunMeasurement {
-            parsing,
-            checking,
-            elaboration,
-            total,
-            polyeq: checker_stats.polyeq_time,
-            assume: checker_stats.assume_time,
-            assume_core: checker_stats.assume_core_time,
-            elaboration_pipeline: pipeline_durations,
-        },
-    );
-    *results = checker_stats.results;
-    checking_result
+    results.add_run_measurement(&(job.proof_file.to_path_buf(), job.run_index), run);
+    Ok(checking_status)
 }
 
-fn worker_thread<T: CollectStats + Default + Send>(
+fn worker_thread<S: CollectStats + Default>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
-) -> BenchResult<T> {
+) -> BenchResult<S> {
     let mut res = BenchResult {
         num_errors: 0,
         is_holey: false,
-        stats: T::default(),
+        stats: S::default(),
     };
 
     while let Some(job) = jobs_queue.pop() {
@@ -147,14 +111,14 @@ fn worker_thread<T: CollectStats + Default + Send>(
     res
 }
 
-pub fn run_benchmark<T: CollectStats + Default + Send>(
+pub fn run_benchmark<S: CollectStats + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: NonZero<usize>,
     num_jobs: NonZero<usize>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
-) -> BenchResult<T> {
+) -> BenchResult<S> {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
     let jobs_queue = ArrayQueue::new(instances.len() * num_runs.get());

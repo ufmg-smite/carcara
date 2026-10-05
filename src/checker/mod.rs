@@ -10,7 +10,7 @@ use crate::{
         ContextStack, Polyeq, Problem, ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep,
         Rc, Term, pool::Pool, rare_rules::Rules,
     },
-    benchmarking::{CollectStats, SummaryStats},
+    benchmarking::CollectStats,
     external::{ExternalError, ExternalTool, SatTools},
 };
 
@@ -20,7 +20,6 @@ use indexmap::{IndexMap, IndexSet};
 use rules::{Premise, RuleArgs, RuleResult, get_rule};
 use std::{
     collections::HashSet,
-    fmt,
     path::Path,
     time::{Duration, Instant},
 };
@@ -31,11 +30,10 @@ pub(crate) use rules::linear_arithmetic::la_generic_partial;
 
 pub use parallel::ParallelChecker;
 
-/// Benchmarking statistics collected while checking a proof.
-#[derive(Clone)]
-pub struct CheckerStatistics<'s, CR> {
-    /// The name of the proof file being checked.
-    pub file_name: &'s str,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CheckingStats {
+    /// Total time spent checking the proof.
+    pub total: Duration,
 
     /// Total time spent on `polyeq` operations during checking.
     pub polyeq_time: Duration,
@@ -43,36 +41,28 @@ pub struct CheckerStatistics<'s, CR> {
     /// Total time spent checking `assume` steps.
     pub assume_time: Duration,
 
-    /// Time spent comparing `assume` terms with their corresponding `assert` premise, excluding the
-    /// time spent searching for the right premise.
-    pub assume_core_time: Duration,
-
-    /// The collected benchmarking results.
-    pub results: CR,
+    /// Time spent comparing `assume` terms with their corresponding `assert` premise.
+    ///
+    /// This excludes the time spent searching for the right premise.
+    pub assume_compare_time: Duration,
 }
 
-impl<'s, CR: Default> CheckerStatistics<'s, CR> {
-    pub fn new(file_name: &'s str) -> Self {
+impl CheckingStats {
+    fn combine(self, other: Self) -> Self {
         Self {
-            file_name,
-            polyeq_time: Duration::ZERO,
-            assume_time: Duration::ZERO,
-            assume_core_time: Duration::ZERO,
-            results: CR::default(),
+            total: self.total + other.total,
+            polyeq_time: self.polyeq_time + other.polyeq_time,
+            assume_time: self.assume_time + other.assume_time,
+            assume_compare_time: self.assume_compare_time + other.assume_compare_time,
         }
     }
-}
 
-impl<CR> fmt::Debug for CheckerStatistics<'_, CR> {
-    // Since `self.results` does not implement `Debug`, we can't just `#[derive(Debug)]` and instead
-    // have to implement it manually, removing that field.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CheckerStatistics")
-            .field("file_name", &self.file_name)
-            .field("polyeq_time", &self.polyeq_time)
-            .field("assume_time", &self.assume_time)
-            .field("assume_core_time", &self.assume_core_time)
-            .finish()
+    pub fn polyeq_ratio(&self) -> f64 {
+        self.polyeq_time.as_secs_f64() / self.total.as_secs_f64()
+    }
+
+    pub fn assume_ratio(&self) -> f64 {
+        self.assume_time.as_secs_f64() / self.total.as_secs_f64()
     }
 }
 
@@ -143,6 +133,7 @@ pub struct Checker<'c> {
     reached_empty_clause: bool,
     is_holey: bool,
     rare_rules: &'c Rules,
+    run_stats: CheckingStats,
 }
 
 impl<'c> Checker<'c> {
@@ -155,6 +146,7 @@ impl<'c> Checker<'c> {
             reached_empty_clause: false,
             is_holey: false,
             rare_rules,
+            run_stats: CheckingStats::default(),
         }
     }
 
@@ -162,9 +154,21 @@ impl<'c> Checker<'c> {
     ///
     /// Returns `Ok` if the proof is valid, with the proof status.
     pub fn check(&mut self, problem: &Problem, proof: &Proof) -> CarcaraResult<Status> {
-        let null_stats = None::<&mut CheckerStatistics<SummaryStats>>;
-        let status =
-            self.check_commands(problem, &proof.filename, &proof.commands, 0, null_stats)?;
+        let (status, _) = self.check_with_stats(problem, proof, &mut ())?;
+        Ok(status)
+    }
+
+    /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
+    /// statistics into `stats`.
+    pub fn check_with_stats<S: CollectStats>(
+        &mut self,
+        problem: &Problem,
+        proof: &Proof,
+        stats: &mut S,
+    ) -> CarcaraResult<(Status, CheckingStats)> {
+        let start = Instant::now();
+        let status = self.check_commands(problem, &proof.filename, &proof.commands, 0, stats)?;
+        self.run_stats.total = start.elapsed();
 
         let result = if self.reached_empty_clause {
             Ok(status)
@@ -176,24 +180,7 @@ impl<'c> Checker<'c> {
         self.reached_empty_clause = false;
         self.is_holey = false;
 
-        result
-    }
-
-    /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
-    /// statistics into `stats`.
-    pub fn check_with_stats<CR: CollectStats + Send + Default>(
-        &mut self,
-        problem: &Problem,
-        proof: &Proof,
-        stats: &mut CheckerStatistics<CR>,
-    ) -> CarcaraResult<Status> {
-        let status =
-            self.check_commands(problem, &proof.filename, &proof.commands, 0, Some(stats))?;
-        if self.reached_empty_clause {
-            Ok(status)
-        } else {
-            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
-        }
+        Ok((result?, std::mem::take(&mut self.run_stats)))
     }
 
     /// Checks a sequence of commands.
@@ -201,13 +188,13 @@ impl<'c> Checker<'c> {
     /// This must be a contiguous slice of commands at the proof root level, that is, not inside
     /// a subproof. Only the commands from `start_position` to the end of `commands` are actually
     /// checked; the preceding commands are used only to resolve premises and the subproof context.
-    fn check_commands<CR: CollectStats + Send + Default>(
+    fn check_commands<S: CollectStats>(
         &mut self,
         problem: &Problem,
-        proof_filename: &Path,
+        proof_file_name: &Path,
         commands: &[ProofCommand],
         start_position: usize,
-        mut stats: Option<&mut CheckerStatistics<CR>>,
+        stats: &mut S,
     ) -> CarcaraResult<Status> {
         // Similarly to the parser, to avoid stack overflows in proofs with many nested subproofs,
         // we check the subproofs iteratively, instead of recursively
@@ -228,8 +215,12 @@ impl<'c> Checker<'c> {
                     } else {
                         None
                     };
-                    self.check_step(step, previous_command, &iter, &mut stats, &problem.prelude)
-                        .map_err(|e| e.at(&step.id, &step.rule, proof_filename))?;
+
+                    let time = Instant::now();
+                    self.check_step(step, previous_command, &iter, &problem.prelude)
+                        .map_err(|e| e.at(&step.id, &step.rule, proof_file_name))?;
+                    let time = time.elapsed();
+                    stats.add_step_measurement(proof_file_name, &step.id, &step.rule, time);
 
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack. The parser already ensures that the last command
@@ -247,28 +238,21 @@ impl<'c> Checker<'c> {
                 }
                 ProofCommand::Subproof(s) => {
                     let time = Instant::now();
-                    let step_id = command.id();
-
                     self.context.push(&s.args);
-
-                    if let Some(stats) = &mut stats {
-                        let rule_name = match s.commands.last() {
-                            Some(ProofCommand::Step(step)) => format!("anchor({})", &step.rule),
-                            _ => "anchor".to_owned(),
-                        };
-                        stats.results.add_step_measurement(
-                            stats.file_name,
-                            step_id,
-                            &rule_name,
-                            time.elapsed(),
-                        );
-                    }
+                    let id = command.id();
+                    stats.add_step_measurement(proof_file_name, id, "anchor", time.elapsed());
                 }
+                // Some subproofs contain `assume` commands inside them. These don't refer to the
+                // original problem premises, but are instead local assumptions that are discharged
+                // by the subproof's final step, so we ignore the `assume` command if it is inside
+                // a subproof.
+                ProofCommand::Assume { .. } if iter.is_in_subproof() => {}
                 ProofCommand::Assume { id, term } => {
-                    if !self.check_assume(id, term, &problem.premises, &iter, &mut stats) {
-                        let err = CheckerError::Assume(term.clone());
-                        return Err(err.at(id, "assume", proof_filename));
-                    }
+                    let time = Instant::now();
+                    let was_easy = self
+                        .check_assume(term, &problem.premises, stats)
+                        .map_err(|e| e.at(id, "assume", proof_file_name))?;
+                    stats.add_assume_measurement(proof_file_name, id, was_easy, time.elapsed());
                 }
             }
         }
@@ -279,43 +263,32 @@ impl<'c> Checker<'c> {
         })
     }
 
-    fn check_assume<'i, CR: CollectStats + Send + Default>(
+    /// Checks an assume command, returning `Ok` if it is valid, and a boolean describing whether it
+    /// was "easy", that is, did not require polyequality checking.
+    fn check_assume<S: CollectStats>(
         &mut self,
-        id: &str,
         term: &Rc<Term>,
         premises: &IndexSet<Rc<Term>>,
-        iter: &'i ProofIter<'i>,
-        stats: &mut Option<&mut CheckerStatistics<CR>>,
-    ) -> bool {
-        // Some subproofs contain `assume` commands inside them. These don't refer to the original
-        // problem premises, but are instead local assumptions that are discharged by the subproof's
-        // final step, so we ignore the `assume` command if it is inside a subproof.
-        if iter.is_in_subproof() {
-            return true;
-        }
-
+        stats: &mut S,
+    ) -> Result<bool, CheckerError> {
         let time = Instant::now();
 
         // Check for exact match first
         if premises.contains(term) {
             let total_time = time.elapsed();
-            if let Some(s) = stats {
-                s.assume_time += total_time;
-                s.results
-                    .add_assume_measurement(s.file_name, id, true, total_time);
-            }
-            return true;
+            self.run_stats.assume_time += total_time;
+            return Ok(true);
         }
 
         // If elaborated mode, no polyeq checking allowed
         if self.config.elaborated {
-            return false;
+            return Err(CheckerError::Assume(term.clone()));
         }
 
         // Perform polyeq checking
         let mut found = false;
         let mut polyeq_time = Duration::ZERO;
-        let mut core_time = Duration::ZERO;
+        let mut compare_time = Duration::ZERO;
 
         for p in premises {
             let mut this_polyeq_time = Duration::ZERO;
@@ -326,11 +299,9 @@ impl<'c> Checker<'c> {
 
             polyeq_time += this_polyeq_time;
 
-            if let Some(s) = &mut *stats {
-                s.results.add_polyeq_depth(depth);
-            }
+            stats.add_polyeq_depth(depth);
             if result {
-                core_time = this_polyeq_time;
+                compare_time = this_polyeq_time;
                 found = true;
                 break;
             }
@@ -338,27 +309,24 @@ impl<'c> Checker<'c> {
 
         let total_time = time.elapsed();
 
-        if let Some(s) = stats {
-            s.assume_time += total_time;
-            s.assume_core_time += core_time;
-            s.polyeq_time += polyeq_time;
-            s.results
-                .add_assume_measurement(s.file_name, id, false, total_time);
-        }
+        self.run_stats.assume_time += total_time;
+        self.run_stats.assume_compare_time += compare_time;
+        self.run_stats.polyeq_time += polyeq_time;
 
-        found
+        if found {
+            Ok(false)
+        } else {
+            Err(CheckerError::Assume(term.clone()))
+        }
     }
 
-    fn check_step<'i, CR: CollectStats + Send + Default>(
+    fn check_step<'i>(
         &mut self,
         step: &ProofStep,
         previous_command: Option<Premise>,
         iter: &'i ProofIter<'i>,
-        stats: &mut Option<&mut CheckerStatistics<CR>>,
         prelude: &ProblemPrelude,
     ) -> RuleResult {
-        let time = Instant::now();
-
         if self.config.allowed_rules.contains(&step.rule) {
             self.is_holey = true;
             return Ok(());
@@ -408,6 +376,7 @@ impl<'c> Checker<'c> {
             polyeq_time: &mut polyeq_time,
             rare_rules: self.rare_rules,
         };
+        // TODO: only passing args, not conclusion?
         if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
             check_external(rule_args.args, custom_checker)?;
             return Ok(());
@@ -441,12 +410,7 @@ impl<'c> Checker<'c> {
             check_discharge(subproof, iter.depth(), &step.discharge)?;
         }
 
-        if let Some(s) = stats {
-            let elapsed = time.elapsed();
-            s.results
-                .add_step_measurement(s.file_name, &step.id, &step.rule, elapsed);
-            s.polyeq_time += polyeq_time;
-        }
+        self.run_stats.polyeq_time += polyeq_time;
         Ok(())
     }
 }

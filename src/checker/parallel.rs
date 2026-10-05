@@ -1,8 +1,8 @@
 use crate::{
     CarcaraResult, Error, Status,
     ast::{Problem, Proof, pool::Pool, rare_rules::Rules},
-    benchmarking::{CollectStats, SummaryStats},
-    checker::{Checker, CheckerStatistics, Config},
+    benchmarking::CollectStats,
+    checker::{Checker, CheckingStats, Config},
 };
 use crossbeam_queue::ArrayQueue;
 use std::{
@@ -12,7 +12,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::Duration,
+    time::Instant,
 };
 
 /// A parallel proof checker for Alethe.
@@ -48,31 +48,22 @@ impl<'c> ParallelChecker<'c> {
         num_threads: NonZero<usize>,
         stack_size: Option<usize>,
     ) -> CarcaraResult<Status> {
-        let null_stats = None::<&mut CheckerStatistics<SummaryStats>>;
-        self.check_impl(problem, proof, num_threads, stack_size, null_stats)
+        let (status, _) =
+            self.check_with_stats(problem, proof, num_threads, stack_size, &mut ())?;
+        Ok(status)
     }
 
     /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
     /// statistics into `stats`.
-    pub fn check_with_stats<CR: CollectStats + Send + Default>(
+    pub fn check_with_stats<S: CollectStats + Send + Default>(
         &mut self,
         problem: &Problem,
         proof: &Proof,
         num_threads: NonZero<usize>,
         stack_size: Option<usize>,
-        stats: &mut CheckerStatistics<CR>,
-    ) -> CarcaraResult<Status> {
-        self.check_impl(problem, proof, num_threads, stack_size, Some(stats))
-    }
-
-    fn check_impl<CR: CollectStats + Send + Default>(
-        &mut self,
-        problem: &Problem,
-        proof: &Proof,
-        num_threads: NonZero<usize>,
-        stack_size: Option<usize>,
-        stats: Option<&mut CheckerStatistics<CR>>,
-    ) -> CarcaraResult<Status> {
+        stats: &mut S,
+    ) -> CarcaraResult<(Status, CheckingStats)> {
+        let start = Instant::now();
         if proof.commands.is_empty() {
             return Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() });
         }
@@ -87,7 +78,6 @@ impl<'c> ParallelChecker<'c> {
 
         let combined_result = thread::scope(|s| {
             let work_queue = &work_queue;
-            let use_stats = stats.is_some();
             let global_pool = &self.global_pool;
             let rare_rules = self.rare_rules;
             let config = &self.config;
@@ -103,14 +93,7 @@ impl<'c> ParallelChecker<'c> {
                             let mut local_pool = Pool::with_parent(global_pool.clone());
                             let local_checker =
                                 Checker::new(&mut local_pool, rare_rules, config.clone());
-                            worker_thread::<CR>(
-                                local_checker,
-                                problem,
-                                proof,
-                                work_queue,
-                                abort,
-                                use_stats,
-                            )
+                            worker_thread::<S>(local_checker, problem, proof, work_queue, abort)
                         })
                         .unwrap()
                 })
@@ -123,29 +106,32 @@ impl<'c> ParallelChecker<'c> {
                 .unwrap()
         })?;
 
-        let combined_stats = combined_result.stats;
-        if let Some(stats) = stats
-            && let Some(combined_stats) = combined_stats
-        {
-            let file_name = stats.file_name;
-            *stats = combined_stats;
-            stats.file_name = file_name;
-        }
+        *stats = S::combine(std::mem::take(stats), combined_result.global_stats);
+
+        // TODO
+        // The workers only measure the time spent on polyeq and `assume` steps, so the total is the
+        // wall-clock time of the whole parallel check
+        let checking_stats = CheckingStats {
+            total: start.elapsed(),
+            ..combined_result.checking_stats
+        };
+
         if combined_result.reached_empty_clause {
-            Ok(combined_result.status)
+            Ok((combined_result.status, checking_stats))
         } else {
             Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
         }
     }
 }
 
-struct WorkerResult<R: CollectStats + Send + Default> {
+struct WorkerResult<S> {
     status: Status,
     reached_empty_clause: bool,
-    stats: Option<CheckerStatistics<'static, R>>,
+    checking_stats: CheckingStats,
+    global_stats: S,
 }
 
-impl<R: CollectStats + Send + Default> WorkerResult<R> {
+impl<S: CollectStats> WorkerResult<S> {
     fn combine(a: Self, b: Self) -> Self {
         Self {
             status: if a.status == Status::Holey || b.status == Status::Holey {
@@ -154,43 +140,20 @@ impl<R: CollectStats + Send + Default> WorkerResult<R> {
                 Status::Valid
             },
             reached_empty_clause: a.reached_empty_clause || b.reached_empty_clause,
-            stats: combine_stats(a.stats, b.stats),
+            checking_stats: a.checking_stats.combine(b.checking_stats),
+            global_stats: S::combine(a.global_stats, b.global_stats),
         }
     }
 }
 
-fn combine_stats<R: CollectStats + Send + Default>(
-    a: Option<CheckerStatistics<'static, R>>,
-    b: Option<CheckerStatistics<'static, R>>,
-) -> Option<CheckerStatistics<'static, R>> {
-    let mut a = a?;
-    let b = b?;
-    a.polyeq_time += b.polyeq_time;
-    a.assume_time += b.assume_time;
-    a.assume_core_time += b.assume_core_time;
-    a.results = CollectStats::combine(a.results, b.results);
-    Some(a)
-}
-
-fn worker_thread<R: CollectStats + Send + Default>(
+fn worker_thread<S: CollectStats + Default>(
     mut local_checker: Checker,
     problem: &Problem,
     proof: &Proof,
     work_queue: &ArrayQueue<usize>,
     abort: &AtomicBool,
-    collect_stats: bool,
-) -> CarcaraResult<WorkerResult<R>> {
-    let mut local_stats = if collect_stats {
-        Some(CheckerStatistics {
-            file_name: "",
-            polyeq_time: Duration::ZERO,
-            assume_time: Duration::ZERO,
-            assume_core_time: Duration::ZERO,
-            results: R::default(),
-        })
-    } else {
-        None
-    };
+) -> CarcaraResult<WorkerResult<S>> {
+    let mut stats = S::default();
     while let Some(index) = work_queue.pop() {
         if abort.load(Ordering::Relaxed) {
             break;
@@ -200,7 +163,7 @@ fn worker_thread<R: CollectStats + Send + Default>(
             &proof.filename,
             &proof.commands[..index + 1],
             index,
-            local_stats.as_mut(),
+            &mut stats,
         );
         if result.is_err() {
             abort.store(true, Ordering::Relaxed);
@@ -215,6 +178,7 @@ fn worker_thread<R: CollectStats + Send + Default>(
             Status::Valid
         },
         reached_empty_clause: local_checker.reached_empty_clause,
-        stats: local_stats,
+        checking_stats: std::mem::take(&mut local_checker.run_stats),
+        global_stats: stats,
     })
 }

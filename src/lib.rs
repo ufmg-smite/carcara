@@ -56,16 +56,11 @@ pub mod slice;
 pub mod translation;
 mod utils;
 
-use benchmarking::{CollectStats, RunMeasurement, SummaryStats};
-use checker::{CheckerStatistics, error::CheckerError};
-use elaborator::ElaborationPass;
-use elaborator::error::ElaborationError;
+use benchmarking::{CollectStats, RunStats};
+use checker::error::CheckerError;
+use elaborator::{ElaborationPass, error::ElaborationError};
 use parser::{ParserError, Position};
-use std::io;
-use std::num::NonZero;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{io, num::NonZero, path::PathBuf, sync::Arc, time::Instant};
 use thiserror::Error;
 
 /// A type alias for a `Result` whose error type is a Carcara error.
@@ -169,51 +164,23 @@ pub enum Error {
 
 /// Parses and checks an Alethe proof against an SMT-LIB problem.
 ///
-/// The `Result` returned is `Ok` if the proof did not have errors, and contains the proof status.
-/// The `input` contains the SMT-LIB problem and the Alethe proof to check, and optionally a set of
-/// Rare rewrite rules to be used when checking.
-///
-/// If `collect_stats` is true, benchmarking statistics will be collected and printed.
-pub fn check<'s>(
+/// Benchmarking statistics collected while checking are recorded in `stats`. To not collect any
+/// statistics, pass `&mut ()`.
+pub fn check<'s, S: CollectStats>(
     input: Input<'s>,
     parser_config: parser::Config,
     checker_config: checker::Config,
-    collect_stats: bool,
+    stats: &mut S,
 ) -> Result<Status, Error> {
-    // Parsing
-    let start = Instant::now();
-    let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
-
-    let parsing = start.elapsed();
-
-    // Checking
-    let checking = Instant::now();
-    let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
-    if collect_stats {
-        // TODO: use actual proof file name
-        let mut checker_stats = CheckerStatistics::<SummaryStats>::new("this");
-        let res = checker.check_with_stats(&problem, &proof, &mut checker_stats);
-
-        let run = RunMeasurement {
-            parsing,
-            checking: checking.elapsed(),
-            elaboration: Duration::ZERO,
-            total: start.elapsed(),
-            polyeq: checker_stats.polyeq_time,
-            assume: checker_stats.assume_time,
-            assume_core: checker_stats.assume_core_time,
-            elaboration_pipeline: Vec::new(),
-        };
-        checker_stats
-            .results
-            .add_run_measurement(&("this".to_owned(), 0), run);
-        // Print the statistics
-        checker_stats.results.print(false);
-
-        res
-    } else {
-        checker.check(&problem, &proof)
-    }
+    let (status, _, _, _) = check_and_elaborate(
+        input,
+        parser_config,
+        checker_config,
+        elaborator::Config::new(),
+        Vec::new(),
+        stats,
+    )?;
+    Ok(status)
 }
 
 /// Parses and checks an Alethe proof against an SMT-LIB problem, checking steps in parallel.
@@ -221,55 +188,29 @@ pub fn check<'s>(
 /// This is similar to [`check`], but the proof steps are checked concurrently using `num_threads`
 /// threads. The `stack_size` argument, if given, sets the stack size of the worker threads;
 /// otherwise, the platform's default stack size is used.
-#[allow(clippy::too_many_arguments)]
-pub fn check_parallel<'s>(
+pub fn check_parallel<'s, S: CollectStats + Send + Default>(
     input: Input<'s>,
     parser_config: parser::Config,
     checker_config: checker::Config,
-    collect_stats: bool,
     num_threads: NonZero<usize>,
     stack_size: Option<usize>,
+    stats: &mut S,
 ) -> Result<Status, Error> {
-    // Parsing
-    let start = Instant::now();
-    let (problem, proof, rules, pool) = parser::parse(input, parser_config)?;
+    let mut run: RunStats = RunStats::new();
 
-    let parsing = start.elapsed();
+    // Parsing
+    let parsing_time = Instant::now();
+    let (problem, proof, rules, pool) = parser::parse(input, parser_config)?;
+    run.parsing = parsing_time.elapsed();
 
     // Checking
-    let checking = Instant::now();
     let mut checker = checker::ParallelChecker::new(Arc::new(pool), &rules, checker_config);
-    if collect_stats {
-        // TODO: use actual proof file name
-        let mut checker_stats = CheckerStatistics::<SummaryStats>::new("this");
-        let res = checker.check_with_stats(
-            &problem,
-            &proof,
-            num_threads,
-            stack_size,
-            &mut checker_stats,
-        );
+    let (status, checking) =
+        checker.check_with_stats(&problem, &proof, num_threads, stack_size, stats)?;
+    run.checking = checking;
 
-        let run = RunMeasurement {
-            parsing,
-            checking: checking.elapsed(),
-            elaboration: Duration::ZERO,
-            total: start.elapsed(),
-            polyeq: checker_stats.polyeq_time,
-            assume: checker_stats.assume_time,
-            assume_core: checker_stats.assume_core_time,
-            elaboration_pipeline: Vec::new(),
-        };
-        checker_stats
-            .results
-            .add_run_measurement(&("this".to_owned(), 0), run);
-        // Print the statistics
-        checker_stats.results.print(false);
-
-        res
-    } else {
-        checker.check(&problem, &proof, num_threads, stack_size)
-    }
+    stats.add_run_measurement(&(proof.filename.clone(), 0), run);
+    Ok(status)
 }
 
 /// Parses, checks, and elaborates an Alethe proof against an SMT-LIB problem.
@@ -278,74 +219,43 @@ pub fn check_parallel<'s>(
 /// `pipeline` argument determines the elaboration passes to apply, in order. On success, this
 /// returns the proof holiness status, the parsed problem, the elaborated proof, and the term pool
 /// used.
-#[allow(clippy::too_many_arguments)]
-pub fn check_and_elaborate<'s>(
+pub fn check_and_elaborate<'s, S: CollectStats>(
     input: Input<'s>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
     pipeline: Vec<elaborator::ElaborationPass>,
-    collect_stats: bool,
+    stats: &mut S,
 ) -> Result<(Status, ast::Problem, ast::Proof, ast::pool::Pool), Error> {
-    let mut run: RunMeasurement = RunMeasurement::default();
+    let mut run: RunStats = RunStats::new();
 
-    // Parsing (Complete rare rules)
-    let total = Instant::now();
+    // Parsing
+    let parsing_time = Instant::now();
     let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
-    run.parsing = total.elapsed();
-
-    let mut stats = SummaryStats::new();
+    run.parsing = parsing_time.elapsed();
 
     // Checking
-    let checking = Instant::now();
     let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
-    let checking_status = if collect_stats {
-        let mut checker_stats = CheckerStatistics {
-            file_name: "this",
-            polyeq_time: Duration::ZERO,
-            assume_time: Duration::ZERO,
-            assume_core_time: Duration::ZERO,
-            results: std::mem::take(&mut stats),
-        };
-
-        let res = checker.check_with_stats(&problem, &proof, &mut checker_stats);
-        run.checking = checking.elapsed();
-        run.polyeq = checker_stats.polyeq_time;
-        run.assume = checker_stats.assume_time;
-        run.assume_core = checker_stats.assume_core_time;
-
-        stats = checker_stats.results;
-        res
-    } else {
-        checker.check(&problem, &proof)
-    }?;
+    let (checking_status, checking) = checker.check_with_stats(&problem, &proof, stats)?;
+    run.checking = checking;
 
     // Elaborating
-    let elaboration = Instant::now();
-
-    let node = ast::ProofNodeForest::from_commands(proof.commands);
-    let (elaborated, pipeline_durations) = elaborator::Elaborator::new(
-        &mut pool,
-        &problem,
-        elaborator_config,
-    )
-    .elaborate_with_stats(node, &proof.filename, pipeline)?;
-    let elaborated = ast::Proof {
-        commands: elaborated.into_commands(),
-        ..proof
+    let proof = if !pipeline.is_empty() {
+        let node = ast::ProofNodeForest::from_commands(proof.commands);
+        let (elaborated, times) =
+            elaborator::Elaborator::new(&mut pool, &problem, elaborator_config)
+                .elaborate_with_stats(node, &proof.filename, pipeline)?;
+        run.elaboration = times;
+        ast::Proof {
+            commands: elaborated.into_commands(),
+            ..proof
+        }
+    } else {
+        proof
     };
 
-    if collect_stats {
-        run.elaboration = elaboration.elapsed();
-        run.total = total.elapsed();
-        run.elaboration_pipeline = pipeline_durations;
-
-        stats.add_run_measurement(&("this".to_owned(), 0), run);
-
-        stats.print(false);
-    }
-
-    Ok((checking_status, problem, elaborated, pool))
+    stats.add_run_measurement(&(proof.filename.clone(), 0), run);
+    Ok((checking_status, problem, proof, pool))
 }
 
 /// Generates an SMT-LIB problem for each `lia_generic` step in a proof.
