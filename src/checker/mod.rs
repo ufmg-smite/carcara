@@ -229,12 +229,7 @@ impl<'c> Checker<'c> {
                         None
                     };
                     self.check_step(step, previous_command, &iter, &mut stats, &problem.prelude)
-                        .map_err(|e| Error::Checker {
-                            inner: Box::new(e),
-                            rule: step.rule.as_str().into(),
-                            step: step.id.as_str().into(),
-                            file: proof_filename.to_path_buf(),
-                        })?;
+                        .map_err(|e| e.at(&step.id, &step.rule, proof_filename))?;
 
                     // If this is the last command of a subproof, we have to pop the subproof
                     // commands off of the stack. The parser already ensures that the last command
@@ -271,12 +266,8 @@ impl<'c> Checker<'c> {
                 }
                 ProofCommand::Assume { id, term } => {
                     if !self.check_assume(id, term, &problem.premises, &iter, &mut stats) {
-                        return Err(Error::Checker {
-                            inner: Box::new(CheckerError::Assume(term.clone())),
-                            rule: "assume".into(),
-                            step: id.as_str().into(),
-                            file: proof_filename.to_path_buf(),
-                        });
+                        let err = CheckerError::Assume(term.clone());
+                        return Err(err.at(id, "assume", proof_filename));
                     }
                 }
             }

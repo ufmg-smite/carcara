@@ -7,7 +7,7 @@ use crate::{
     utils::{Range, TypeName},
 };
 use rug::{Integer, Rational};
-use std::fmt;
+use std::{fmt, path::Path};
 use thiserror::Error;
 
 /// An error that occurred while checking a proof.
@@ -310,6 +310,17 @@ pub enum CheckerError {
     /// An unknown rule was encountered.
     #[error("unknown rule")]
     UnknownRule,
+}
+
+impl CheckerError {
+    pub fn at(self, id: &str, rule: &str, file: &Path) -> crate::Error {
+        crate::Error::Checker {
+            inner: Box::new(self),
+            rule: rule.into(),
+            step: id.into(),
+            file: file.to_path_buf(),
+        }
+    }
 }
 
 /// Errors in which we expected two things to be equal but they weren't.
