@@ -8,7 +8,7 @@ mod path_args;
 use app::*;
 use carcara::{
     ast::{self, Proof, printer, rare_rules::Rules},
-    benchmarking::OnlineBenchmarkResults,
+    benchmarking::SummaryStats,
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances,
     parser::{self, Source},
     slice,
@@ -171,7 +171,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         return Ok(());
     }
 
-    let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
+    let results: SummaryStats = benchmarking::run_benchmark(
         &instances,
         options.num_runs,
         options.num_jobs,

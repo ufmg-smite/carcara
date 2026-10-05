@@ -10,7 +10,7 @@ use crate::{
         ContextStack, Polyeq, Problem, ProblemPrelude, Proof, ProofCommand, ProofIter, ProofStep,
         Rc, Term, pool::Pool, rare_rules::Rules,
     },
-    benchmarking::{CollectResults, OnlineBenchmarkResults},
+    benchmarking::{CollectStats, SummaryStats},
     external::{ExternalError, ExternalTool, SatTools},
 };
 
@@ -162,7 +162,7 @@ impl<'c> Checker<'c> {
     ///
     /// Returns `Ok` if the proof is valid, with the proof status.
     pub fn check(&mut self, problem: &Problem, proof: &Proof) -> CarcaraResult<Status> {
-        let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
+        let null_stats = None::<&mut CheckerStatistics<SummaryStats>>;
         let status =
             self.check_commands(problem, &proof.filename, &proof.commands, 0, null_stats)?;
 
@@ -181,7 +181,7 @@ impl<'c> Checker<'c> {
 
     /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
     /// statistics into `stats`.
-    pub fn check_with_stats<CR: CollectResults + Send + Default>(
+    pub fn check_with_stats<CR: CollectStats + Send + Default>(
         &mut self,
         problem: &Problem,
         proof: &Proof,
@@ -201,7 +201,7 @@ impl<'c> Checker<'c> {
     /// This must be a contiguous slice of commands at the proof root level, that is, not inside
     /// a subproof. Only the commands from `start_position` to the end of `commands` are actually
     /// checked; the preceding commands are used only to resolve premises and the subproof context.
-    fn check_commands<CR: CollectResults + Send + Default>(
+    fn check_commands<CR: CollectStats + Send + Default>(
         &mut self,
         problem: &Problem,
         proof_filename: &Path,
@@ -279,7 +279,7 @@ impl<'c> Checker<'c> {
         })
     }
 
-    fn check_assume<'i, CR: CollectResults + Send + Default>(
+    fn check_assume<'i, CR: CollectStats + Send + Default>(
         &mut self,
         id: &str,
         term: &Rc<Term>,
@@ -349,7 +349,7 @@ impl<'c> Checker<'c> {
         found
     }
 
-    fn check_step<'i, CR: CollectResults + Send + Default>(
+    fn check_step<'i, CR: CollectStats + Send + Default>(
         &mut self,
         step: &ProofStep,
         previous_command: Option<Premise>,

@@ -1,7 +1,7 @@
 use crate::{
     CarcaraResult, Error, Status,
     ast::{Problem, Proof, pool::Pool, rare_rules::Rules},
-    benchmarking::{CollectResults, OnlineBenchmarkResults},
+    benchmarking::{CollectStats, SummaryStats},
     checker::{Checker, CheckerStatistics, Config},
 };
 use crossbeam_queue::ArrayQueue;
@@ -48,13 +48,13 @@ impl<'c> ParallelChecker<'c> {
         num_threads: NonZero<usize>,
         stack_size: Option<usize>,
     ) -> CarcaraResult<Status> {
-        let null_stats = None::<&mut CheckerStatistics<OnlineBenchmarkResults>>;
+        let null_stats = None::<&mut CheckerStatistics<SummaryStats>>;
         self.check_impl(problem, proof, num_threads, stack_size, null_stats)
     }
 
     /// Checks that `proof` is a valid proof for the given problem, collecting benchmarking
     /// statistics into `stats`.
-    pub fn check_with_stats<CR: CollectResults + Send + Default>(
+    pub fn check_with_stats<CR: CollectStats + Send + Default>(
         &mut self,
         problem: &Problem,
         proof: &Proof,
@@ -65,7 +65,7 @@ impl<'c> ParallelChecker<'c> {
         self.check_impl(problem, proof, num_threads, stack_size, Some(stats))
     }
 
-    fn check_impl<CR: CollectResults + Send + Default>(
+    fn check_impl<CR: CollectStats + Send + Default>(
         &mut self,
         problem: &Problem,
         proof: &Proof,
@@ -139,13 +139,13 @@ impl<'c> ParallelChecker<'c> {
     }
 }
 
-struct WorkerResult<R: CollectResults + Send + Default> {
+struct WorkerResult<R: CollectStats + Send + Default> {
     status: Status,
     reached_empty_clause: bool,
     stats: Option<CheckerStatistics<'static, R>>,
 }
 
-impl<R: CollectResults + Send + Default> WorkerResult<R> {
+impl<R: CollectStats + Send + Default> WorkerResult<R> {
     fn combine(a: Self, b: Self) -> Self {
         Self {
             status: if a.status == Status::Holey || b.status == Status::Holey {
@@ -159,7 +159,7 @@ impl<R: CollectResults + Send + Default> WorkerResult<R> {
     }
 }
 
-fn combine_stats<R: CollectResults + Send + Default>(
+fn combine_stats<R: CollectStats + Send + Default>(
     a: Option<CheckerStatistics<'static, R>>,
     b: Option<CheckerStatistics<'static, R>>,
 ) -> Option<CheckerStatistics<'static, R>> {
@@ -168,11 +168,11 @@ fn combine_stats<R: CollectResults + Send + Default>(
     a.polyeq_time += b.polyeq_time;
     a.assume_time += b.assume_time;
     a.assume_core_time += b.assume_core_time;
-    a.results = CollectResults::combine(a.results, b.results);
+    a.results = CollectStats::combine(a.results, b.results);
     Some(a)
 }
 
-fn worker_thread<R: CollectResults + Send + Default>(
+fn worker_thread<R: CollectStats + Send + Default>(
     mut local_checker: Checker,
     problem: &Problem,
     proof: &Proof,

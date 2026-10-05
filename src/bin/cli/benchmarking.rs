@@ -1,6 +1,6 @@
 use carcara::{
     ast,
-    benchmarking::{CollectResults, CsvBenchmarkResults, RunMeasurement},
+    benchmarking::{CollectStats, CsvStats, RunMeasurement},
     checker, elaborator, parser,
 };
 use crossbeam_queue::ArrayQueue;
@@ -18,7 +18,7 @@ struct JobDescriptor<'a> {
     run_index: usize,
 }
 
-fn run_job<T: CollectResults + Default + Send>(
+fn run_job<T: CollectStats + Default + Send>(
     results: &mut T,
     job: JobDescriptor,
     parser_config: parser::Config,
@@ -86,7 +86,7 @@ fn run_job<T: CollectResults + Default + Send>(
     checking_result
 }
 
-fn worker_thread<T: CollectResults + Default + Send>(
+fn worker_thread<T: CollectStats + Default + Send>(
     jobs_queue: &ArrayQueue<JobDescriptor>,
     parser_config: parser::Config,
     checker_config: checker::Config,
@@ -115,7 +115,7 @@ fn worker_thread<T: CollectResults + Default + Send>(
     results
 }
 
-pub fn run_benchmark<T: CollectResults + Default + Send>(
+pub fn run_benchmark<T: CollectStats + Default + Send>(
     instances: &[(PathBuf, PathBuf)],
     num_runs: NonZero<usize>,
     num_jobs: NonZero<usize>,
@@ -175,7 +175,7 @@ pub fn run_csv_benchmark(
     runs_file: &str,
     steps_file: &str,
 ) -> Result<(), carcara::Error> {
-    let result: CsvBenchmarkResults = run_benchmark(
+    let result: CsvStats = run_benchmark(
         instances,
         num_runs,
         num_jobs,

@@ -80,7 +80,7 @@ pub struct RunMeasurement {
 
 /// The benchmark results collected over many runs of Carcara on a set of proofs.
 #[derive(Debug, Default, Clone)]
-pub struct OnlineBenchmarkResults {
+pub struct SummaryStats {
     /// The time per run to parse the proof.
     pub parsing: Metrics<RunId>,
 
@@ -136,8 +136,8 @@ pub struct OnlineBenchmarkResults {
     pub had_error: bool,
 }
 
-impl OnlineBenchmarkResults {
-    /// Creates a new, empty `OnlineBenchmarkResults`.
+impl SummaryStats {
+    /// Creates a new, empty `SummaryStats`.
     pub fn new() -> Self {
         Default::default()
     }
@@ -285,7 +285,7 @@ type InternedRunId = (Arc<str>, usize);
 
 /// Benchmark results that can be written to CSV files.
 #[derive(Default)]
-pub struct CsvBenchmarkResults {
+pub struct CsvStats {
     strings: IndexSet<Arc<str>>,
     runs: IndexMap<InternedRunId, RunMeasurement>,
     steps: Vec<(Arc<str>, Duration)>,
@@ -293,8 +293,8 @@ pub struct CsvBenchmarkResults {
     num_errors: usize,
 }
 
-impl CsvBenchmarkResults {
-    /// Creates a new, empty `CsvBenchmarkResults`.
+impl CsvStats {
+    /// Creates a new, empty `CsvStats`.
     pub fn new() -> Self {
         Default::default()
     }
@@ -391,7 +391,7 @@ impl CsvBenchmarkResults {
 }
 
 /// A sink for benchmark results, which receives measurements as proofs are checked and elaborated.
-pub trait CollectResults {
+pub trait CollectStats {
     /// Records the time spent checking a single step.
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
 
@@ -416,7 +416,7 @@ pub trait CollectResults {
         Self: Sized;
 }
 
-impl CollectResults for OnlineBenchmarkResults {
+impl CollectStats for SummaryStats {
     fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
         let rule = rule.to_owned();
         let id = StepId {
@@ -511,7 +511,7 @@ impl CollectResults for OnlineBenchmarkResults {
     }
 }
 
-impl CollectResults for CsvBenchmarkResults {
+impl CollectStats for CsvStats {
     fn add_step_measurement(&mut self, _: &str, _: &str, rule: &str, time: Duration) {
         let rule = self.intern(rule);
         self.steps.push((rule, time));

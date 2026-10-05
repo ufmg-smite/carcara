@@ -56,7 +56,7 @@ pub mod slice;
 pub mod translation;
 mod utils;
 
-use benchmarking::{CollectResults, OnlineBenchmarkResults, RunMeasurement};
+use benchmarking::{CollectStats, RunMeasurement, SummaryStats};
 use checker::{CheckerStatistics, error::CheckerError};
 use elaborator::ElaborationPass;
 use elaborator::error::ElaborationError;
@@ -191,7 +191,7 @@ pub fn check<'s>(
     let mut checker = checker::Checker::new(&mut pool, &rules, checker_config);
     if collect_stats {
         // TODO: use actual proof file name
-        let mut checker_stats = CheckerStatistics::<OnlineBenchmarkResults>::new("this");
+        let mut checker_stats = CheckerStatistics::<SummaryStats>::new("this");
         let res = checker.check_with_stats(&problem, &proof, &mut checker_stats);
 
         let run = RunMeasurement {
@@ -241,7 +241,7 @@ pub fn check_parallel<'s>(
     let mut checker = checker::ParallelChecker::new(Arc::new(pool), &rules, checker_config);
     if collect_stats {
         // TODO: use actual proof file name
-        let mut checker_stats = CheckerStatistics::<OnlineBenchmarkResults>::new("this");
+        let mut checker_stats = CheckerStatistics::<SummaryStats>::new("this");
         let res = checker.check_with_stats(
             &problem,
             &proof,
@@ -294,7 +294,7 @@ pub fn check_and_elaborate<'s>(
     let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
     run.parsing = total.elapsed();
 
-    let mut stats = OnlineBenchmarkResults::new();
+    let mut stats = SummaryStats::new();
 
     // Checking
     let checking = Instant::now();
