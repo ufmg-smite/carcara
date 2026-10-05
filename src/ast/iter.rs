@@ -27,7 +27,8 @@ use super::*;
 ///         :rule equiv1 :premises (t3))
 ///     (step t5 (cl) :rule resolution :premises (t4 h1 h2))
 /// ";
-/// let (_, proof, _, _) = parser::parse_instance("".into(), proof.into(), None, parser::Config::new())?;
+/// let input = Input { problem: "".into(), proof: proof.into(), rare_rules: None };
+/// let (_, proof, _, _) = parser::parse(input, parser::Config::new())?;
 /// let ids: Vec<_> = proof.iter().map(|c| c.id()).collect();
 /// assert_eq!(ids, ["h1", "h2", "t3", "t3.t1", "t3.t2", "t3", "t4", "t5"]);
 /// # Ok(())
@@ -39,8 +40,13 @@ pub struct ProofIter<'a> {
 
 impl<'a> ProofIter<'a> {
     /// Constructs a new `ProofIter`, given a slice of proof commands.
-    pub(super) fn new(commands: &'a [ProofCommand]) -> Self {
-        Self { stack: vec![(0, commands)] }
+    pub fn new(commands: &'a [ProofCommand]) -> Self {
+        Self::new_at_position(commands, 0)
+    }
+
+    /// Constructs a new `ProofIter`, starting at the given index.
+    pub fn new_at_position(commands: &'a [ProofCommand], pos: usize) -> Self {
+        Self { stack: vec![(pos, commands)] }
     }
 
     /// Returns the current nesting depth of the iterator, or more precisely, the nesting depth of

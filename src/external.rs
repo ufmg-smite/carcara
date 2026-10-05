@@ -1,10 +1,8 @@
 use crate::{
     CarcaraResult, Status,
     ast::{
-        Binder, Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc,
-        StepNode, SubproofNode, Term, build_term, match_term,
-        pool::{PrimitivePool, TermPool},
-        printer,
+        Operator, Polyeq, ProblemPrelude, ProofCommand, ProofNode, ProofNodeForest, Rc, StepNode,
+        SubproofNode, Term, build_term, match_term, pool::Pool, printer,
     },
     checker,
     elaborator::{IdHelper, Mutate},
@@ -13,11 +11,10 @@ use crate::{
 use std::{
     borrow::ToOwned,
     collections::{HashMap, HashSet},
-    convert::Infallible,
     fmt, fs,
     io::{self, BufRead, Write},
     path::Path,
-    process::{Command, Output, Stdio},
+    process::{Command, ExitStatus, Output, Stdio},
     str::FromStr,
 };
 use thiserror::Error;
@@ -46,21 +43,20 @@ impl fmt::Display for ExternalTool {
 }
 
 impl FromStr for ExternalTool {
-    type Err = Infallible;
+    type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::new(s))
+        let mut iter = s.split_whitespace();
+        let command = iter
+            .next()
+            .ok_or("external tool command is empty")?
+            .to_owned();
+        let args = iter.map(ToOwned::to_owned).collect();
+        Ok(Self { command, args })
     }
 }
 
 impl ExternalTool {
-    pub fn new(s: &str) -> Self {
-        let mut iter = s.split_whitespace();
-        let command = iter.next().unwrap().to_owned();
-        let args = iter.map(ToOwned::to_owned).collect();
-        Self { command, args }
-    }
-
     pub fn call(&self, stdin: &[u8]) -> Result<Output, ExternalError> {
         self.call_with_extra_args([], stdin)
     }
@@ -98,9 +94,6 @@ pub enum ExternalError {
     #[error("failed to spawn external tool process")]
     FailedSpawn(io::Error),
 
-    #[error("failed to open external tool stdin")]
-    FailedOpenStdin(io::Error),
-
     #[error("failed to write to external tool stdin")]
     FailedWriteToStdin(io::Error),
 
@@ -116,30 +109,36 @@ pub enum ExternalError {
     #[error("external tool timed out")]
     Timeout,
 
+    #[error("external tool exited unsuccessfully ({0})")]
+    FailedExit(ExitStatus),
+
+    #[error("external checker '{0}' did not validate step")]
+    StepNotValidated(ExternalTool),
+
     #[error("error in inner proof: {0}")]
     InnerProofError(Box<crate::Error>),
 
     #[error("proof returned by external tool is holey")]
     InnerProofHoley,
-
-    #[error("couldn't check lemma: '{0}'")]
-    LemmaNotChecked(Rc<Term>),
 }
 
-pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
-    pool: &mut PrimitivePool,
-    prelude: &ProblemPrelude,
-    assertions: I,
-) -> String {
+pub fn get_problem_string(prelude: &ProblemPrelude, assertions: &[Rc<Term>]) -> String {
     use std::fmt::Write;
 
     let mut problem = String::new();
     writeln!(&mut problem, "(set-option :produce-proofs true)").unwrap();
     write!(&mut problem, "{}", prelude).unwrap();
 
-    let mut bytes = Vec::new();
-    printer::write_asserts(pool, prelude, &mut bytes, assertions, false).unwrap();
-    write!(&mut problem, "{}", String::from_utf8(bytes).unwrap()).unwrap();
+    let options = printer::DisplayOptions::new()
+        .use_sharing(false)
+        .sharing_prefix("p_".into())
+        .smt_lib_strict(true);
+    write!(
+        &mut problem,
+        "{}",
+        printer::display_asserts(assertions, options)
+    )
+    .unwrap();
     writeln!(&mut problem, "(check-sat)").unwrap();
     writeln!(&mut problem, "(get-proof)").unwrap();
     writeln!(&mut problem, "(exit)").unwrap();
@@ -148,7 +147,7 @@ pub fn get_problem_string<'a, I: IntoIterator<Item = &'a Rc<Term>>>(
 }
 
 pub fn parse_and_check_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     problem: &str,
     proof: &str,
 ) -> CarcaraResult<(Vec<ProofCommand>, Status)> {
@@ -156,17 +155,19 @@ pub fn parse_and_check_solver_proof(
         .expand_lets(true)
         .allow_int_real_subtyping(true);
 
-    let problem = parser::Source::new(Path::new("<problem sent to external tool>"), problem);
-    let proof = parser::Source::new(Path::new("<proof from external tool>"), proof);
-    let (problem, proof, rules) =
-        parser::parse_instance_with_pool(problem, proof, None, config, pool)?;
+    let input = crate::Input {
+        problem: parser::Source::new(Path::new("<problem sent to external tool>"), problem),
+        proof: parser::Source::new(Path::new("<proof from external tool>"), proof),
+        rare_rules: None,
+    };
+    let (problem, proof, rules) = parser::parse_with_pool(input, config, pool)?;
     let config = checker::Config::new().ignore_unknown_rules(true);
-    let res = checker::ProofChecker::new(pool, &rules, config).check(&problem, &proof)?;
+    let res = checker::Checker::new(pool, &rules, config).check(&problem, &proof)?;
     Ok((proof.commands, res))
 }
 
 pub fn get_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     problem: String,
     solver: &ExternalTool,
 ) -> Result<(Vec<ProofCommand>, Status), ExternalError> {
@@ -255,7 +256,7 @@ pub fn gen_dimacs<'a>(
 }
 
 pub fn collect_premise_clauses(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premise_steps: &Vec<&ProofCommand>,
     lemmas_to_th_ids: &mut HashMap<Rc<Term>, String>,
     lemmas_to_step_ids: &mut HashMap<Rc<Term>, String>,
@@ -263,7 +264,6 @@ pub fn collect_premise_clauses(
     choice_terms: &mut HashSet<Rc<Term>>,
 ) -> Vec<Vec<Rc<Term>>> {
     let mut premise_clauses: Vec<Vec<_>> = Vec::new();
-    let mut _or_lits: Vec<Rc<Term>> = Vec::new();
     premise_steps.iter().for_each(|p| {
         match p {
             ProofCommand::Step(step) => {
@@ -272,12 +272,11 @@ pub fn collect_premise_clauses(
                 // unities. If they are not singleton clauses, we add the
                 // whole clause as a clause
                 if step.rule == "hole" {
-                    let th_id = if step.args.len() == 2
-                        && step.args[0].as_string().unwrap() == "THEORY_LEMMA"
-                    {
-                        step.args[1].as_string().unwrap()
-                    } else {
-                        "none".to_owned()
+                    let th_id = match step.args.as_slice() {
+                        [kind, id] if kind.as_string().as_deref() == Some("THEORY_LEMMA") => {
+                            id.as_string().unwrap_or_else(|| "none".to_owned())
+                        }
+                        _ => "none".to_owned(),
                     };
                     let lemma_opt = match &step.clause[..] {
                         [term] => match term.as_ref() {
@@ -349,7 +348,7 @@ pub fn collect_premise_clauses(
     });
     premise_clauses.iter().for_each(|c| {
         c.iter().for_each(|l| {
-            let choices_l = pool.collect_binders(l, Binder::Choice);
+            let choices_l = pool.choice_subterms(l);
             choices_l.iter().for_each(|l_cs| {
                 choice_terms.insert(l_cs.clone());
             });
@@ -452,7 +451,7 @@ fn increase_subproof_depth(proof: Rc<ProofNode>, delta: usize, prefix: &str) -> 
 }
 
 pub fn insert_solver_proof(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     commands: Vec<ProofCommand>,
     conclusion: &[Rc<Term>],
     root_id: &str,

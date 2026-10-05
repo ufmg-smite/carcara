@@ -5,7 +5,7 @@ use super::{
     error::{ParserError, SortError, assert_num_args, check_relation_sort, check_set_sort},
 };
 use crate::{
-    ast::{Constant, Operator, Rc, Sort, Term, pool::TermPool},
+    ast::{Constant, Operator, Rc, Sort, Term},
     automata::parser::parse_automaton,
     utils::Range,
 };
@@ -351,7 +351,10 @@ fn custom_check(
                 ArgsCheck::FirstThenAllEq(ArgSort::Exact(Sort::Real))
             };
             Rule::arity(2.., args_check).check(parser, sorts)?;
-            Ok(parser.interpret_div_as_real_lit(&args[0], &args[1]))
+            match args {
+                [a, b] => Ok(parser.interpret_div_as_real_lit(a, b)),
+                _ => Ok(None),
+            }
         }
         Operator::Select => {
             assert_num_args(sorts, 2)?;

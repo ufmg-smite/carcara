@@ -16,7 +16,7 @@ macro_rules! match_term_err {
 
 /// A macro to help build new terms.
 ///
-/// This macro takes two arguments: the `TermPool` with which to build the term, and an s-expression
+/// This macro takes two arguments: the `Pool` with which to build the term, and an s-expression
 /// representing the term to be built. Subterms in that s-expression that are surrounded by `{}` are
 /// evaluated as expressions, and they should have type `Rc<Term>`.
 ///
@@ -25,7 +25,7 @@ macro_rules! match_term_err {
 /// Building the term `(and true (not false))`:
 /// ```text
 /// # use carcara::{ast::*, build_term, match_term};
-/// let mut pool = PrimitivePool::new();
+/// let mut pool = Pool::new();
 /// let t = build_term!(pool, (and {pool.bool_true()} (not {pool.bool_false()})));
 /// assert!(match_term!((and true (not false)) = t).is_some());
 /// ```
@@ -66,6 +66,68 @@ macro_rules! build_term {
             vec![ $(build_term!($pool, $args)),+ ],
         );
         $pool.add(term)
+    }};
+}
+
+/// A macro to help build sorts.
+///
+/// This macro takes two arguments: the `Pool` with which to build the sort, and an s-expression
+/// representing the sort to be built. It evaluates to an `Rc<Sort>`. Sorts surrounded by `{}` are
+/// evaluated as expressions and should have type `Rc<Sort>`.
+///
+/// # Examples
+///
+/// Building the sort `(par (X) (-> X Int))`:
+/// ```text
+/// # use carcara::{ast::*, build_sort};
+/// let mut pool = Pool::new();
+/// let s = build_sort!(pool, (par (X) (-> X Int)));
+/// ```
+macro_rules! build_sort {
+    ($pool:expr, Int) => { $pool.add_sort($crate::ast::Sort::Int) };
+    ($pool:expr, Bool) => { $pool.add_sort($crate::ast::Sort::Bool) };
+    ($pool:expr, Real) => { $pool.add_sort($crate::ast::Sort::Real) };
+    ($pool:expr, String) => { $pool.add_sort($crate::ast::Sort::String) };
+    ($pool:expr, RegLan) => { $pool.add_sort($crate::ast::Sort::RegLan) };
+    ($pool:expr, ParamBitVec) => { $pool.add_sort($crate::ast::Sort::ParamBitVec) };
+    ($pool:expr, Type) => { $pool.add_sort($crate::ast::Sort::Type) };
+    ($pool:expr, (BitVec $width:literal)) => { $pool.add_sort($crate::ast::Sort::BitVec($width)) };
+    ($pool:expr, (par ($($var:ident)*) $body:tt)) => {{
+        let body = build_sort!($pool, $body);
+        let vars = vec![$(stringify!($var).to_owned()),*];
+        $pool.add_sort($crate::ast::Sort::Par(vars, body))
+    }};
+    ($pool:expr, (-> $($arg:tt)+)) => {{
+        let args = vec![$(build_sort!($pool, $arg)),+];
+        $pool.add_sort($crate::ast::Sort::Function(args))
+    }};
+    ($pool:expr, (Array $key:tt $value:tt)) => {{
+        let key = build_sort!($pool, $key);
+        let value = build_sort!($pool, $value);
+        $pool.add_sort($crate::ast::Sort::Array(key, value))
+    }};
+    ($pool:expr, (Set $elem:tt)) => {{
+        let elem = build_sort!($pool, $elem);
+        $pool.add_sort($crate::ast::Sort::Set(elem))
+    }};
+    ($pool:expr, (Tuple $($elem:tt)*)) => {{
+        let elems = vec![$(build_sort!($pool, $elem)),*];
+        $pool.add_sort($crate::ast::Sort::Tuple(elems))
+    }};
+    ($pool:expr, (Atom $name:literal $($arg:tt)*)) => {{
+        let args = vec![$(build_sort!($pool, $arg)),*].into_boxed_slice();
+        $pool.add_sort($crate::ast::Sort::Atom($name.into(), args))
+    }};
+    ($pool:expr, (Datatype $name:literal $($arg:tt)*)) => {{
+        let args = vec![$(build_sort!($pool, $arg)),*];
+        $pool.add_sort($crate::ast::Sort::Datatype { name: $name.into(), args })
+    }};
+    ($pool:expr, {$sort:expr}) => { $sort };
+    ($pool:expr, ?) => {{
+        $pool.add_sort($crate::ast::Sort::Var("?".to_owned()))
+    }};
+    ($pool:expr, $var:ident) => {{
+        $pool.add_sort($crate::ast::Sort::Var(stringify!($var).to_owned()))
     }};
 }
 
@@ -129,19 +191,16 @@ macro_rules! impl_str_conversion_traits {
     };
 }
 
-pub(crate) use {build_term, impl_str_conversion_traits, match_term_err};
+pub(crate) use {build_sort, build_term, impl_str_conversion_traits, match_term_err};
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
-        BindingList, Operator, Rc, Sort, Term, match_term,
-        pool::{PrimitivePool, TermPool},
-    };
+    use crate::ast::{BindingList, Operator, Rc, Sort, Term, match_term, pool::Pool};
     use crate::parser::tests::{parse_term, parse_terms};
 
     #[test]
     fn test_match_term() {
-        let mut p = PrimitivePool::new();
+        let mut p = Pool::new();
         let [one, two, five] = [1, 2, 5].map(|n| p.add(Term::new_int(n)));
 
         let term = parse_term(&mut p, "(= (= (not false) (= true false)) (not true))");
@@ -201,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_match_term_repeated_names() {
-        let mut p = PrimitivePool::new();
+        let mut p = Pool::new();
         let (true_, false_) = (p.bool_true(), p.bool_false());
         let not_true = p.add(Term::Op(Operator::Not, vec![true_]));
         let not_false = p.add(Term::Op(Operator::Not, vec![false_]));
@@ -255,7 +314,7 @@ mod tests {
             (declare-fun p () Bool)
             (declare-fun q () Bool)
         ";
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let bool_sort = pool.add_sort(Sort::Bool);
         let int_sort = pool.add_sort(Sort::Int);
 

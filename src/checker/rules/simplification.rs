@@ -3,9 +3,7 @@ use super::{
     assert_is_bool_constant,
 };
 use crate::{
-    ast::{
-        Constant, Operator, Rc, Sort, Term, build_term, match_term, match_term_err, pool::TermPool,
-    },
+    ast::{Operator, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
     utils::{DedupIterator, MultiSet},
 };
 use indexmap::{IndexMap, IndexSet};
@@ -45,8 +43,8 @@ macro_rules! simplify {
 
 fn generic_simplify_rule(
     conclusion: &[Rc<Term>],
-    pool: &mut dyn TermPool,
-    simplify_function: fn(&Term, &mut dyn TermPool) -> Option<Rc<Term>>,
+    pool: &mut Pool,
+    simplify_function: fn(&Term, &mut Pool) -> Option<Rc<Term>>,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
@@ -165,14 +163,14 @@ pub fn eq_simplify(args: RuleArgs) -> RuleResult {
 /// Used for both the `and_simplify` and `or_simplify` rules, depending on `rule_kind`. `rule_kind`
 /// has to be either `Operator::And` or `Operator::Or`.
 fn generic_and_or_simplify(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     conclusion: &[Rc<Term>],
     rule_kind: Operator,
 ) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
     // The "skip term" is the term that represents the empty conjunction or disjunction, and can be
-    // skipped. This is `false` for conjunctions and `true` disjunctions
+    // skipped. This is `true` for conjunctions and `false` for disjunctions
     let skip_term = match rule_kind {
         Operator::And => true,
         Operator::Or => false,
@@ -180,7 +178,7 @@ fn generic_and_or_simplify(
     };
 
     // The "short-circuit term" is the term that can short-circuit the conjunction or disjunction.
-    // This is `true` for conjunctions and `false` for disjunctions
+    // This is `false` for conjunctions and `true` for disjunctions
     let short_circuit_term = !skip_term;
 
     let (phis, result_term) = match_term_err!((= phi psi) = &conclusion[0])?;
@@ -417,10 +415,8 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     // a rational constant. So we check that l is the same as r in
     // this case
     if left.is_const() {
-        if let Term::Const(Constant::Real(_)) = right.as_ref() {
-            return assert_eq(left, right);
-        }
-        return Err(CheckerError::ExpectedNumber(Rational::new(), right.clone()));
+        right.as_number_err()?;
+        return assert_eq(left, right);
     }
 
     let ((numer, denom), is_int_div) = match match_term!((div n d) = left) {
@@ -431,7 +427,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     if numer == denom {
         rassert!(
             right.as_signed_number_err()? == 1,
-            CheckerError::ExpectedNumber(Rational::new(), right.clone())
+            CheckerError::ExpectedNumber(1.into(), right.clone())
         );
         Ok(())
     } else if denom.as_number().is_some_and(|n| n == 1) {
@@ -460,7 +456,7 @@ pub fn div_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// Used for both the `sum_simplify` and `prod_simplify` rules, depending on `rule_kind`.
 /// `rule_kind` has to be either `Operator::Add` or `Operator::Mult`.
 fn generic_sum_prod_simplify_rule(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     ts: &Rc<Term>,
     u: &Rc<Term>,
     rule_kind: Operator,
@@ -589,7 +585,7 @@ pub fn minus_simplify(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         if t_1 == t_2 {
             rassert!(
                 u.as_number_err()? == 0,
-                CheckerError::ExpectedNumber(Rational::from(1), u.clone()),
+                CheckerError::ExpectedNumber(0.into(), u.clone()),
             );
             return Ok(());
         }
@@ -682,7 +678,7 @@ pub fn comp_simplify(args: RuleArgs) -> RuleResult {
 }
 
 fn apply_ac_simp(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
     term: &Rc<Term>,
 ) -> Rc<Term> {
@@ -760,10 +756,23 @@ fn is_assoc(op: Operator) -> bool {
     )
 }
 
+/// Operators that are idempotent, that is, where `(<op> a a) = a`
+fn is_idempotent(op: Operator) -> bool {
+    matches!(
+        op,
+        Operator::And | Operator::Or | Operator::BvAnd | Operator::BvOr
+    )
+}
+
+/// Operators that are commutative, that is, where `(<op> a b) = (<op> b a)`
+fn is_commutative(op: Operator) -> bool {
+    is_assoc(op) && !matches!(op, Operator::BvConcat | Operator::StrConcat)
+}
+
 // Term is given as argument as well because if the operator is
 // parametric, such as a BV operator, the width of the arguments will
 // be relevant.
-fn identity_of_op(pool: &mut dyn TermPool, op: Operator, term: &Rc<Term>) -> Option<Term> {
+fn identity_of_op(pool: &mut Pool, op: Operator, term: &Rc<Term>) -> Option<Term> {
     match op {
         Operator::Or => Some(Term::new_bool(false)),
         Operator::And => Some(Term::new_bool(true)),
@@ -836,7 +845,7 @@ pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     };
     match (t11.as_ref(), t22.as_ref()) {
         (Term::Op(op1, args1), Term::Op(op2, args2))
-            if is_assoc(*op1) && *op1 != Operator::BvConcat && op1 == op2 =>
+            if is_assoc(*op1) && is_commutative(*op1) && op1 == op2 =>
         {
             let args1_multiset: MultiSet<_> = args1.iter().collect();
             let args2_multiset: MultiSet<_> = args2.iter().collect();
@@ -850,7 +859,7 @@ pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 }
 
 fn apply_aci_simp(
-    pool: &mut dyn TermPool,
+    pool: &mut Pool,
     cache: &mut IndexMap<Rc<Term>, Rc<Term>>,
     term: &Rc<Term>,
     op: Operator,
@@ -865,7 +874,7 @@ fn apply_aci_simp(
     let result = match term.as_ref() {
         // flatten and remove duplicate on the result
         Term::Op(opp, args) if *opp == op => {
-            let args: Vec<_> = args
+            let args = args
                 .iter()
                 .flat_map(|term| {
                     let term = apply_aci_simp(pool, cache, term, op, identity);
@@ -874,13 +883,17 @@ fn apply_aci_simp(
                         _ => vec![term.clone()],
                     }
                 })
-                .dedup()
-                .filter(|t| identity.is_none() || *t.as_ref() != identity.clone().unwrap())
-                .collect();
-            if args.len() == 1 {
-                args[0].clone()
+                .filter(|t| identity.as_ref() != Some(t.as_ref()));
+            // We can only dedup if the operator is idempotent
+            let args: Vec<_> = if is_idempotent(op) {
+                args.dedup().collect()
             } else {
-                pool.add(Term::Op(op, args))
+                args.collect()
+            };
+            match args.as_slice() {
+                [] => pool.add(identity.clone().unwrap()),
+                [a] => a.clone(),
+                _ => pool.add(Term::Op(op, args)),
             }
         }
         _ => term.clone(),

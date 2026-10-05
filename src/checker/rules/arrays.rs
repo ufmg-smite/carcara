@@ -50,6 +50,7 @@ pub fn ext(
     }: RuleArgs,
 ) -> RuleResult {
     assert_num_premises(premises, 1)?;
+    assert_clause_len(conclusion, 1)?;
     let premise = get_premise_term(&premises[0])?;
     let (ap, bp) = match_term_err!((not (= a b)) = premise)?;
     let (ac, _, bc) = match_term_err!((not (= (select ac k) (select bc k))) = &conclusion[0])?;

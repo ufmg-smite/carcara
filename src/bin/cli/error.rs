@@ -1,5 +1,5 @@
-use ansi_term::{Color, Style};
 use carcara::{elaborator::ElaborationPass, parser::Position};
+use owo_colors::OwoColorize;
 use std::{
     fmt,
     path::{Path, PathBuf},
@@ -10,7 +10,6 @@ pub enum CliError {
     CarcaraError(carcara::Error),
     CantInferProblemFile(PathBuf),
     InvalidSliceId(String),
-    BothFilesStdin,
 }
 
 pub type CliResult<T> = Result<T, CliError>;
@@ -27,8 +26,8 @@ fn pretty_error(
     write!(
         f,
         "  {} in file {}",
-        Color::Blue.paint("-->"),
-        Color::Blue.underline().paint(file.to_string_lossy()),
+        "-->".blue(),
+        file.display().blue().underline(),
     )?;
     if let Some((line, column)) = pos {
         writeln!(f, ":{}:{}", line, column)?;
@@ -36,7 +35,7 @@ fn pretty_error(
         writeln!(f)?;
     }
     if let Some(info) = more_info {
-        writeln!(f, "  {} {}", Style::new().bold().paint("note:"), info)?;
+        writeln!(f, "  {} {}", "note:".bold(), info)?;
     }
     Ok(())
 }
@@ -60,8 +59,8 @@ impl fmt::Display for CliError {
             CliError::CarcaraError(Error::Checker { inner, rule, step, file }) => {
                 let info = format!(
                     "checking failed on step {} with rule {}",
-                    Color::Yellow.paint(&**step),
-                    Color::Yellow.paint(&**rule),
+                    step.yellow(),
+                    rule.yellow(),
                 );
                 pretty_error(f, inner, file, None, Some(info))
             }
@@ -80,16 +79,15 @@ impl fmt::Display for CliError {
                 };
                 let info = format!(
                     "elaboration failed during {} elaboration pass, on step {} with rule {}",
-                    Color::Yellow.paint(pass),
-                    Color::Yellow.paint(&**step),
-                    Color::Yellow.paint(&**rule),
+                    pass.yellow(),
+                    step.yellow(),
+                    rule.yellow(),
                 );
                 pretty_error(f, inner, file, None, Some(info))
             }
             CliError::CantInferProblemFile(p) => {
                 write!(f, "can't infer problem file: {}", p.display())
             }
-            CliError::BothFilesStdin => write!(f, "problem and proof files can't both be `-`"),
             CliError::InvalidSliceId(id) => write!(f, "invalid id for slice: {}", id),
         }
     }

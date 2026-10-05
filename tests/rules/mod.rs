@@ -2,15 +2,17 @@ use carcara::{
     ast::{ProofCommand, ProofStep},
     checker, parser,
 };
-use colored::{Color, Colorize};
+use owo_colors::{AnsiColors, OwoColorize};
 
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, &(proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
-            definitions.into(),
-            proof.into(),
-            None,
+        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse(
+            carcara::Input {
+                problem: definitions.into(),
+                proof: proof.into(),
+                rare_rules: None,
+            },
             parser::Config::new().apply_function_defs(true),
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
@@ -38,8 +40,7 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker =
-            checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+        let mut checker = checker::Checker::new(&mut pool, &rare_rules, checker::Config::new());
         let check_result = checker.check(&problem, &proof);
 
         // Extract error message, if any
@@ -51,20 +52,20 @@ fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         let got = check_result.is_ok();
 
         if expected == got {
-            println!("{} \"{}\"", "PASSED".bold().color(Color::Green), test_name);
+            println!("{} \"{}\"", "PASSED".green().bold(), test_name);
         } else {
             let (color, expectation) = if expected {
-                (Color::Red, "expected to PASS but FAILED".red())
+                (AnsiColors::Red, "expected to PASS but FAILED")
             } else {
-                (Color::Yellow, "expected to FAIL but PASSED".yellow())
+                (AnsiColors::Yellow, "expected to FAIL but PASSED")
             };
 
             panic!(
                 "{}\nTest '{}' case {}: {}\nOUTCOME: {}",
-                "TEST FAILURE".bold().color(color),
+                "TEST FAILURE".color(color).bold(),
                 test_name.bold(),
                 i.to_string().bold(),
-                expectation,
+                expectation.color(color),
                 error_message
             );
         }

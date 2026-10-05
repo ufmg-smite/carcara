@@ -144,10 +144,12 @@ const BV_CONCAT_EXTRACT_MERGE_ALETHE: &str = r#"
 
 fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, &(proof, expected)) in cases.iter().enumerate() {
-        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
-            definitions.into(),
-            proof.into(),
-            Some(RARE_RULES.into()),
+        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse(
+            carcara::Input {
+                problem: definitions.into(),
+                proof: proof.into(),
+                rare_rules: Some(RARE_RULES.into()),
+            },
             parser::Config::new().apply_function_defs(true),
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
@@ -173,8 +175,7 @@ fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
             discharge: Vec::new(),
         }));
 
-        let mut checker =
-            checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+        let mut checker = checker::Checker::new(&mut pool, &rare_rules, checker::Config::new());
         let check_result = checker.check(&problem, &proof);
 
         let error_message = match &check_result {
@@ -185,19 +186,19 @@ fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
         let got = check_result.is_ok();
 
         if expected != got {
-            use colored::{Color, Colorize};
+            use owo_colors::{AnsiColors, OwoColorize};
             let (color, expectation) = if expected {
-                (Color::Red, "expected to PASS but FAILED".red())
+                (AnsiColors::Red, "expected to PASS but FAILED")
             } else {
-                (Color::Yellow, "expected to FAIL but PASSED".yellow())
+                (AnsiColors::Yellow, "expected to FAIL but PASSED")
             };
 
             panic!(
                 "{}\nTest '{}' case {}: {}\nOUTCOME: {}",
-                "TEST FAILURE".bold().color(color),
+                "TEST FAILURE".color(color).bold(),
                 test_name.bold(),
                 i.to_string().bold(),
-                expectation,
+                expectation.color(color),
                 error_message
             );
         }
@@ -211,10 +212,12 @@ fn run_rare_file_test(
     rare_rules: &str,
     expected_status: Status,
 ) {
-    let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        problem.into(),
-        proof.into(),
-        Some(rare_rules.into()),
+    let (problem, proof, rare_rules, mut pool) = parser::parse(
+        carcara::Input {
+            problem: problem.into(),
+            proof: proof.into(),
+            rare_rules: Some(rare_rules.into()),
+        },
         parser::Config::new()
             .apply_function_defs(true)
             .expand_lets(true)
@@ -223,7 +226,7 @@ fn run_rare_file_test(
     )
     .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
 
-    let mut checker = checker::ProofChecker::new(&mut pool, &rare_rules, checker::Config::new());
+    let mut checker = checker::Checker::new(&mut pool, &rare_rules, checker::Config::new());
     let check_result = checker.check(&problem, &proof);
 
     match check_result {

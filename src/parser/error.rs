@@ -24,6 +24,10 @@ pub enum ParserError {
     #[error("division by zero in numerical literal: '{0}'")]
     DivisionByZeroInLiteral(String),
 
+    /// The lexer encountered a numerical literal with no denominator, e.g. `5/`.
+    #[error("missing denominator in numerical literal: '{0}/'")]
+    MissingDenominatorInLiteral(String),
+
     /// The lexer encountered a `\` character while reading a quoted symbol.
     #[error("quoted symbol contains backslash")]
     BackslashInQuotedSymbol,
@@ -44,10 +48,6 @@ pub enum ParserError {
     /// bitvector literal is just `#`, `#b` or `#x`.
     #[error("empty bitvector literal")]
     EmptyBitvector,
-
-    /// A bitvector literal was too large.
-    #[error("bitvector literal is too large")]
-    TooLargeBitvector,
 
     /// The parser encountered an unexpected token.
     #[error("unexpected token: '{0}'")]
@@ -81,14 +81,6 @@ pub enum ParserError {
     #[error("expected integer constant, got '{0}'")]
     ExpectedIntegerConstant(Rc<Term>),
 
-    /// Pattern in `match` term is not valid.
-    #[error("invalid pattern '{0}'")]
-    InvalidPattern(Rc<Term>),
-
-    /// Results in `match` term do not have the same type.
-    #[error("invalid match results (different types) '{0} and {1}'")]
-    InvalidMatchResults(Rc<Term>, Rc<Term>),
-
     /// Patterns in `match` term do not cover all constructors.
     #[error("Patterns in match statement do not cover all constructors")]
     NonExhaustivePatterns,
@@ -118,7 +110,7 @@ pub enum ParserError {
     WrongNumberOfArgs(Range, usize),
 
     /// The argument values are not in the expected range.
-    #[error("expected argument value to be greater than {0}, got {1}")]
+    #[error("expected argument value to be {0}, got {1}")]
     WrongValueOfArgs(Range, Integer),
 
     /// Constant arguments given to `extract` do not follow required restrictions.
@@ -193,7 +185,7 @@ pub enum ParserError {
     #[error("not a valid rule attribute: '{0}'")]
     InvalidRareRuleAttribute(String),
 
-    /// The parser encountered a Rare ruel with no conclusion.
+    /// The parser encountered a Rare rule with no conclusion.
     #[error("the rule '{0}' has no conclusion")]
     UndefinedRareConclusion(String),
 }

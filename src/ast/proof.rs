@@ -1,4 +1,4 @@
-use super::{ProofIter, Rc, SortedVar, Term};
+use super::{ProofIter, Rc, Sort, SortedVar, Term};
 use std::path::PathBuf;
 
 /// A proof in the Alethe format.
@@ -6,8 +6,9 @@ use std::path::PathBuf;
 pub struct Proof {
     /// The constants defined in the proof using `define-fun` with arity zero.
     ///
-    /// This is only used to reconstruct these `define-fun`s when printing the proof.
-    pub constant_definitions: Vec<(String, Rc<Term>)>,
+    /// This is only used to reconstruct these `define-fun`s when printing the proof. We also store
+    /// the sort to avoid having to recompute it.
+    pub constant_definitions: Vec<(String, Rc<Term>, Rc<Sort>)>,
 
     /// The proof commands.
     pub commands: Vec<ProofCommand>,
@@ -151,21 +152,11 @@ impl AnchorArg {
         }
     }
 
-    /// Returns `true` if the anchor arg is a "variable" style argument.
-    pub fn is_variable(&self) -> bool {
-        matches!(self, Self::Variable(_))
-    }
-
     /// Returns `Some` if the anchor arg is an "assignment" style argument.
     pub fn as_assign(&self) -> Option<(&String, &Rc<Term>)> {
         match self {
             AnchorArg::Variable(_) => None,
             AnchorArg::Assign((name, _), value) => Some((name, value)),
         }
-    }
-
-    /// Returns `true` if the anchor arg is an "assignment" style argument.
-    pub fn is_assign(&self) -> bool {
-        matches!(self, Self::Assign(..))
     }
 }

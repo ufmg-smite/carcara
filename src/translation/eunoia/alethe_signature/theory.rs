@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use crate::translation::eunoia::ast::*;
 
 // NOTE: THIS IS ONLY DONE TO AVOID THE COMPLEXITIES OF DECLARING
@@ -8,7 +10,7 @@ use crate::translation::eunoia::ast::*;
 /// interact with the internals of our current main mechanization in Eunoia.
 pub struct AletheTheory {
     // Path to each file of the current AletheInEunoia mechanization.
-    pub mechanization_files: Vec<String>,
+    pub mechanization_files: Vec<PathBuf>,
 
     // Built-in operators.
     pub cl: &'static str,
@@ -73,19 +75,19 @@ pub struct AletheTheory {
 }
 
 impl AletheTheory {
-    pub fn new(eunoia_mech: &str) -> Self {
+    pub fn new(eunoia_mech: &Path) -> Self {
         AletheTheory {
             // Build paths to current mechanization files.
             mechanization_files: vec![
                 // Theories
-                format!("{}/theories/theory.eo", eunoia_mech),
+                eunoia_mech.join("theories/theory.eo"),
                 // Rules
-                format!("{}/rules/alethe.eo", eunoia_mech),
-                format!("{}/rules/tautologies.eo", eunoia_mech),
-                format!("{}/rules/rare_rules.eo", eunoia_mech),
+                eunoia_mech.join("rules/alethe.eo"),
+                eunoia_mech.join("rules/tautologies.eo"),
+                eunoia_mech.join("rules/rare_rules.eo"),
                 // Programs
-                format!("{}/programs/programs.eo", eunoia_mech),
-                format!("{}/programs/arith.eo", eunoia_mech),
+                eunoia_mech.join("programs/programs.eo"),
+                eunoia_mech.join("programs/arith.eo"),
             ],
 
             // Clauses.
@@ -100,7 +102,7 @@ impl AletheTheory {
             implies: "=>",
             ite: "ite",
 
-            // Arithemtic
+            // Arithmetic
             add: "+",
             sub: "-",
             mult: "*",

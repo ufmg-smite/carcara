@@ -1,8 +1,5 @@
 use carcara::{
-    ast::{
-        ProblemPrelude, Proof, ProofCommand, ProofNodeForest, pool::PrimitivePool,
-        printer::write_proof_to_dest,
-    },
+    ast::{Proof, ProofNodeForest, printer::DisplayOptions},
     elaborator, parser,
 };
 
@@ -10,18 +7,6 @@ struct TestCase {
     problem: &'static str,
     proof: &'static str,
     expected: &'static str,
-}
-
-fn print_proof(pool: &mut PrimitivePool, prelude: &ProblemPrelude, commands: Vec<ProofCommand>) {
-    let mut buf = Vec::new();
-    let proof = Proof {
-        constant_definitions: Vec::new(),
-        commands,
-        filename: "dummy".into(),
-    };
-    write_proof_to_dest(pool, prelude, &proof, &mut buf, false).unwrap();
-    let result = std::str::from_utf8(&buf).unwrap();
-    println!("{}", result)
 }
 
 fn run_tests(
@@ -33,9 +18,15 @@ fn run_tests(
     let mut result = true;
     let parser_config = parser::Config::new().apply_function_defs(true);
     for (i, case) in cases.iter().enumerate() {
-        let (problem, proof, _, mut pool) =
-            parser::parse_instance(case.problem.into(), case.proof.into(), None, parser_config)
-                .unwrap();
+        let (problem, proof, _, mut pool) = parser::parse(
+            carcara::Input {
+                problem: case.problem.into(),
+                proof: case.proof.into(),
+                rare_rules: None,
+            },
+            parser_config,
+        )
+        .unwrap();
 
         let mut elab = elaborator::Elaborator::new(&mut pool, &problem, config.clone());
         let elaborated = elab
@@ -47,10 +38,12 @@ fn run_tests(
             .expect("elaboration error")
             .into_commands();
 
-        let (_, expected, _) = parser::parse_instance_with_pool(
-            case.problem.into(),
-            case.expected.into(),
-            None,
+        let (_, expected, _) = parser::parse_with_pool(
+            carcara::Input {
+                problem: case.problem.into(),
+                proof: case.expected.into(),
+                rare_rules: None,
+            },
             parser_config,
             &mut pool,
         )
@@ -58,7 +51,13 @@ fn run_tests(
 
         if expected.commands != elaborated {
             println!("Test '{}' case {} failed, got proof:", name, i);
-            print_proof(&mut pool, &problem.prelude, elaborated);
+            let proof = Proof {
+                constant_definitions: Vec::new(),
+                commands: elaborated,
+                filename: "dummy".into(),
+            };
+            let options = DisplayOptions::new().use_sharing(false);
+            println!("{}", proof.display(options));
             result = false
         }
     }

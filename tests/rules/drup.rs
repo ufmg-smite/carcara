@@ -46,6 +46,24 @@ fn drup() {
             (step t0 (cl a b) :rule or :premises (a3))
             (step t1 (cl) :rule drup :premises (a1 t0) :args ((cl)))": false,
         }
+        "Deleting unit clauses" {
+            "(assume a1 (not a))
+            (assume a3 (or a b))
+            (step t0 (cl a b) :rule or :premises (a3))
+            (step t1 (cl b) :rule drup :premises (a1 t0) :args ((cl b)))": true,
+
+            "(assume a1 (not a))
+            (assume a3 (or a b))
+            (step t0 (cl a b) :rule or :premises (a3))
+            (step t1 (cl b) :rule drup :premises (a1 t0) :args ((@d (cl (not a))) (cl b)))": false,
+        }
+        "Arguments that are not clauses" {
+            "(assume a0 a)
+            (step t1 (cl a) :rule drup :premises (a0) :args (a))": false,
+
+            "(assume a0 a)
+            (step t1 (cl a) :rule drup :premises (a0) :args ((@d a) (cl a)))": false,
+        }
     }
 }
 
@@ -90,6 +108,10 @@ fn drat() {
             (step t1 (cl a (not c) d) :rule or :premises (a1))
             (step t2 (cl (not d) e) :rule or :premises (a2))
             (step t4 (cl a) :rule drat :premises (t0 t1 t2) :args ((cl a b)))": false,
+        }
+        "Arguments that are not clauses" {
+            "(assume a0 a)
+            (step t1 (cl a) :rule drat :premises (a0) :args (a))": false,
         }
     }
 }

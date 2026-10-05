@@ -3,8 +3,6 @@ pub mod eunoia;
 
 use crate::ast::*;
 
-use std::io::Result;
-
 // scopes
 use crate::utils::HashMapStack;
 
@@ -468,11 +466,4 @@ pub trait VecToVecTranslator<'a> {
 
     /// Translates only an SMT-lib problem.
     fn translate_problem_2_vect(&mut self, problem: &Problem) -> Vec<Self::StepType>;
-}
-
-/// Common pretty printing interface shared by Eunoia and TSTP compilers.
-pub trait ProofPrinter {
-    type Proof;
-
-    fn write_proof(&mut self, proof: &Self::Proof) -> Result<()>;
 }

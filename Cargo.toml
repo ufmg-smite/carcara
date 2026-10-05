@@ -16,7 +16,6 @@ license = "Apache-2.0"
 carcara-macros = { path = "carcara-macros" }
 clap = { version = "4.6.6", features = ["derive"] }
 crossbeam-queue = "0.3.13"
-ansi_term = "0.12"
 indexmap = "2.14.0"
 log = { version = "0.4.34", features = ["std"] }
 rapidhash = "4.5.1"
@@ -26,11 +25,11 @@ rug = { version = "1.30.0", default-features = false, features = [
 ] }
 thiserror = "2.0.20"
 nom = "8.0.0"
+owo-colors = "4"
 
 [dev-dependencies]
 test-generator = { path = "test-generator" }
 rand = "0.10.2"
-colored = "3.1.1"
 
 [[bin]]
 name = "carcara"

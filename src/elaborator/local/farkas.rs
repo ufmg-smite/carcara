@@ -1,19 +1,16 @@
 use crate::{
-    ast::{
-        ContextStack, ProofNode, Rc, StepNode, Term,
-        pool::{PrimitivePool, TermPool},
-    },
+    ast::{ContextStack, ProofNode, Rc, StepNode, Term, pool::Pool},
     checker::la_generic_partial,
     elaborator::error::ElaborationError,
 };
 
 pub fn bounded_farkas(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
     let mut trace = Some(Vec::new());
-    la_generic_partial(&step.clause, &step.args, &mut trace)?;
+    la_generic_partial(pool, &step.clause, &step.args, &mut trace)?;
 
     let inferred = trace
         .unwrap()

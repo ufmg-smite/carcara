@@ -1,7 +1,9 @@
-#![allow(dead_code)]
-
 use crate::error::CliError;
-use std::{ffi::OsStr, fs, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+};
 
 const SMT_FILE_EXTENSIONS: [&str; 3] = ["smt", "smt2", "smt_in"];
 const ALETHE_FILE_EXTENSIONS: [&str; 2] = ["alethe", "proof"];
@@ -47,12 +49,14 @@ fn get_instances_from_dir(
     Ok(())
 }
 
-pub fn get_instances_from_paths<'a, T>(paths: T) -> Result<Vec<(PathBuf, PathBuf)>, CliError>
+pub fn get_instances_from_paths<T, I>(paths: T) -> Result<Vec<(PathBuf, PathBuf)>, CliError>
 where
-    T: Iterator<Item = &'a str>,
+    I: AsRef<Path>,
+    T: IntoIterator<Item = I>,
 {
     let mut result = Vec::new();
     for p in paths {
+        let p = p.as_ref();
         let file_type = fs::metadata(p)
             .map_err(|inner| carcara::Error::Io { inner, file: p.into() })?
             .file_type();

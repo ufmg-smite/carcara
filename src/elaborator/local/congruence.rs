@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         ContextStack, ProofNode, Rc, StepNode, Term, build_term, match_term, match_term_err,
-        pool::{PrimitivePool, TermPool},
+        pool::Pool,
     },
     checker::error::CheckerError,
     elaborator::{IdHelper, add_symm_step, add_trans_step, error::ElaborationError},
@@ -10,7 +10,7 @@ use crate::{
 use std::collections::HashSet;
 
 fn build_eq_symm_step(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     a: &Rc<Term>,
     b: &Rc<Term>,
     id: String,
@@ -75,7 +75,7 @@ fn term_args(term: &Rc<Term>) -> &[Rc<Term>] {
 }
 
 pub fn cong(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -104,7 +104,7 @@ pub fn cong(
     Ok(step)
 }
 
-fn flip_needed_premises(pool: &mut PrimitivePool, step: StepNode) -> Rc<ProofNode> {
+fn flip_needed_premises(pool: &mut Pool, step: StepNode) -> Rc<ProofNode> {
     let (f, g) = match_term!((= f g) = &step.clause[0]).unwrap();
     let [f_args, g_args] = [f, g].map(term_args);
     let premises: Vec<_> = step
@@ -137,7 +137,7 @@ fn flip_needed_premises(pool: &mut PrimitivePool, step: StepNode) -> Rc<ProofNod
 }
 
 fn elaborate_cong_between_equalities(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     step: &StepNode,
     (f1, f2): (&Rc<Term>, &Rc<Term>),
     (g1, g2): (&Rc<Term>, &Rc<Term>),
@@ -212,7 +212,7 @@ fn elaborate_cong_between_equalities(
 }
 
 pub fn eq_congruent(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -220,7 +220,7 @@ pub fn eq_congruent(
 }
 
 pub fn eq_congruent_pred(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -228,7 +228,7 @@ pub fn eq_congruent_pred(
 }
 
 fn generic_eq_congruent(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     step: &StepNode,
     is_pred: bool,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

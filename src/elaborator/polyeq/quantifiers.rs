@@ -3,7 +3,7 @@ use crate::{ast::*, checker::error::CheckerError};
 use rapidhash::RapidHashMap;
 
 pub fn forall_inst(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     _: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {

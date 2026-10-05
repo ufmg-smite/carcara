@@ -1,16 +1,13 @@
 use super::{IdHelper, error::ElaborationError};
 use crate::{
-    ast::{
-        ProofNode, Rc, StepNode, Term,
-        pool::{PrimitivePool, TermPool},
-    },
+    ast::{ProofNode, Rc, StepNode, Term, pool::Pool},
     checker::error::CheckerError,
     resolution::{Literal, ResolutionError, literal_to_term},
     utils::MultiSet,
 };
 use rapidhash::{HashMapExt, HashSetExt, RapidHashMap, RapidHashSet};
 
-fn literals_to_clause(pool: &mut PrimitivePool, clause: &[Literal]) -> Vec<Rc<Term>> {
+fn literals_to_clause(pool: &mut Pool, clause: &[Literal]) -> Vec<Rc<Term>> {
     clause.iter().map(|l| literal_to_term(pool, *l)).collect()
 }
 
@@ -39,7 +36,7 @@ impl<'a> ResolutionPremise<'a> {
 }
 
 fn apply_naive_resolution<'a>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     premises: &[ResolutionPremise<'a>],
 ) -> Result<Vec<Literal<'a>>, ResolutionError> {
     assert!(premises.len() >= 2);
@@ -98,7 +95,7 @@ fn check_clauses_are_compatible(
 }
 
 pub fn uncrowd_resolution(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     step: &StepNode,
     rotate_premises: bool,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
@@ -187,7 +184,7 @@ pub fn uncrowd_resolution(
 }
 
 fn add_partial_resolution_step<'a>(
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     ids: &mut IdHelper,
     depth: usize,
     premises: &[ResolutionPremise<'a>],
@@ -418,7 +415,7 @@ mod tests {
     use super::*;
     use crate::{
         ast::{ProofNodeForest, compare_nodes},
-        parser::{self, parse_instance, parse_instance_with_pool},
+        parser::{self, parse, parse_with_pool},
     };
 
     #[test]
@@ -447,8 +444,15 @@ mod tests {
                 :premises (t1 t2 t3 t4 t5 t6 t7 t8)
                 :args (x true y true a true z true b true c true d true))
         ";
-        let (_, proof, _, mut pool) =
-            parse_instance(problem.into(), proof.into(), None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) = parse(
+            crate::Input {
+                problem: problem.into(),
+                proof: proof.into(),
+                rare_rules: None,
+            },
+            parser::Config::new(),
+        )
+        .unwrap();
         let proof = ProofNodeForest::from_commands(proof.commands)
             .0
             .pop()
@@ -478,10 +482,12 @@ mod tests {
             (step t9.t6 (cl d w) :rule contraction :premises (t9.t5))
             (step t9 (cl w) :rule resolution :premises (t9.t6 t8) :args (d true))
         ";
-        let (_, expected, _) = parse_instance_with_pool(
-            problem.into(),
-            expected.into(),
-            None,
+        let (_, expected, _) = parse_with_pool(
+            crate::Input {
+                problem: problem.into(),
+                proof: expected.into(),
+                rare_rules: None,
+            },
             parser::Config::new(),
             &mut pool,
         )

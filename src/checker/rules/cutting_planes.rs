@@ -7,7 +7,33 @@ use crate::checker::error::{CheckerError, EqualityError};
 use rug::Integer;
 use std::collections::HashMap;
 
-type PbHash = HashMap<String, Integer>;
+/// A pseudo-boolean literal: either a variable `x`, or its negation `(- 1 x)`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct PbLiteral {
+    var: Rc<Term>,
+    negated: bool,
+}
+
+impl PbLiteral {
+    fn neg(&self) -> Self {
+        Self {
+            var: self.var.clone(),
+            negated: !self.negated,
+        }
+    }
+}
+
+impl std::fmt::Display for PbLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.negated {
+            write!(f, "~{}", self.var)
+        } else {
+            write!(f, "{}", self.var)
+        }
+    }
+}
+
+type PbHash = HashMap<PbLiteral, Integer>;
 
 // Helper to unwrap a summation list
 pub fn split_summation(sum_term: &Rc<Term>) -> &[Rc<Term>] {
@@ -38,17 +64,17 @@ fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
     for term in pbsum {
         let (coeff, literal) =
             // Negated literal  (* c (- 1 x1))
-            if let Some((coeff, literal)) = match_term!((* coeff (- 1 literal)) = term) {
-                (coeff, format!("~{}",literal))
+            if let Some((coeff, var)) = match_term!((* coeff (- 1 var)) = term) {
+                (coeff, PbLiteral { var: var.clone(), negated: true })
             // Plain literal    (* c x1)
-            } else if let Some((coeff, literal)) = match_term!((* coeff literal) = term) {
-                (coeff, format!("{}",literal))
+            } else if let Some((coeff, var)) = match_term!((* coeff var) = term) {
+                (coeff, PbLiteral { var: var.clone(), negated: false })
             } else {
                 return Err(CheckerError::Explanation(format!("Term is neither plain nor negated: {}",term)));
             };
 
-        let coeff = coeff.as_integer_err()?;
-        hm.insert(literal, coeff);
+        // Repeated literals have their coefficients added together
+        *hm.entry(literal).or_default() += coeff.as_integer_err()?;
     }
     Ok(hm)
 }
@@ -70,36 +96,18 @@ fn add_pbsums(pbsum_a: &PbHash, pbsum_b: &PbHash) -> PbHash {
     res
 }
 
-fn is_negated_literal(lit: &str) -> bool {
-    lit.starts_with('~')
-}
-
-trait NegatedLiterals {
-    fn get_opposite(&self, lit: &str) -> Option<&Integer>;
-}
-
-impl NegatedLiterals for PbHash {
-    fn get_opposite(&self, lit: &str) -> Option<&Integer> {
-        if let Some(plain_lit) = lit.strip_prefix('~') {
-            self.get(plain_lit)
-        } else {
-            self.get(&format!("~{}", lit))
-        }
-    }
-}
-
 /// Cancel out opposite coefficients
 fn reduce_pbsum(pbsum: &PbHash) -> (PbHash, Integer) {
     let mut slack = Integer::from(0);
     let mut res = pbsum.clone();
-    let mut changes: Vec<(String, Integer)> = Vec::new();
+    let mut changes: Vec<(PbLiteral, Integer)> = Vec::new();
 
     for lit in res.keys() {
-        if is_negated_literal(lit) {
+        if lit.negated {
             continue;
         }
         let pos = res.get(lit);
-        let neg = res.get_opposite(lit);
+        let neg = res.get(&lit.neg());
         if neg.is_none() {
             continue;
         }
@@ -112,11 +120,11 @@ fn reduce_pbsum(pbsum: &PbHash) -> (PbHash, Integer) {
         if pos > neg {
             let diff = pos.clone() - neg;
             changes.push((lit.clone(), diff)); // Update lit to diff
-            changes.push((format!("~{lit}"), Integer::from(0))); // Set ~lit to 0
+            changes.push((lit.neg(), Integer::from(0))); // Set ~lit to 0
         } else {
             let diff = neg.clone() - pos;
             changes.push((lit.clone(), Integer::from(0))); // Set lit to 0
-            changes.push((format!("~{lit}"), diff)); // Update ~lit to neg - pos
+            changes.push((lit.neg(), diff)); // Update ~lit to neg - pos
         }
     }
 
@@ -239,6 +247,12 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
     assert_num_args(args, 1)?;
     let scalar: Integer = args[0].as_integer_err()?;
 
+    // Multiplying by a negative scalar would flip the inequality
+    rassert!(
+        scalar >= 0,
+        CheckerError::ExpectedNonnegInteger(args[0].clone())
+    );
+
     // Check there is exactly one conclusion
     assert_clause_len(conclusion, 1)?;
     let conclusion = &conclusion[0];
@@ -273,6 +287,7 @@ pub fn cp_multiplication(RuleArgs { premises, args, conclusion, .. }: RuleArgs) 
 
 pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
+    assert_clause_len(premises[0].clause, 1)?;
     let clause = &premises[0].clause[0];
 
     // Check there is exactly one arg
@@ -324,6 +339,7 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
 pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> RuleResult {
     assert_num_premises(premises, 1)?;
     assert_num_args(args, 0)?;
+    assert_clause_len(premises[0].clause, 1)?;
     let clause = &premises[0].clause[0];
 
     // Check there is exactly one conclusion
@@ -335,6 +351,19 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
 
     // Unwrap the conclusion inequality
     let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
+
+    // Saturation is only sound if the constant and all coefficients are non-negative
+    rassert!(
+        constant_p >= 0,
+        CheckerError::Explanation(format!(
+            "Saturation requires a non-negative constant, got {constant_p}"
+        ))
+    );
+    if let Some((literal, coeff)) = pbsum_p.iter().find(|(_, coeff)| **coeff < 0) {
+        return Err(CheckerError::Explanation(format!(
+            "Saturation requires non-negative coefficients, got {coeff} for {literal}"
+        )));
+    }
 
     // Verify constants match
     rassert!(
@@ -360,8 +389,16 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
 }
 
 pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResult {
+    assert_clause_len(conclusion, 1)?;
     assert_num_args(args, 1)?;
     // TODO: Set args type to FF 2
+
+    // The argument must be a literal, that is, a variable `l` or its negation `(- 1 l)`
+    let var = match_term!((- 1 l) = &args[0]).unwrap_or(&args[0]);
+    rassert!(
+        var.is_var(),
+        CheckerError::Explanation(format!("Expected a literal, got {}", args[0]))
+    );
 
     if let Some((c, l)) = match_term!((>= (* c (- 1 l)) 0) = &conclusion[0]) {
         rassert!(
@@ -713,10 +750,7 @@ mod tests {
 
     use super::{CoeffTimesVar, flatten_addition_tree};
     use crate::{
-        ast::{
-            build_term,
-            pool::{PrimitivePool, TermPool},
-        },
+        ast::{build_term, pool::Pool},
         checker::Rc,
         checker::rules::{RuleResult, Term},
     };
@@ -737,14 +771,14 @@ mod tests {
 
     #[test]
     fn flatten_addition_tree_single_constant() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let term = build_term!(pool, 1);
         flatten_addition_test_gen(&term, vec![], 1.into())
     }
 
     #[test]
     fn flatten_addition_tree_single_plain_variable() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let term = build_term!(pool, (let x Int));
         let var = CoeffTimesVar::from(&term);
         flatten_addition_test_gen(&term, vec![var], 0.into())
@@ -752,7 +786,7 @@ mod tests {
 
     #[test]
     fn flatten_addition_tree_single_negated_variable() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let x = build_term!(pool, (let x Int));
         let term = build_term!(pool, (- 1 {x.clone()}));
         let var = CoeffTimesVar {
@@ -765,7 +799,7 @@ mod tests {
 
     #[test]
     fn flatten_addition_tree_single_double_variable() -> RuleResult {
-        let pool = &mut PrimitivePool::new();
+        let pool = &mut Pool::new();
         let x = build_term!(pool, (let x Int));
         let term = build_term!(pool, (* 2 {x.clone()}));
         let var = CoeffTimesVar {

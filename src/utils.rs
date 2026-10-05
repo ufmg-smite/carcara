@@ -15,11 +15,6 @@ pub fn is_symbol_character(ch: char) -> bool {
         ch if ch.is_ascii_alphanumeric() => true,
         '+' | '-' | '/' | '*' | '=' | '%' | '?' | '!' | '.' | '$' | '_' | '~' | '&' | '^' | '<'
         | '>' | '@' => true,
-
-        // While `'` is not a valid symbol character according to the SMT-LIB and Alethe specs, it
-        // is used by Carcara to differentiate variables renamed by capture-avoidance in
-        // substitutions. To accommodate for that, we consider it a valid character when parsing.
-        '\'' => true,
         _ => false,
     }
 }
@@ -96,7 +91,7 @@ impl<T: Hash> Hash for HashCache<T> {
 impl<T: Eq + Hash> HashCache<T> {
     /// Creates a new `HashCache`, computing and storing the hash of `value`.
     pub fn new(value: T) -> Self {
-        let mut hasher = std::collections::hash_map::DefaultHasher::default();
+        let mut hasher = rapidhash::fast::RapidHasher::default_const();
         value.hash(&mut hasher);
         Self { hash: hasher.finish(), value }
     }
@@ -287,7 +282,7 @@ impl<T: Hash + Eq> MultiSet<T> {
         self.0.entry(value).or_default()
     }
 
-    /// Returns the number of times `value` occurs in the multiset, or `0` if it is not present.
+    /// Returns `true` if `value` is contained at least once in the multiset.
     pub fn contains<Q>(&self, value: &Q) -> bool
     where
         T: Borrow<Q>,

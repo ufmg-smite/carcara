@@ -7,25 +7,24 @@ fn run_parallel_checker_test(
     config: (parser::Config, checker::Config),
     num_threads: usize,
 ) -> CarcaraResult<()> {
-    use std::sync::Arc;
-
-    let (problem, proof, rare_rules, pool) = parser::parse_instance(
-        parser::Source::file(problem_path, &mut String::new())?,
-        parser::Source::file(proof_path, &mut String::new())?,
-        None,
+    let (problem, proof, rare_rules, pool) = parser::parse(
+        carcara::Input {
+            problem: parser::Source::file(problem_path)?,
+            proof: parser::Source::file(proof_path)?,
+            rare_rules: None,
+        },
         config.0,
     )?;
 
-    let (scheduler, schedule_context_usage) = checker::Scheduler::new(num_threads, &proof);
-    let mut checker = checker::ParallelProofChecker::new(
-        Arc::new(pool),
-        config.1,
-        &problem.prelude,
-        &schedule_context_usage,
-        128 * 1024 * 1024,
-        rare_rules,
-    );
-    checker.check(&problem, &proof, &scheduler)?;
+    let mut checker =
+        checker::ParallelChecker::new(std::sync::Arc::new(pool), &rare_rules, config.1);
+    checker.check(
+        &problem,
+        &proof,
+        num_threads.try_into().unwrap(),
+        Some(128 * 1024 * 1024),
+    )?;
+
     Ok(())
 }
 
@@ -34,15 +33,17 @@ fn run_test(
     proof_path: &Path,
     config: (parser::Config, checker::Config),
 ) -> CarcaraResult<()> {
-    let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        parser::Source::file(problem_path, &mut String::new())?,
-        parser::Source::file(proof_path, &mut String::new())?,
-        None,
+    let (problem, proof, rare_rules, mut pool) = parser::parse(
+        carcara::Input {
+            problem: parser::Source::file(problem_path)?,
+            proof: parser::Source::file(proof_path)?,
+            rare_rules: None,
+        },
         config.0,
     )?;
 
     // First, we check the proof normally
-    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone()).check(&problem, &proof)?;
+    checker::Checker::new(&mut pool, &rare_rules, config.1.clone()).check(&problem, &proof)?;
 
     // Then we elaborate it
     let elab_config = elaborator::Config::new().uncrowd_rotation(true);
@@ -56,7 +57,7 @@ fn run_test(
     };
 
     // After that, we check the elaborated proof to make sure it is valid
-    checker::ProofChecker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
+    checker::Checker::new(&mut pool, &rare_rules, config.1.clone().elaborated(true))
         .check(&problem, &elaborated)?;
 
     // Finally, we elaborate the already elaborated proof, to make sure the elaboration is

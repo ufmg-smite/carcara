@@ -1,6 +1,6 @@
 use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_args};
 use crate::{
-    ast::*,
+    ast::{pool::Pool, *},
     checker::error::{CheckerError, LinearArithmeticError},
 };
 use indexmap::{IndexMap, map::Entry};
@@ -256,6 +256,7 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
 }
 
 fn process_disequality(
+    pool: &Pool,
     (acc_op, acc): (Operator, LinearComb),
     (phi, arg): (&Rc<Term>, Option<Rational>),
     coeff_trace: &mut Option<Vec<Rational>>,
@@ -299,36 +300,52 @@ fn process_disequality(
         }
     };
 
-    // Step 4: Apply strengthening rules
-    let op = strengthen(op, &mut disequality, &arg);
+    // Step 4: Apply strengthening rules. These are only applied if all variables are integer sorted
+    let all_vars_are_int = disequality.0.keys().all(|var| *pool.sort(var) == Sort::Int);
+    if all_vars_are_int {
+        op = strengthen(op, &mut disequality, &arg);
+    }
 
-    // Step 5: Multiply disequality by a
+    // Step 5: Multiply disequality by a. If a is zero, we must also weaken `>` into `>=`
     let arg = match op {
         Operator::Equals => arg,
         _ => arg.abs(),
     };
+    if op == Operator::GreaterThan && arg.is_zero() {
+        op = Operator::GreaterEq;
+    }
     disequality.mul(&arg);
 
-    // let (op, diseq) = item?;
     let new_acc = acc.add(disequality);
     let new_op = match (acc_op, op) {
-        (_, Operator::GreaterEq) => Operator::GreaterEq,
-        (Operator::Equals, Operator::GreaterThan) => Operator::GreaterThan,
-        _ => acc_op,
+        (Operator::GreaterThan, _) | (_, Operator::GreaterThan) => Operator::GreaterThan,
+        (Operator::GreaterEq, _) | (_, Operator::GreaterEq) => Operator::GreaterEq,
+        _ => Operator::Equals,
     };
     Ok((new_op, new_acc))
 }
 
 pub fn la_generic(rule_args: RuleArgs) -> RuleResult {
     assert_num_args(rule_args.args, rule_args.conclusion.len())?;
-    la_generic_partial(rule_args.conclusion, rule_args.args, &mut None)
+    la_generic_partial(
+        rule_args.pool,
+        rule_args.conclusion,
+        rule_args.args,
+        &mut None,
+    )
 }
 
 pub fn bounded_farkas(rule_args: RuleArgs) -> RuleResult {
-    la_generic_partial(rule_args.conclusion, rule_args.args, &mut None)
+    la_generic_partial(
+        rule_args.pool,
+        rule_args.conclusion,
+        rule_args.args,
+        &mut None,
+    )
 }
 
 pub fn la_generic_partial(
+    pool: &Pool,
     conclusion: &[Rc<Term>],
     args: &[Rc<Term>],
     coeff_trace: &mut Option<Vec<Rational>>,
@@ -346,7 +363,7 @@ pub fn la_generic_partial(
         .iter()
         .zip(args)
         .try_fold((Operator::Equals, LinearComb::new()), |acc, diseq| {
-            process_disequality(acc, diseq, coeff_trace)
+            process_disequality(pool, acc, diseq, coeff_trace)
         })?;
 
     let LinearComb(left_side, right_side): &LinearComb = &final_disequality;

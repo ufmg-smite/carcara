@@ -2,8 +2,8 @@ use super::{Parser, ParserError, Reserved, Token};
 use crate::{
     CarcaraResult,
     ast::{
-        MatchCase, MatchPattern, Rc, Sort, Term,
-        pool::{Datatype, DatatypeConstructor, TermPool},
+        MatchCase, MatchPattern, Rc, Sort, Term, build_sort,
+        pool::{Datatype, DatatypeConstructor},
     },
 };
 use indexmap::IndexMap;
@@ -169,9 +169,7 @@ impl<'p, 's> Parser<'p, 's> {
             // If we are supporting legacy tester syntax, register a function symbol named
             // `is-<cons>`, that serves the same purpose as the newer `(_ is <cons>)`.
             if self.config.allow_legacy_tester_syntax {
-                let sort =
-                    Sort::Function(vec![return_sort.clone(), self.pool.add_sort(Sort::Bool)]);
-                let sort = self.pool.add_sort(sort);
+                let sort = build_sort!(self.pool, (-> {return_sort.clone()} Bool));
                 self.declare_symbol(format!("is-{}", name), sort);
             }
 
@@ -198,10 +196,10 @@ impl<'p, 's> Parser<'p, 's> {
         sort_params: &[String],
     ) {
         for (name, selector_sort) in &constructor.selectors {
-            let inner_sort = self.pool.add_sort(Sort::Function(vec![
-                datatype_sort.clone(),
-                selector_sort.clone(),
-            ]));
+            let inner_sort = build_sort!(
+                self.pool,
+                (-> {datatype_sort.clone()} {selector_sort.clone()})
+            );
             let sort = if sort_params.is_empty() {
                 inner_sort
             } else {

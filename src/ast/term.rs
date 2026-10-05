@@ -1,13 +1,10 @@
 use super::{
-    Rc, Sort,
-    custom_operator::CustomOperator,
-    macros::impl_str_conversion_traits,
-    match_term, match_term_err,
-    pool::{PrimitivePool, TermPool},
+    Rc, Sort, custom_operator::CustomOperator, macros::impl_str_conversion_traits, match_term,
+    match_term_err, pool::Pool,
 };
 use crate::{CheckerError, automata::Automaton};
 use rug::{Integer, Rational};
-use std::{collections::HashSet, hash::Hash, ops::Deref};
+use std::{hash::Hash, ops::Deref};
 
 /// A term.
 ///
@@ -677,12 +674,11 @@ impl Operator {
 
             // Strings
             Operator::StrConcat
-            | Operator::StrLessThan
-            | Operator::StrLessEq
             | Operator::ReConcat
             | Operator::ReUnion
             | Operator::ReIntersection
             | Operator::ReDiff => Some(NaryCase::LeftAssoc),
+            Operator::StrLessThan | Operator::StrLessEq => Some(NaryCase::Chainable),
             Operator::StrLen
             | Operator::CharAt
             | Operator::Substring
@@ -1119,9 +1115,9 @@ impl Term {
     }
 
     /// Returns the sort of this term. This does not make use of a cache --- if possible, prefer to
-    /// use `TermPool::sort`.
+    /// use `Pool::sort`.
     pub fn raw_sort(&self) -> Sort {
-        let mut pool = PrimitivePool::new();
+        let mut pool = Pool::new();
         let added = pool.add(self.clone());
         pool.sort(&added).as_ref().clone()
     }
@@ -1222,7 +1218,11 @@ impl Term {
         fn as_unsigned_fraction(term: &Term) -> Option<Rational> {
             match term {
                 Term::Op(Operator::IntDiv | Operator::RealDiv, args) if args.len() == 2 => {
-                    Some(args[0].as_signed_number()? / args[1].as_signed_number()?)
+                    let denom = args[1].as_signed_number()?;
+                    if denom.is_zero() {
+                        return None;
+                    }
+                    Some(args[0].as_signed_number()? / denom)
                 }
                 _ => term.as_number(),
             }
@@ -1308,12 +1308,6 @@ impl Term {
 }
 
 impl Rc<Term> {
-    /// Returns whether the term is closed, that is, whether it contains no free variables aside
-    /// from global variables.
-    pub fn is_closed(&self, pool: &mut PrimitivePool, global_vars: &HashSet<Rc<Term>>) -> bool {
-        pool.free_vars(self).iter().all(|x| global_vars.contains(x))
-    }
-
     /// Removes a leading negation from the term, if it exists. Same thing as `match_term!((not t)
     /// = term)`.
     pub fn remove_negation(&self) -> Option<&Self> {
@@ -1358,12 +1352,9 @@ impl Rc<Term> {
 
     /// Similar to `Term::as_integer_err`, but also checks if non-negative.
     pub fn as_usize_err(&self) -> Result<usize, CheckerError> {
-        if let Some(i) = self.as_integer()
-            && i >= 0
-        {
-            return Ok(i.to_usize().unwrap());
-        }
-        Err(CheckerError::ExpectedNonnegInteger(self.clone()))
+        self.as_integer()
+            .and_then(|i| i.to_usize())
+            .ok_or_else(|| CheckerError::ExpectedNonnegInteger(self.clone()))
     }
 
     /// Similar to `Term::as_signed_number`, but returns a `CheckerError` on failure.
@@ -1420,17 +1411,6 @@ impl Rc<Term> {
 }
 
 impl Constant {
-    /// Returns the sort of a constant. In case it's a `BitVec`, we only return the width.
-    pub fn sort(&self) -> Sort {
-        match self {
-            Constant::Integer(_) => Sort::Int,
-            Constant::Real(_) => Sort::Real,
-            Constant::String(_) => Sort::String,
-            Constant::RegLan(_, _) => Sort::RegLan,
-            Constant::BitVec(_, width) => Sort::BitVec(*width),
-        }
-    }
-
     /// If this is an integer constant, returns its value as an [`Integer`]. Otherwise, returns
     /// `None`.
     pub fn as_integer(&self) -> Option<Integer> {

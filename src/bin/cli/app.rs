@@ -4,7 +4,7 @@ use carcara::{
     parser,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use std::error::Error;
+use std::{error::Error, num::NonZero, path::PathBuf};
 
 const VERSION_STRING: &str = carcara_macros::version_string!();
 
@@ -38,6 +38,10 @@ pub struct Cli {
     /// Don't use sharing when printing terms.
     #[clap(global = true, short = 'v', long)]
     pub no_print_with_sharing: bool,
+
+    /// Print term diffs on error.
+    #[clap(global = true, long = "diff")]
+    pub print_diffs: bool,
 }
 
 #[derive(Subcommand)]
@@ -62,19 +66,22 @@ pub enum Command {
 
     /// Translates an Alethe proof into different formats (Eunoia, TSTP).
     Translate(TranslateCommandOptions),
+
+    /// Compares two terms and prints a readable diff.
+    Diff(DiffCommandOptions),
 }
 
 #[derive(Args)]
 pub struct Input {
     /// The proof file to be checked
-    pub proof_file: String,
+    pub proof_file: PathBuf,
 
     /// The original problem file. If this argument is not present, it will be inferred from the
     /// proof file.
-    pub problem_file: Option<String>,
+    pub problem_file: Option<PathBuf>,
 
     #[clap(long)]
-    pub rare_file: Option<String>,
+    pub rare_file: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -86,9 +93,12 @@ pub struct StatsOptions {
 
 #[derive(Args)]
 pub struct StackOptions {
-    /// Defines the thread stack size for each check worker (does not include the main thread stack size, which should be set manually).
-    #[clap(long, default_value = "0")]
-    pub stack_size: usize,
+    /// Defines the thread stack size for each check worker (does not include the main thread stack
+    /// size, which should be set manually).
+    ///
+    /// If not provided, the platform's default stack size is used.
+    #[clap(long)]
+    pub stack_size: Option<usize>,
 }
 
 #[derive(Args, Clone)]
@@ -133,20 +143,17 @@ pub struct ParsingOptions {
 
     /// Enables strict parsing.
     ///
-    /// When this flag is enabled: unary `and`, `or` and `xor` terms are not allowed;
-    #[clap(short, long = "strict-parsing")]
+    /// When this flag is enabled:
+    /// - unary `and`, `or` and `xor` terms are not allowed
+    /// - anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed;
+    ///   the new syntax (`(:= (<symbol> <sort>) <term>)`) must be used instead
+    #[clap(short, long = "strict-parsing", verbatim_doc_comment)]
     pub strict: bool,
 
     /// If `true`, Carcara will parse arguments to the `hole` rule, expecting them to be valid
     /// terms. In the future, this will be the default behaviour.
     #[clap(long)]
     pub parse_hole_args: bool,
-
-    /// Buffer the entire file in memory before parsing instead of reading line-by-line.
-    /// This can improve performance in network file systems or cluster environments
-    /// at the cost of increased memory usage.
-    #[clap(long)]
-    pub buffer_entire_file: bool,
 
     /// Enables parsing of the old (SMT-LIB versions < 2.6) syntax for datatype testers, namely
     /// `is-cons` instead of `(_ is cons)`.
@@ -251,16 +258,8 @@ pub struct CheckCommandOptions {
     pub tools: ToolOptions,
 
     /// Defines the number of cores for proof checking.
-    #[clap(
-        short = 'u',
-        long,
-        required = false,
-        default_value = "1",
-        // This has to be u32 because clap does not have a range value parser for usize. See:
-        // https://github.com/clap-rs/clap/issues/4253
-        value_parser = clap::value_parser!(u32).range(1..)
-    )]
-    pub num_threads: u32,
+    #[clap(short = 'u', long, required = false, default_value = "1")]
+    pub num_threads: NonZero<usize>,
 
     #[clap(flatten)]
     pub stats: StatsOptions,
@@ -309,12 +308,12 @@ pub struct BenchCommandOptions {
     pub tools: ToolOptions,
 
     /// Number of times to run the benchmark for each file.
-    #[clap(short, long, default_value_t = 1)]
-    pub num_runs: usize,
+    #[clap(short, long, default_value = "1")]
+    pub num_runs: NonZero<usize>,
 
     /// Number of jobs to run simultaneously when running the benchmark.
-    #[clap(short = 'j', long, default_value_t = 1)]
-    pub num_jobs: usize,
+    #[clap(short = 'j', long, default_value = "1")]
+    pub num_jobs: NonZero<usize>,
 
     /// Show benchmark results sorted by total time taken, instead of by average time taken.
     #[clap(short = 't', long)]
@@ -327,7 +326,7 @@ pub struct BenchCommandOptions {
     /// The proof files on which the benchmark will be run. If a directory is passed, the checker
     /// will recursively find all proof files in the directory. The problem files will be
     /// inferred from the proof files.
-    pub files: Vec<String>,
+    pub files: Vec<PathBuf>,
 }
 
 #[derive(Args)]
@@ -392,10 +391,22 @@ pub struct TranslateCommandOptions {
     /// When translating into Eunoia, we need to pass a path to the folder
     /// containing the corresponding mechanization.
     #[clap(long)]
-    pub eunoia_mech: String,
+    pub eunoia_mech: PathBuf,
 
     #[clap(flatten)]
     pub input: Input,
+
+    #[clap(flatten)]
+    pub parsing: ParsingOptions,
+}
+
+#[derive(Args)]
+pub struct DiffCommandOptions {
+    /// The original problem file.
+    pub problem_file: PathBuf,
+
+    /// A file containing two terms to be diffed.
+    pub terms_file: PathBuf,
 
     #[clap(flatten)]
     pub parsing: ParsingOptions,

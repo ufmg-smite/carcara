@@ -6,144 +6,115 @@ mod tests;
 
 pub use metrics::*;
 
-use indexmap::{IndexMap, IndexSet, map::Entry};
-use std::{fmt, fs, hash::Hash, io, sync::Arc, time::Duration};
+use indexmap::IndexMap;
+use rapidhash::RapidHashSet;
+use std::{
+    fmt, fs,
+    hash::Hash,
+    io,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
-fn combine_map<S, K, V, M>(mut a: IndexMap<S, M>, b: IndexMap<S, M>) -> IndexMap<S, M>
-where
-    S: Eq + Hash,
-    V: MetricsUnit,
-    M: Metrics<K, V> + Default,
-{
-    for (k, v) in b {
-        match a.entry(k) {
-            Entry::Occupied(mut e) => {
-                // To take the old value from the entry without moving it entirely, we have
-                // to insert something in its place, so we insert an empty `M`
-                let old = e.insert(M::default());
-                e.insert(old.combine(v));
-            }
-            Entry::Vacant(e) => {
-                e.insert(v);
-            }
-        }
-    }
-    a
-}
+use crate::checker::CheckingStats;
 
 /// The unique identifier of a single proof step, given by its file, step ID, and rule.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StepId {
-    pub(crate) file: Box<str>,
+    pub(crate) file: Box<Path>,
     pub(crate) step_id: Box<str>,
     pub(crate) rule: Box<str>,
 }
 
 impl fmt::Display for StepId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{} ({})", self.file, self.step_id, self.rule)
+        write!(
+            f,
+            "{}:{} ({})",
+            self.file.display(),
+            self.step_id,
+            self.rule
+        )
     }
 }
 
-type RunId = (String, usize);
+type RunId = (PathBuf, usize);
 
 /// The timing measurements of a single run of Carcara on a proof.
 #[derive(Debug, Default)]
-pub struct RunMeasurement {
+pub struct RunStats {
     /// The time spent parsing the proof.
     pub parsing: Duration,
 
     /// The time spent checking the proof.
-    pub checking: Duration,
-
-    /// The time spent elaborating the proof.
-    pub elaboration: Duration,
-
-    /// The time spent scheduling the checking tasks.
-    pub scheduling: Duration,
-
-    /// The total time spent on the run.
-    pub total: Duration,
-
-    /// The time spent checking polyequality.
-    pub polyeq: Duration,
-
-    /// The time spent checking `assume` steps.
-    pub assume: Duration,
-
-    /// The time spent comparing `assume`d terms with their premises.
-    pub assume_core: Duration,
+    pub checking: CheckingStats,
 
     /// The time spent on each pass of the elaboration pipeline.
-    pub elaboration_pipeline: Vec<Duration>,
+    pub elaboration: Vec<Duration>,
+}
+
+impl RunStats {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn total(&self) -> Duration {
+        self.parsing + self.checking.total + self.elaboration.iter().sum()
+    }
 }
 
 /// The benchmark results collected over many runs of Carcara on a set of proofs.
 #[derive(Debug, Default, Clone)]
-pub struct OnlineBenchmarkResults {
+pub struct SummaryStats {
     /// The time per run to parse the proof.
-    pub parsing: OnlineMetrics<RunId>,
+    pub parsing: Metrics<RunId>,
 
     /// The time per run to check the proof.
-    pub checking: OnlineMetrics<RunId>,
+    pub checking: Metrics<RunId>,
 
     /// The time per run to elaborate the proof.
-    pub elaborating: OnlineMetrics<RunId>,
-
-    /// The time per run to schedule the checking tasks.
-    pub scheduling: OnlineMetrics<RunId>,
-
-    /// The combined time per run to parse, check, and elaborate.
-    pub total_accounted_for: OnlineMetrics<RunId>,
+    pub elaborating: Metrics<RunId>,
 
     /// The total time spent per run.
-    pub total: OnlineMetrics<RunId>,
+    pub total: Metrics<RunId>,
 
     /// The time spent checking each step.
-    pub step_time: OnlineMetrics<StepId>,
-
-    /// For each file, the time spent checking each step in the file.
-    pub step_time_by_file: IndexMap<String, OnlineMetrics<StepId>>,
+    pub step_time: Metrics<StepId>,
 
     /// For each rule, the time spent checking each step that uses that rule.
-    pub step_time_by_rule: IndexMap<String, OnlineMetrics<StepId>>,
+    pub step_time_by_rule: IndexMap<String, Metrics<StepId>>,
 
     /// The time spent checking polyequality.
-    pub polyeq_time: OnlineMetrics<RunId>,
+    pub polyeq_time: Metrics<RunId>,
 
     /// The proportion of the checking time that was spent checking polyequality.
-    pub polyeq_time_ratio: OnlineMetrics<RunId, f64>,
+    pub polyeq_time_ratio: Metrics<RunId, f64>,
 
     /// The time spent on `assume` steps.
-    pub assume_time: OnlineMetrics<RunId>,
+    pub assume_time: Metrics<RunId>,
 
     /// The proportion of the checking time that was spent on `assume` steps.
-    pub assume_time_ratio: OnlineMetrics<RunId, f64>,
+    pub assume_time_ratio: Metrics<RunId, f64>,
 
     /// The time spent comparing `assume`d terms with their premises.
-    pub assume_core_time: OnlineMetrics<RunId>,
+    pub assume_compare_time: Metrics<RunId>,
 
-    /// The time spent in each elaboration pass.
-    pub pipeline_times: Vec<Duration>,
+    /// For each elaboration pass, the time per run spent in that pass.
+    pub pipeline_times: Vec<Metrics<RunId>>,
 
     /// The depth of each polyequality check that was performed.
-    pub polyeq_depths: OnlineMetrics<(), usize>,
+    pub polyeq_depths: Metrics<(), usize>,
 
     /// The total number of `assume` steps checked.
     pub num_assumes: usize,
 
     /// The number of `assume` steps that required no polyequality.
     pub num_easy_assumes: usize,
-
-    /// Whether any of the checked proofs contained holes.
-    pub is_holey: bool,
-
-    /// Whether any of the runs finished with an error.
-    pub had_error: bool,
 }
 
-impl OnlineBenchmarkResults {
-    /// Creates a new, empty `OnlineBenchmarkResults`.
+impl SummaryStats {
+    /// Creates a new, empty `SummaryStats`.
     pub fn new() -> Self {
         Default::default()
     }
@@ -153,159 +124,99 @@ impl OnlineBenchmarkResults {
         self.total.is_empty()
     }
 
-    /// The time per run to parse the proof.
-    pub fn parsing(&self) -> &OnlineMetrics<RunId> {
-        &self.parsing
-    }
-
-    /// The time per run to check the proof.
-    pub fn checking(&self) -> &OnlineMetrics<RunId> {
-        &self.checking
-    }
-
-    /// The time per run to elaborate the proof.
-    pub fn elaborating(&self) -> &OnlineMetrics<RunId> {
-        &self.elaborating
-    }
-
-    /// The time per run to schedule the checking tasks.
-    pub fn scheduling(&self) -> &OnlineMetrics<RunId> {
-        &self.scheduling
-    }
-
-    /// The combined time per run to parse, check, and elaborate.
-    pub fn total_accounted_for(&self) -> &OnlineMetrics<RunId> {
-        &self.total_accounted_for
-    }
-
-    /// The total time spent per run. Should be pretty similar to `total_accounted_for`.
-    pub fn total(&self) -> &OnlineMetrics<RunId> {
-        &self.total
-    }
-
-    /// The time spent checking each step.
-    pub fn step_time(&self) -> &OnlineMetrics<StepId> {
-        &self.step_time
-    }
-
-    /// For each file, the time spent checking each step in the file.
-    pub fn step_time_by_file(&self) -> &IndexMap<String, OnlineMetrics<StepId>> {
-        &self.step_time_by_file
-    }
-
-    /// For each rule, the time spent checking each step that uses that rule.
-    pub fn step_time_by_rule(&self) -> &IndexMap<String, OnlineMetrics<StepId>> {
-        &self.step_time_by_rule
-    }
-
     /// Prints the benchmark results
     pub fn print(&self, sort_by_total: bool) {
-        let [
-            parsing,
-            checking,
-            elaborating,
-            scheduling,
-            accounted_for,
-            total,
-            assume_time,
-            assume_core_time,
-            polyeq_time,
-        ] = [
-            self.parsing(),
-            self.checking(),
-            self.elaborating(),
-            self.scheduling(),
-            self.total_accounted_for(),
-            self.total(),
-            &self.assume_time,
-            &self.assume_core_time,
-            &self.polyeq_time,
-        ]
-        .map(|m| {
-            if sort_by_total {
-                format!("{:#}", m)
-            } else {
-                format!("{}", m)
-            }
-        });
-
-        println!("parsing:             {}", parsing);
-        println!("checking:            {}", checking);
-        if !elaborating.is_empty() {
-            println!("elaborating:         {}", elaborating);
-            for (i, p) in self.pipeline_times.iter().enumerate() {
-                println!("    pass {}:  {:?}", i, p);
+        println!(
+            "parsing:             {}",
+            self.parsing.display(sort_by_total)
+        );
+        println!(
+            "checking:            {}",
+            self.checking.display(sort_by_total)
+        );
+        if !self.pipeline_times.is_empty() {
+            println!(
+                "elaborating:         {}",
+                self.elaborating.display(sort_by_total)
+            );
+            for (i, pass) in self.pipeline_times.iter().enumerate() {
+                println!("    pass {}:          {}", i, pass.display(sort_by_total));
             }
         }
-        println!("scheduling:          {}", scheduling);
 
         println!(
             "on assume:           {} ({:.02}% of checking time)",
-            assume_time,
-            100.0 * self.assume_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+            self.assume_time.display(sort_by_total),
+            100.0 * self.assume_time.mean().as_secs_f64() / self.checking.mean().as_secs_f64(),
         );
-        println!("on assume (core):    {}", assume_core_time);
-        println!("assume ratio:        {}", self.assume_time_ratio);
+        println!(
+            "on assume (compare): {}",
+            self.assume_compare_time.display(sort_by_total)
+        );
+        println!(
+            "assume ratio:        {}",
+            self.assume_time_ratio.display(false)
+        );
         println!(
             "on polyeq:           {} ({:.02}% of checking time)",
-            polyeq_time,
-            100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking().mean().as_secs_f64(),
+            self.polyeq_time.display(sort_by_total),
+            100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking.mean().as_secs_f64(),
         );
-        println!("polyeq ratio:        {}", self.polyeq_time_ratio);
+        println!(
+            "polyeq ratio:        {}",
+            self.polyeq_time_ratio.display(false)
+        );
 
-        println!("total accounted for: {}", accounted_for);
-        println!("total:               {}", total);
+        println!("total:               {}", self.total.display(sort_by_total));
 
-        let data_by_rule = self.step_time_by_rule();
+        let data_by_rule = &self.step_time_by_rule;
         let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
         data_by_rule.sort_by_key(|(_, m)| if sort_by_total { m.total() } else { m.mean() });
 
         println!("by rule:");
         for (rule, data) in data_by_rule {
-            print!("    {: <18}", rule);
-            if sort_by_total {
-                println!("{:#}", data);
-            } else {
-                println!("{}", data);
-            }
+            println!("    {: <18}{}", rule, data.display(sort_by_total));
         }
 
         println!("worst cases:");
-        if !self.step_time().is_empty() {
-            let worst_step = self.step_time().max();
+        if !self.step_time.is_empty() {
+            let worst_step = self.step_time.max();
             println!("    step:            {} ({:?})", worst_step.0, worst_step.1);
         }
 
-        let worst_file_parsing = self.parsing().max();
+        let worst_file_parsing = self.parsing.max();
         println!(
             "    file (parsing):  {} ({:?})",
-            worst_file_parsing.0.0, worst_file_parsing.1
+            worst_file_parsing.0.0.display(),
+            worst_file_parsing.1
         );
 
-        let worst_file_checking = self.checking().max();
+        let worst_file_checking = self.checking.max();
         println!(
             "    file (checking): {} ({:?})",
-            worst_file_checking.0.0, worst_file_checking.1
+            worst_file_checking.0.0.display(),
+            worst_file_checking.1
         );
 
         let worst_file_assume = self.assume_time_ratio.max();
         println!(
             "    file (assume):   {} ({:.04}%)",
-            worst_file_assume.0.0,
+            worst_file_assume.0.0.display(),
             worst_file_assume.1 * 100.0
         );
 
         let worst_file_polyeq = self.polyeq_time_ratio.max();
         println!(
             "    file (polyeq):   {} ({:.04}%)",
-            worst_file_polyeq.0.0,
+            worst_file_polyeq.0.0.display(),
             worst_file_polyeq.1 * 100.0
         );
 
-        let worst_file_total = self.total().max();
+        let worst_file_total = self.total.max();
         println!(
             "    file overall:    {} ({:?})",
-            worst_file_total.0.0, worst_file_total.1
+            worst_file_total.0.0.display(),
+            worst_file_total.1
         );
 
         let num_hard_assumes = self.num_assumes - self.num_easy_assumes;
@@ -335,46 +246,18 @@ impl OnlineBenchmarkResults {
     }
 }
 
-/// The identifier of a single proof step, with its strings interned to improve memory usage.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct InternedStepId {
-    pub(crate) file: Arc<str>,
-    pub(crate) step_id: Arc<str>,
-    pub(crate) rule: Arc<str>,
-}
-
-impl fmt::Display for InternedStepId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{} ({})", self.file, self.step_id, self.rule)
-    }
-}
-
-type InternedRunId = (Arc<str>, usize);
-
 /// Benchmark results that can be written to CSV files.
 #[derive(Default)]
-pub struct CsvBenchmarkResults {
-    strings: IndexSet<Arc<str>>,
-    runs: IndexMap<InternedRunId, RunMeasurement>,
+pub struct CsvStats {
+    strings: RapidHashSet<Arc<str>>,
+    runs: Vec<(RunId, RunStats)>,
     steps: Vec<(Arc<str>, Duration)>,
-    is_holey: bool,
-    num_errors: usize,
 }
 
-impl CsvBenchmarkResults {
-    /// Creates a new, empty `CsvBenchmarkResults`.
+impl CsvStats {
+    /// Creates a new, empty `CsvStats`.
     pub fn new() -> Self {
         Default::default()
-    }
-
-    /// Returns `true` if any of the checked proofs contained holes.
-    pub fn is_holey(&self) -> bool {
-        self.is_holey
-    }
-
-    /// Returns the number of runs that finished with an error.
-    pub fn num_errors(&self) -> usize {
-        self.num_errors
     }
 
     fn intern(&mut self, s: &str) -> Arc<str> {
@@ -388,6 +271,7 @@ impl CsvBenchmarkResults {
         }
     }
 
+    // TODO: use Path
     /// Writes the benchmark results to the given writers: one CSV for the run measurements and one
     /// for the step measurements.
     pub fn write_csv(self, runs_file: &str, steps_file: &str) -> Result<(), crate::Error> {
@@ -399,17 +283,11 @@ impl CsvBenchmarkResults {
             .map_err(|inner| crate::Error::Io { inner, file: steps_file.into() })
     }
 
-    fn write_runs_csv(
-        data: IndexMap<InternedRunId, RunMeasurement>,
-        dest: &mut dyn io::Write,
-    ) -> io::Result<()> {
-        let pipeline_length = data
-            .iter()
-            .next()
-            .map_or(0, |(_, m)| m.elaboration_pipeline.len());
+    fn write_runs_csv(data: Vec<(RunId, RunStats)>, dest: &mut dyn io::Write) -> io::Result<()> {
+        let pipeline_length = data.first().map_or(0, |(_, m)| m.elaboration.len());
         write!(
             dest,
-            "proof_file,run_id,parsing,checking,elaboration,total_accounted_for,\
+            "proof_file,run_id,parsing,checking,elaboration,\
             total,polyeq,polyeq_ratio,assume,assume_ratio"
         )?;
         for i in 0..pipeline_length {
@@ -418,26 +296,23 @@ impl CsvBenchmarkResults {
         writeln!(dest)?;
 
         for (id, m) in data {
-            let total_accounted_for = m.parsing + m.checking + m.elaboration;
-            let polyeq_ratio = m.polyeq.as_secs_f64() / m.checking.as_secs_f64();
-            let assume_ratio = m.assume.as_secs_f64() / m.checking.as_secs_f64();
+            let elab_total: Duration = m.elaboration.iter().sum();
             write!(
                 dest,
-                "{},{},{},{},{},{},{},{},{},{},{}",
-                id.0,
+                "{},{},{},{},{},{},{},{},{},{}",
+                id.0.display(),
                 id.1,
                 m.parsing.as_nanos(),
-                m.checking.as_nanos(),
-                m.elaboration.as_nanos(),
-                total_accounted_for.as_nanos(),
-                m.total.as_nanos(),
-                m.polyeq.as_nanos(),
-                polyeq_ratio,
-                m.assume.as_nanos(),
-                assume_ratio,
+                m.checking.total.as_nanos(),
+                elab_total.as_nanos(),
+                m.total().as_nanos(),
+                m.checking.polyeq_time.as_nanos(),
+                m.checking.polyeq_ratio(),
+                m.checking.assume_time.as_nanos(),
+                m.checking.assume_ratio(),
             )?;
-            assert_eq!(m.elaboration_pipeline.len(), pipeline_length);
-            for d in m.elaboration_pipeline {
+            assert_eq!(m.elaboration.len(), pipeline_length);
+            for d in m.elaboration {
                 write!(dest, ",{}", d.as_nanos())?;
             }
             writeln!(dest)?;
@@ -459,24 +334,18 @@ impl CsvBenchmarkResults {
 }
 
 /// A sink for benchmark results, which receives measurements as proofs are checked and elaborated.
-pub trait CollectResults {
+pub trait CollectStats {
     /// Records the time spent checking a single step.
-    fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration);
+    fn add_step_measurement(&mut self, file: &Path, step_id: &str, rule: &str, time: Duration);
 
     /// Records the time spent checking an `assume` step.
-    fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration);
+    fn add_assume_measurement(&mut self, file: &Path, id: &str, is_easy: bool, time: Duration);
 
     /// Records the depth of a polyequality check.
     fn add_polyeq_depth(&mut self, depth: usize);
 
     /// Records the timing measurements of a single run.
-    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
-
-    /// Records that a checked proof contained holes.
-    fn register_holey(&mut self);
-
-    /// Records that a run finished with an error.
-    fn register_error(&mut self, error: &crate::Error);
+    fn add_run_measurement(&mut self, id: &RunId, measurement: RunStats);
 
     /// Combines two sets of results into one.
     fn combine(a: Self, b: Self) -> Self
@@ -484,27 +353,31 @@ pub trait CollectResults {
         Self: Sized;
 }
 
-impl CollectResults for OnlineBenchmarkResults {
-    fn add_step_measurement(&mut self, file: &str, step_id: &str, rule: &str, time: Duration) {
-        let file = file.to_owned();
+// `()` serves as a no-op `CollectStats`
+impl CollectStats for () {
+    fn add_step_measurement(&mut self, _: &Path, _: &str, _: &str, _: Duration) {}
+    fn add_assume_measurement(&mut self, _: &Path, _: &str, _: bool, _: Duration) {}
+    fn add_polyeq_depth(&mut self, _: usize) {}
+    fn add_run_measurement(&mut self, _: &RunId, _: RunStats) {}
+    fn combine(_: Self, _: Self) -> Self {}
+}
+
+impl CollectStats for SummaryStats {
+    fn add_step_measurement(&mut self, file: &Path, step_id: &str, rule: &str, time: Duration) {
         let rule = rule.to_owned();
         let id = StepId {
-            file: file.clone().into_boxed_str(),
+            file: file.into(),
             step_id: step_id.into(),
             rule: rule.clone().into_boxed_str(),
         };
         self.step_time.add_sample(&id, time);
-        self.step_time_by_file
-            .entry(file)
-            .or_default()
-            .add_sample(&id, time);
         self.step_time_by_rule
             .entry(rule)
             .or_default()
             .add_sample(&id, time);
     }
 
-    fn add_assume_measurement(&mut self, file: &str, id: &str, is_easy: bool, time: Duration) {
+    fn add_assume_measurement(&mut self, file: &Path, id: &str, is_easy: bool, time: Duration) {
         self.num_assumes += 1;
         self.num_easy_assumes += is_easy as usize;
         self.add_step_measurement(file, id, "assume", time);
@@ -514,37 +387,30 @@ impl CollectResults for OnlineBenchmarkResults {
         self.polyeq_depths.add_sample(&(), depth);
     }
 
-    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
-        let RunMeasurement {
-            parsing,
-            checking,
-            elaboration,
-            scheduling,
-            total,
-            polyeq,
-            assume,
-            assume_core,
-            elaboration_pipeline,
-        } = measurement;
+    fn add_run_measurement(&mut self, id: &RunId, run: RunStats) {
+        self.parsing.add_sample(id, run.parsing);
+        self.checking.add_sample(id, run.checking.total);
+        self.elaborating
+            .add_sample(id, run.elaboration.iter().sum());
+        self.total.add_sample(id, run.total());
 
-        self.parsing.add_sample(id, parsing);
-        self.checking.add_sample(id, checking);
-        self.elaborating.add_sample(id, elaboration);
-        self.scheduling.add_sample(id, scheduling);
-        self.total_accounted_for
-            .add_sample(id, parsing + checking + elaboration);
-        self.total.add_sample(id, total);
+        self.polyeq_time.add_sample(id, run.checking.polyeq_time);
+        self.assume_time.add_sample(id, run.checking.assume_time);
+        self.assume_compare_time
+            .add_sample(id, run.checking.assume_compare_time);
 
-        self.polyeq_time.add_sample(id, polyeq);
-        self.assume_time.add_sample(id, assume);
-        self.assume_core_time.add_sample(id, assume_core);
+        self.polyeq_time_ratio
+            .add_sample(id, run.checking.polyeq_ratio());
+        self.assume_time_ratio
+            .add_sample(id, run.checking.assume_ratio());
 
-        let polyeq_ratio = polyeq.as_secs_f64() / checking.as_secs_f64();
-        let assume_ratio = assume.as_secs_f64() / checking.as_secs_f64();
-        self.polyeq_time_ratio.add_sample(id, polyeq_ratio);
-        self.assume_time_ratio.add_sample(id, assume_ratio);
-
-        self.pipeline_times = elaboration_pipeline;
+        if self.pipeline_times.len() < run.elaboration.len() {
+            self.pipeline_times
+                .resize_with(run.elaboration.len(), Metrics::new);
+        }
+        for (pass, time) in self.pipeline_times.iter_mut().zip(run.elaboration) {
+            pass.add_sample(id, time);
+        }
     }
 
     fn combine(a: Self, b: Self) -> Self {
@@ -552,65 +418,53 @@ impl CollectResults for OnlineBenchmarkResults {
             parsing: a.parsing.combine(b.parsing),
             checking: a.checking.combine(b.checking),
             elaborating: a.elaborating.combine(b.elaborating),
-            scheduling: a.scheduling.combine(b.scheduling),
-            total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
             total: a.total.combine(b.total),
             step_time: a.step_time.combine(b.step_time),
-            step_time_by_file: combine_map(a.step_time_by_file, b.step_time_by_file),
-            step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
+            step_time_by_rule: {
+                let mut res = a.step_time_by_rule;
+                for (k, v) in b.step_time_by_rule {
+                    res.entry(k).or_default().combine_in_place(v);
+                }
+                res
+            },
 
             polyeq_time: a.polyeq_time.combine(b.polyeq_time),
             polyeq_time_ratio: a.polyeq_time_ratio.combine(b.polyeq_time_ratio),
             assume_time: a.assume_time.combine(b.assume_time),
             assume_time_ratio: a.assume_time_ratio.combine(b.assume_time_ratio),
-            assume_core_time: a.assume_core_time.combine(b.assume_core_time),
+            assume_compare_time: a.assume_compare_time.combine(b.assume_compare_time),
 
             polyeq_depths: a.polyeq_depths.combine(b.polyeq_depths),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
-            is_holey: a.is_holey || b.is_holey,
-            had_error: a.had_error || b.had_error,
-            pipeline_times: a
-                .pipeline_times
-                .into_iter()
-                .zip(b.pipeline_times)
-                .map(|(a, b)| a + b)
-                .collect(),
+            pipeline_times: {
+                let mut res = a.pipeline_times;
+                if res.len() < b.pipeline_times.len() {
+                    res.resize_with(b.pipeline_times.len(), Metrics::new);
+                }
+                for (pass, other) in res.iter_mut().zip(b.pipeline_times) {
+                    pass.combine_in_place(other);
+                }
+                res
+            },
         }
-    }
-
-    fn register_holey(&mut self) {
-        self.is_holey = true;
-    }
-
-    fn register_error(&mut self, _: &crate::Error) {
-        self.had_error = true;
     }
 }
 
-impl CollectResults for CsvBenchmarkResults {
-    fn add_step_measurement(&mut self, _: &str, _: &str, rule: &str, time: Duration) {
+impl CollectStats for CsvStats {
+    fn add_step_measurement(&mut self, _: &Path, _: &str, rule: &str, time: Duration) {
         let rule = self.intern(rule);
         self.steps.push((rule, time));
     }
 
-    fn add_assume_measurement(&mut self, file: &str, id: &str, _: bool, time: Duration) {
+    fn add_assume_measurement(&mut self, file: &Path, id: &str, _: bool, time: Duration) {
         self.add_step_measurement(file, id, "assume", time);
     }
 
     fn add_polyeq_depth(&mut self, _: usize) {}
 
-    fn add_run_measurement(&mut self, (file, i): &RunId, measurement: RunMeasurement) {
-        let id = (self.intern(file), *i);
-        self.runs.insert(id, measurement);
-    }
-
-    fn register_holey(&mut self) {
-        self.is_holey = true;
-    }
-
-    fn register_error(&mut self, _: &crate::Error) {
-        self.num_errors += 1;
+    fn add_run_measurement(&mut self, id: &RunId, measurement: RunStats) {
+        self.runs.push((id.clone(), measurement));
     }
 
     fn combine(mut a: Self, b: Self) -> Self {
@@ -618,7 +472,6 @@ impl CollectResults for CsvBenchmarkResults {
         // in benchmarks anyway
         a.runs.extend(b.runs);
         a.steps.extend(b.steps);
-        a.num_errors += b.num_errors;
         a
     }
 }

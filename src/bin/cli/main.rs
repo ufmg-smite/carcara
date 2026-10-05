@@ -1,22 +1,25 @@
 mod app;
 mod benchmarking;
+mod diff;
 mod error;
 mod logger;
 mod path_args;
 
 use app::*;
 use carcara::{
-    ast::{self, Proof, rare_rules::Rules},
-    benchmarking::OnlineBenchmarkResults,
-    check, check_and_elaborate, check_parallel, generate_lia_smt_instances, parser, slice,
-    translation::{self, ProofPrinter, Translator},
+    ast::{self, Proof, printer, rare_rules::Rules},
+    benchmarking::{CollectStats, CsvStats, SummaryStats},
+    check, check_and_elaborate, check_parallel, generate_lia_smt_instances,
+    parser::{self, Source},
+    slice,
+    translation::{self, Translator},
 };
 use error::{CliError, CliResult};
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
-    io::{self, IsTerminal, Read, Write},
-    path::PathBuf,
+    io::{IsTerminal, Write},
+    path::{Path, PathBuf},
     sync::atomic,
 };
 
@@ -24,179 +27,148 @@ use clap::Parser;
 
 fn main() {
     let cli = Cli::parse();
-    let colors_enabled = !cli.no_color && std::io::stderr().is_terminal();
+    let stderr_colors = !cli.no_color && std::io::stderr().is_terminal();
+    let stdout_colors = !cli.no_color && std::io::stdout().is_terminal();
 
     ast::printer::USE_SHARING_IN_TERM_DISPLAY
         .store(!cli.no_print_with_sharing, atomic::Ordering::Relaxed);
 
-    logger::init(cli.log_level.into(), colors_enabled);
+    logger::init(cli.log_level.into(), stderr_colors);
 
+    let display_options = printer::DisplayOptions::new().use_sharing(!cli.no_print_with_sharing);
     let result = match cli.command {
-        Command::Parse(options) => parse_command(options).and_then(|(pb, pf, _rules, mut pool)| {
-            ast::printer::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-            Ok(())
-        }),
+        Command::Parse(options) => {
+            parse_command(options).map(|(_, pf, _, _)| println!("{}", pf.display(display_options)))
+        }
         Command::Check(options) => {
             match check_command(options) {
                 Ok(s) => println!("{}", s),
                 Err(e) => {
                     log::error!("{}", e);
+                    if cli.print_diffs
+                        && let Some(diff) = diff_from_error(&e)
+                    {
+                        eprint!("{}", diff.display(stderr_colors))
+                    }
                     println!("invalid");
                     std::process::exit(1);
                 }
             }
             return;
         }
-        Command::Elaborate(options) => {
-            elaborate_command(options).and_then(|(res, pb, pf, mut pool)| {
-                println!("{}", res);
-                ast::printer::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-                Ok(())
-            })
-        }
+        Command::Elaborate(options) => elaborate_command(options).map(|(res, _, pf, _)| {
+            println!("{}", res);
+            println!("{}", pf.display(display_options))
+        }),
         Command::Bench(options) => bench_command(options),
-        Command::Slice(options) => {
-            slice_command(options, cli.no_print_with_sharing).and_then(|(pb, pf, mut pool)| {
-                ast::printer::print_proof(&mut pool, &pb.prelude, &pf, !cli.no_print_with_sharing)?;
-                Ok(())
-            })
-        }
+        Command::Slice(options) => slice_command(options, cli.no_print_with_sharing)
+            .map(|(_, pf, _)| println!("{}", pf.display(display_options))),
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
         Command::Translate(options) => translate_command(options),
+        Command::Diff(options) => {
+            diff_command(options).map(|d| print!("{}", d.display(stdout_colors)))
+        }
     };
     if let Err(e) = result {
         log::error!("{}", e);
+        if cli.print_diffs
+            && let Some(diff) = diff_from_error(&e)
+        {
+            eprint!("{}", diff.display(stderr_colors))
+        }
         std::process::exit(1);
     }
 }
 
-struct Instance {
-    problem: (PathBuf, String),
-    proof: (PathBuf, String),
-    rules: Option<(PathBuf, String)>,
-}
-
-impl Instance {
-    fn problem(&self) -> parser::Source<'_> {
-        parser::Source::new(&self.problem.0, &self.problem.1)
-    }
-
-    fn proof(&self) -> parser::Source<'_> {
-        parser::Source::new(&self.proof.0, &self.proof.1)
-    }
-
-    fn rules(&self) -> Option<parser::Source<'_>> {
-        let (name, contents) = self.rules.as_ref()?;
-        Some(parser::Source::new(name, contents))
-    }
-}
-
-fn get_instance(options: &Input) -> CliResult<Instance> {
-    let file_source = |path: &str| -> Result<(PathBuf, String), carcara::Error> {
-        let contents = std::fs::read_to_string(path)
-            .map_err(|e| carcara::Error::Io { inner: e, file: path.into() })?;
-        Ok((path.into(), contents))
+/// Reads the problem, proof and (optional) Rare rules sources given in the command-line input.
+fn get_input(options: &Input) -> CliResult<carcara::Input<'static>> {
+    let problem_file = match &options.problem_file {
+        Some(f) => f.clone(),
+        None => infer_problem_path(&options.proof_file)?,
     };
-    let stdin_source = || -> Result<(PathBuf, String), carcara::Error> {
-        let mut buf = String::new();
-        io::stdin()
-            .read_to_string(&mut buf)
-            .map_err(|e| carcara::Error::Io { inner: e, file: "<stdin>".into() })?;
-        Ok(("<stdin>".into(), buf))
-    };
-
-    let (problem, proof) = match (options.problem_file.as_deref(), options.proof_file.as_str()) {
-        (Some("-"), "-") | (None, "-") => return Err(CliError::BothFilesStdin),
-        (Some(problem), "-") => (file_source(problem)?, stdin_source()?),
-        (Some("-"), proof) => (stdin_source()?, file_source(proof)?),
-        (Some(problem), proof) => (file_source(problem)?, file_source(proof)?),
-        (None, proof) => {
-            let problem = infer_problem_path(proof)?;
-            (file_source(problem.to_str().unwrap())?, file_source(proof)?)
-        }
-    };
-    let rules = options
-        .rare_file
-        .as_ref()
-        .map(|f| file_source(f))
-        .transpose()?;
-
-    Ok(Instance { problem, proof, rules })
+    let problem = Source::file(problem_file)?;
+    let proof = Source::file_or_stdin(&options.proof_file)?;
+    let rare_rules = options.rare_file.as_ref().map(Source::file).transpose()?;
+    Ok(carcara::Input { problem, proof, rare_rules })
 }
 
 fn parse_command(
     options: ParseCommandOptions,
-) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::PrimitivePool)> {
-    let instance = get_instance(&options.input)?;
-    let result = parser::parse_instance(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
-        options.parsing.into_config(),
-    )?;
+) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::Pool)> {
+    let result = parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
     Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
-    let instance = get_instance(&options.input)?;
+    if options.stats.stats {
+        let mut results = SummaryStats::new();
+        let status = check_command_impl(options, &mut results)?;
+        results.print(false);
+        Ok(status)
+    } else {
+        check_command_impl(options, &mut ())
+    }
+}
+
+fn check_command_impl<S: CollectStats + Send + Default>(
+    options: CheckCommandOptions,
+    stats: &mut S,
+) -> CliResult<carcara::Status> {
+    let input = get_input(&options.input)?;
     let parser_config = options.parsing.into_config();
     let checker_config = (options.checking, options.tools).into_config();
 
-    let collect_stats = options.stats.stats;
-    if options.num_threads == 1 {
-        check(
-            instance.problem(),
-            instance.proof(),
-            instance.rules(),
-            parser_config,
-            checker_config,
-            collect_stats,
-        )
+    let status = if options.num_threads.get() == 1 {
+        check(input, parser_config, checker_config, stats)
     } else {
         check_parallel(
-            instance.problem(),
-            instance.proof(),
-            instance.rules(),
+            input,
             parser_config,
             checker_config,
-            collect_stats,
-            options.num_threads as usize,
+            options.num_threads,
             options.stack.stack_size,
+            stats,
         )
-    }
-    .map_err(Into::into)
+    }?;
+    Ok(status)
 }
 
 fn elaborate_command(
     options: ElaborateCommandOptions,
-) -> CliResult<(
-    carcara::Status,
-    ast::Problem,
-    ast::Proof,
-    ast::pool::PrimitivePool,
-)> {
-    let instance = get_instance(&options.input)?;
+) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
+    if options.stats.stats {
+        let mut results = SummaryStats::new();
+        let result = elaborate_command_impl(options, &mut results)?;
+        results.print(false);
+        Ok(result)
+    } else {
+        elaborate_command_impl(options, &mut ())
+    }
+}
+
+fn elaborate_command_impl<S: CollectStats>(
+    options: ElaborateCommandOptions,
+    stats: &mut S,
+) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
+    let input = get_input(&options.input)?;
 
     let checker_config = (options.checking, options.tools.clone()).into_config();
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
-    check_and_elaborate(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
+    Ok(check_and_elaborate(
+        input,
         options.parsing.into_config(),
         checker_config,
         elab_config,
         pipeline,
-        options.stats.stats,
-    )
-    .map_err(CliError::CarcaraError)
+        stats,
+    )?)
 }
 
 fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
-    let instances = get_instances_from_paths(options.files.iter().map(|s| s.as_str()))?;
+    let instances = get_instances_from_paths(&options.files)?;
     if instances.is_empty() {
         log::warn!("no files passed");
         return Ok(());
@@ -212,54 +184,41 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
     if options.dump_to_csv {
-        benchmarking::run_csv_benchmark(
+        let result = benchmarking::run_benchmark::<CsvStats>(
             &instances,
             options.num_runs,
             options.num_jobs,
             options.parsing.into_config(),
             checker_config,
             options.elaborate.then_some((elab_config, pipeline)),
-            "runs.csv",
-            "steps.csv",
-        )?;
-        return Ok(());
-    }
-
-    let results: OnlineBenchmarkResults = benchmarking::run_benchmark(
-        &instances,
-        options.num_runs,
-        options.num_jobs,
-        options.parsing.into_config(),
-        checker_config,
-        options.elaborate.then_some((elab_config, pipeline)),
-    );
-    if results.is_empty() {
-        println!("no benchmark data collected");
-        return Ok(());
-    }
-
-    if results.had_error {
-        println!("invalid");
-    } else if results.is_holey {
-        println!("holey");
+        );
+        result.print_status();
+        result.stats.write_csv("runs.csv", "steps.csv")?;
     } else {
-        println!("valid");
+        let result = benchmarking::run_benchmark::<SummaryStats>(
+            &instances,
+            options.num_runs,
+            options.num_jobs,
+            options.parsing.into_config(),
+            checker_config,
+            options.elaborate.then_some((elab_config, pipeline)),
+        );
+        result.print_status();
+        if result.stats.is_empty() {
+            println!("no benchmark data collected");
+        } else {
+            result.stats.print(options.sort_by_total);
+        }
     }
-    results.print(options.sort_by_total);
     Ok(())
 }
 
 fn slice_command(
     options: SliceCommandOptions,
     no_print_with_sharing: bool,
-) -> CliResult<(ast::Problem, ast::Proof, ast::pool::PrimitivePool)> {
-    let instance = get_instance(&options.input)?;
-    let (problem, proof, _, mut pool) = parser::parse_instance(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
-        options.parsing.into_config(),
-    )?;
+) -> CliResult<(ast::Problem, ast::Proof, ast::pool::Pool)> {
+    let (problem, proof, _, mut pool) =
+        parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
 
     let sliced = {
         let (sliced_proof, sliced_asserts) = slice::slice(
@@ -276,13 +235,12 @@ fn slice_command(
             File::create(problem_filename)
                 .and_then(|mut f| {
                     f.write_all(format!("{}", problem.prelude).as_bytes())?;
-                    ast::printer::write_asserts(
-                        &mut pool,
-                        &problem.prelude,
-                        &mut f,
-                        &sliced_asserts,
-                        false,
-                    )?;
+
+                    let options = printer::DisplayOptions::new()
+                        .use_sharing(false)
+                        .sharing_prefix("p_".into())
+                        .smt_lib_strict(true);
+                    write!(f, "{}", printer::display_asserts(&sliced_asserts, options))?;
                     f.write_all(b"(check-sat)\n")?;
                     f.write_all(b"(exit)\n")
                 })
@@ -293,13 +251,9 @@ fn slice_command(
 
             File::create(proof_filename)
                 .and_then(|mut f| {
-                    ast::printer::write_proof_to_dest(
-                        &mut pool,
-                        &problem.prelude,
-                        &sliced_proof,
-                        &mut f,
-                        !no_print_with_sharing,
-                    )?;
+                    let options =
+                        printer::DisplayOptions::new().use_sharing(!no_print_with_sharing);
+                    write!(f, "{}", sliced_proof.display(options))?;
                     f.write_all(b"\n")
                 })
                 .map_err(|inner| carcara::Error::Io {
@@ -318,19 +272,18 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     use std::io::Write;
 
     let root_file_name = options.input.proof_file.clone();
-    let instance = get_instance(&options.input)?;
     let instances = generate_lia_smt_instances(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
+        get_input(&options.input)?,
         options.parsing.into_config(),
         use_sharing,
     )?;
     for (id, content) in instances {
-        let file_name = format!("{}-{}.lia_smt2", root_file_name, id);
+        let mut file_name = root_file_name.clone().into_os_string();
+        file_name.push(format!("-{}.lia_smt2", id));
+        let file_name = PathBuf::from(file_name);
         File::create(&file_name)
             .and_then(|mut f| write!(f, "{}", content))
-            .map_err(|inner| carcara::Error::Io { inner, file: file_name.into() })?;
+            .map_err(|inner| carcara::Error::Io { inner, file: file_name })?;
     }
 
     Ok(())
@@ -338,14 +291,8 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 
 // Translation-related commands.
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let instance = get_instance(&options.input)?;
-
-    let (alethe_problem, mut alethe_proof, _, _) = parser::parse_instance(
-        instance.problem(),
-        instance.proof(),
-        instance.rules(),
-        options.parsing.into_config(),
-    )?;
+    let (alethe_problem, mut alethe_proof, _, _) =
+        parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
 
     // NOTE: currently supporting only translation into Eunoia.
     match &options.target {
@@ -358,30 +305,54 @@ fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
 fn translate_2_eunoia_command(
     alethe_problem: &ast::Problem,
     proof: &mut Proof,
-    eunoia_mech: &str,
+    eunoia_mech: &Path,
 ) -> CliResult<()> {
+    use translation::eunoia::DisplayEunoiaProof;
+
     let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new(eunoia_mech);
     let eunoia_prelude = translator.translate_problem(alethe_problem);
     let eunoia_proof = translator.translate(proof);
-
-    // Sink where to write the "prelude" of the problem and the path to the Eunoia mechanization.
-    let mut buf_prelude = Vec::new();
-    let s_exp_formatter_prelude =
-        carcara::translation::eunoia::printer::SExpFormatter::new(&mut buf_prelude);
-    let mut printer_prelude =
-        carcara::translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_prelude);
-
-    printer_prelude.write_proof(&eunoia_prelude).unwrap();
-
-    // Sink where to write the translated proof.
-    let mut buf_proof = Vec::new();
-    let s_exp_formatter_proof = translation::eunoia::printer::SExpFormatter::new(&mut buf_proof);
-    let mut printer_proof = translation::eunoia::printer::EunoiaPrinter::new(s_exp_formatter_proof);
-
-    printer_proof.write_proof(eunoia_proof).unwrap();
-
-    println!("{}", std::str::from_utf8(&buf_prelude).unwrap());
-    println!("{}", std::str::from_utf8(&buf_proof).unwrap());
+    println!("{}", DisplayEunoiaProof(&eunoia_prelude));
+    println!("{}", DisplayEunoiaProof(eunoia_proof));
 
     Ok(())
+}
+
+fn diff_from_error(error: &CliError) -> Option<diff::TermDiff> {
+    use carcara::{
+        checker::error::{CheckerError, EqualityError},
+        elaborator::error::ElaborationError,
+    };
+
+    let error = match error {
+        CliError::CarcaraError(carcara::Error::Checker { inner, .. }) => inner,
+        CliError::CarcaraError(carcara::Error::Elaborator { inner, .. }) => match inner.as_ref() {
+            ElaborationError::Checker(inner) => inner,
+            _ => return None,
+        },
+        _ => return None,
+    };
+
+    match error {
+        CheckerError::ReflexivityFailed(l, r)
+        | CheckerError::SimplificationFailed { result: r, target: l, .. }
+        | CheckerError::TermEquality(EqualityError::ExpectedEqual(l, r))
+        | CheckerError::TermEquality(EqualityError::ExpectedToBe { expected: l, got: r })
+        | CheckerError::RarePremiseAreNotEqual(l, r)
+        | CheckerError::RareConclusionAreNotEqual(l, r) => Some(diff::diff(l, r)),
+        _ => None,
+    }
+}
+
+fn diff_command(options: DiffCommandOptions) -> CliResult<diff::TermDiff> {
+    let problem = Source::file(&options.problem_file)?;
+    let terms = Source::file_or_stdin(&options.terms_file)?;
+
+    let mut pool = ast::pool::Pool::new();
+    let mut parser = parser::Parser::new(&mut pool, options.parsing.into_config(), problem)?;
+    let _ = parser.parse_problem()?; // We only parse the problem to get the definitions
+    parser.reset(terms)?;
+    let left = parser.parse_term()?;
+    let right = parser.parse_term()?;
+    Ok(diff::diff(&left, &right))
 }

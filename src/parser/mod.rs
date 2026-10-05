@@ -8,12 +8,12 @@ mod rare;
 pub(crate) mod tests;
 
 use crate::{
-    CarcaraResult, Error,
+    CarcaraResult, Error, Input,
     ast::{
         AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
         Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
-        Subproof, Substitution, Term, build_term, lookup_operator,
-        pool::{PrimitivePool, TermPool},
+        Subproof, Substitution, Term, build_sort, build_term, lookup_operator,
+        pool::Pool,
         rare_rules::{RareStatements, Rules},
     },
     utils::{HashCache, HashMapStack},
@@ -23,46 +23,93 @@ use error::{assert_indexed_op_args_value, assert_num_args, check_set_sort};
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use rug::{Integer, Rational};
-use std::{iter::Iterator, path::Path, str::FromStr};
+use std::{
+    borrow::Cow,
+    iter::Iterator,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 pub use error::{ParserError, SortError};
 pub use lexer::{Position, Reserved, Token};
 
 /// A code source for [`Parser`], with a name and contents.
+///
+/// A `Source` might either borrow its name and contents (see [`Source::new`] and the `From<&str>`
+/// implementation), or own them (see [`Source::owned`], [`Source::file`] and [`Source::stdin`]).
 pub struct Source<'s> {
-    name: &'s Path,
-    contents: &'s str,
+    name: Cow<'s, Path>,
+    contents: Cow<'s, str>,
 }
 
 impl<'s> Source<'s> {
-    /// Constructs a new `Source` from `name` and `contents` strings.
+    /// Constructs a new `Source` that borrows its `name` and `contents`.
     pub fn new(name: &'s Path, contents: &'s str) -> Self {
-        Self { name, contents }
+        Self {
+            name: Cow::Borrowed(name),
+            contents: Cow::Borrowed(contents),
+        }
+    }
+
+    /// Returns the name of this source.
+    pub fn name(&self) -> &Path {
+        &self.name
+    }
+
+    /// Returns the contents of this source.
+    pub fn contents(&self) -> &str {
+        &self.contents
+    }
+}
+
+impl Source<'static> {
+    /// Constructs a new `Source` that owns its `name` and `contents`.
+    pub fn owned(name: impl Into<PathBuf>, contents: String) -> Self {
+        Self {
+            name: Cow::Owned(name.into()),
+            contents: Cow::Owned(contents),
+        }
     }
 
     /// Constructs a new `Source` by reading the contents of a file.
-    ///
-    /// Since `Source` does not own its `contents` string, this must take a buffer in which to store
-    /// the file contents.
-    pub fn file(path: &'s Path, buf: &'s mut String) -> CarcaraResult<Self> {
+    pub fn file(path: impl AsRef<Path>) -> CarcaraResult<Self> {
+        let path = path.as_ref();
+        let contents =
+            std::fs::read_to_string(path).map_err(|e| Error::Io { inner: e, file: path.into() })?;
+        Ok(Self::owned(path, contents))
+    }
+
+    /// Constructs a new `Source` by reading the contents of stdin.
+    pub fn stdin() -> CarcaraResult<Self> {
         use std::io::Read;
 
-        std::fs::File::open(path)
-            .and_then(|mut f| f.read_to_string(buf))
-            .map_err(|e| Error::Io {
-                inner: e,
-                file: path.to_str().unwrap().into(),
-            })?;
-        Ok(Self { name: path, contents: buf })
+        let mut contents = String::new();
+        std::io::stdin()
+            .read_to_string(&mut contents)
+            .map_err(|e| Error::Io { inner: e, file: "<stdin>".into() })?;
+        Ok(Self::owned("<stdin>", contents))
+    }
+
+    /// Constructs a new `Source` by reading the contents of a file, or from stdin if `path` is "-".
+    pub fn file_or_stdin(path: impl AsRef<Path>) -> CarcaraResult<Self> {
+        let path = path.as_ref();
+        if path == "-" {
+            Self::stdin()
+        } else {
+            Self::file(path)
+        }
     }
 }
 
 impl<'s> From<&'s str> for Source<'s> {
     fn from(value: &'s str) -> Self {
-        Self {
-            name: Path::new("<str>"),
-            contents: value,
-        }
+        Self::new(Path::new("<str>"), value)
+    }
+}
+
+impl From<String> for Source<'static> {
+    fn from(value: String) -> Self {
+        Self::owned("<str>", value)
     }
 }
 
@@ -132,44 +179,33 @@ impl Config {
 }
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
-/// format). If the optional argument `rules` is provided, also parses a set of Rare rewrite rules.
+/// format). If the instance includes a set of Rare rewrite rules, also parses them.
 ///
-/// This returns the parsed problem, proof, and rules, as well as the `TermPool` used in parsing.
-pub fn parse_instance<'s>(
-    problem: Source<'s>,
-    proof: Source<'s>,
-    rules: Option<Source<'s>>,
-    config: Config,
-) -> CarcaraResult<(Problem, Proof, Rules, PrimitivePool)> {
-    let mut pool = PrimitivePool::new();
-    parse_instance_with_pool(problem, proof, rules, config, &mut pool)
+/// This returns the parsed problem, proof, and rules, as well as the `Pool` used in parsing.
+pub fn parse<'s>(input: Input<'s>, config: Config) -> CarcaraResult<(Problem, Proof, Rules, Pool)> {
+    let mut pool = Pool::new();
+    parse_with_pool(input, config, &mut pool)
         .map(|(prelude, proof, rules)| (prelude, proof, rules, pool))
 }
 
-/// Given an existing [`PrimitivePool`], parses an SMT problem instance (in the SMT-LIB format) and
-/// its associated proof (in the Alethe format). If the optional argument `rules` is provided, also
-/// parses a set of Rare rewrite rules.
+/// Given an existing [`Pool`], parses an SMT problem instance (in the SMT-LIB format) and its
+/// associated proof (in the Alethe format). If the instance includes a set of Rare rewrite rules,
+/// also parses them.
 ///
 /// This returns the parsed problem, proof, and rules.
-pub fn parse_instance_with_pool<'s>(
-    problem: Source<'s>,
-    proof: Source<'s>,
-    rules: Option<Source<'s>>,
+pub fn parse_with_pool<'s>(
+    input: Input<'s>,
     config: Config,
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
 ) -> CarcaraResult<(Problem, Proof, Rules)> {
-    let mut parser = Parser::new(pool, config, problem)?;
+    let mut parser = Parser::new(pool, config, input.problem)?;
     let problem = parser.parse_problem()?;
-    parser.reset(proof)?;
+    parser.reset(input.proof)?;
     let proof = parser.parse_proof()?;
-    if let Some(rules) = rules {
+    if let Some(rules) = input.rare_rules {
         parser.reset(rules)?;
         parser.config.allow_higher_order_indexed_ops = true;
-        let rules = parser.parse_rare();
-        let rules = match rules {
-            Ok(t) => Ok(t),
-            Err(v) => Err(v),
-        }?;
+        let rules = parser.parse_rare()?;
         return Ok((problem, proof, rules));
     }
     Ok((problem, proof, RareStatements { rules: IndexMap::new() }))
@@ -182,7 +218,7 @@ struct FunctionDef {
 }
 
 impl FunctionDef {
-    fn apply(&self, p: &mut PrimitivePool, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
+    fn apply(&self, p: &mut Pool, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
         assert_num_args(&args, self.params.len())?;
         if args.is_empty() {
             return Ok(self.body.clone());
@@ -241,7 +277,7 @@ struct ParserState {
 
 /// A parser for the Alethe proof format.
 pub struct Parser<'p, 's> {
-    pool: &'p mut PrimitivePool,
+    pool: &'p mut Pool,
     config: Config,
     lexer: lexer::Lexer<'s>,
     current_token: Token,
@@ -255,11 +291,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// Constructs a new `Parser` from a [`Source`].
     ///
     /// This operation can fail if there is an IO or lexer error on the first token.
-    pub fn new(
-        pool: &'p mut PrimitivePool,
-        config: Config,
-        input: Source<'s>,
-    ) -> CarcaraResult<Self> {
+    pub fn new(pool: &'p mut Pool, config: Config, input: Source<'s>) -> CarcaraResult<Self> {
         let mut lexer = lexer::Lexer::new(input);
         let (current_token, current_position) = lexer.next_token()?;
         Ok(Parser {
@@ -285,10 +317,15 @@ impl<'p, 's> Parser<'p, 's> {
         Ok(())
     }
 
+    /// Returns the name of the current input source.
+    fn source_name(&self) -> &Path {
+        self.lexer.source.name()
+    }
+
     /// Wraps a `ParserError` into a crate level error, by adding the given position and the current
     /// source name.
     fn err(&self, inner: impl Into<ParserError>, pos: Position) -> Error {
-        Error::Parser(inner.into(), pos, self.lexer.source_name.into())
+        Error::Parser(inner.into(), pos, self.source_name().into())
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
@@ -371,7 +408,7 @@ impl<'p, 's> Parser<'p, 's> {
         value: Option<&Rc<Sort>>,
         got: &Rc<Sort>,
     ) -> Result<(), SortError> {
-        let any = self.pool.add_sort(Sort::Atom("?".into(), Box::new([])));
+        let any = build_sort!(self.pool, (Atom "?"));
 
         let expected = {
             let [key, value] = [key, value].map(|s| s.cloned().unwrap_or_else(|| any.clone()));
@@ -411,7 +448,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// Return whether we should interpret integer constants as `Real`s.
     ///
     /// If we are working with a logic that contains reals but does not contain integers, and if we
-    /// are parsing the problem and not the poof, this will be true.
+    /// are parsing the problem and not the proof, this will be true.
     fn interpret_ints_as_reals(&self) -> bool {
         self.is_real_only_logic && self.problem.is_some()
     }
@@ -453,14 +490,12 @@ impl<'p, 's> Parser<'p, 's> {
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
         let sort = self.pool.sort(&function);
-        let mut param_function = false;
-        let sorts = {
+        let (params, sorts) = {
             if let Sort::Function(sorts) = sort.as_ref() {
-                sorts
-            } else if let Sort::Par(_, p_sort) = sort.as_ref() {
+                (None, sorts)
+            } else if let Sort::Par(vars, p_sort) = sort.as_ref() {
                 if let Sort::Function(sorts) = p_sort.as_ref() {
-                    param_function = true;
-                    sorts
+                    (Some(vars), sorts)
                 } else {
                     // Parametric function does not have function sort
                     return Err(ParserError::NotAFunction(p_sort.clone()));
@@ -475,8 +510,8 @@ impl<'p, 's> Parser<'p, 's> {
         let mut map = RapidHashMap::new();
         for i in 0..args.len() {
             let arg_sort_i = self.pool.sort(&args[i]);
-            if param_function {
-                if !sorts[i].is_compatible_with_map(&arg_sort_i, &mut map) {
+            if let Some(params) = params {
+                if !sorts[i].match_with(params, &arg_sort_i, &mut map) {
                     return Err(ParserError::IncompatibleSorts(
                         sorts[i].clone(),
                         arg_sort_i.clone(),
@@ -786,7 +821,8 @@ impl<'p, 's> Parser<'p, 's> {
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
                     if func_def.params.is_empty() {
-                        constant_definitions.push((name.clone(), func_def.body.clone()));
+                        let sort = self.pool.sort(&func_def.body);
+                        constant_definitions.push((name.clone(), func_def.body.clone(), sort));
                     }
                     self.state.function_defs.insert(name, func_def);
                     continue;
@@ -870,7 +906,7 @@ impl<'p, 's> Parser<'p, 's> {
         Ok(Proof {
             constant_definitions,
             commands,
-            filename: self.lexer.source_name.into(),
+            filename: self.source_name().into(),
         })
     }
 
@@ -1285,7 +1321,7 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses a `let` term. This method assumes that the `(` and `let` tokens were already
     /// consumed.
-    fn parse_let_term(&mut self) -> CarcaraResult<Rc<Term>> {
+    fn parse_let_term(&mut self, expand: bool) -> CarcaraResult<Rc<Term>> {
         self.expect_token(Token::OpenParen)?;
 
         // Since the let binding semantics is *simultaneous*, we first parse all bindings, and only
@@ -1312,7 +1348,7 @@ impl<'p, 's> Parser<'p, 's> {
 
         self.state.symbol_table.pop_scope();
 
-        if self.config.expand_lets {
+        if expand {
             let substitution = bindings
                 .into_iter()
                 .map(|(name, value)| {
@@ -1381,7 +1417,10 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(ParamOperator, Vec<Rc<Term>>)> {
         let op_symbol = self.expect_symbol()?;
 
-        if let Some(value) = op_symbol.strip_prefix("bv") {
+        if let Some(value) = op_symbol.strip_prefix("bv")
+            && !value.is_empty()
+            && value.chars().all(|c| c.is_ascii_digit())
+        {
             let parsed_value = value.parse::<Integer>().unwrap();
             let args = self.parse_sequence(Self::parse_term, true)?;
             let mut constant_args = Vec::new();
@@ -1441,10 +1480,13 @@ impl<'p, 's> Parser<'p, 's> {
             ParamOperator::BvConst => {
                 assert_num_args(&op_args, 2)?;
                 assert_num_args(&args, 0)?;
+                if let Some(arg) = op_args.iter().find(|a| a.as_integer().is_none()) {
+                    return Err(ParserError::ExpectedIntegerConstant(arg.clone()));
+                }
+                assert_indexed_op_args_value(&op_args[..1], 0..)?;
+                assert_indexed_op_args_value(&op_args[1..], 1..)?;
                 let value = op_args[0].as_integer().unwrap();
                 let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
-                assert_indexed_op_args_value(&[op_args[0].clone()], 0..)?;
-                assert_indexed_op_args_value(&[op_args[1].clone()], 1..)?;
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             ParamOperator::BvExtract => {
@@ -1602,7 +1644,7 @@ impl<'p, 's> Parser<'p, 's> {
                     Reserved::Choice => self.parse_binder(Binder::Choice),
                     Reserved::Lambda => self.parse_binder(Binder::Lambda),
                     Reserved::Bang => self.parse_annotated_term(),
-                    Reserved::Let => self.parse_let_term(),
+                    Reserved::Let => self.parse_let_term(self.config.expand_lets),
                     Reserved::Cl => {
                         let args = self.parse_sequence(Self::parse_term, false)?;
                         self.make_op(Operator::Cl, args)
@@ -1634,50 +1676,19 @@ impl<'p, 's> Parser<'p, 's> {
                 let op = ParamOperator::from_str(s).unwrap();
                 self.next_token()?;
                 let mut op_args = self.parse_sequence(Self::parse_term, true)?;
+                assert_num_args(&op_args, op.num_op_args()..)
+                    .map_err(|err| self.err(err, head_pos))?;
                 let args = op_args.split_off(op.num_op_args());
                 self.make_indexed_op(op, op_args, args)
                     .map_err(|err| self.err(err, head_pos))
             }
             Token::Symbol(s) if s == "eo" => {
-                // "Let" constructions unfold
                 self.expect_token(Token::Symbol("eo".to_owned()))?;
-                self.expect_keyword()?;
+                self.expect_token(Token::Keyword("".to_owned()))?;
                 self.expect_token(Token::Keyword("define".to_owned()))?;
-                self.expect_token(Token::OpenParen)?;
-                let args = self.parse_sequence(
-                    |parser| {
-                        parser.expect_token(Token::OpenParen)?;
-                        let let_arg = parser.expect_symbol()?;
-                        let body = parser.parse_term()?;
-                        parser.expect_token(Token::CloseParen)?;
-                        Ok((let_arg, body))
-                    },
-                    true,
-                )?;
 
-                self.state.symbol_table.push_scope();
-                for (name, value) in &args {
-                    let sort = self.pool.sort(value);
-                    self.declare_symbol(name.clone(), sort);
-                }
-
-                let inner = self.parse_term()?;
-                self.expect_token(Token::CloseParen)?;
-
-                self.state.symbol_table.pop_scope();
-                let substitution = args
-                    .into_iter()
-                    .map(|(name, value)| {
-                        let var = Term::new_var(name, self.pool.sort(&value));
-                        (self.pool.add(var), value)
-                    })
-                    .collect();
-
-                let result = Substitution::new(self.pool, substitution)
-                    .unwrap()
-                    .apply(self.pool, &inner);
-
-                Ok(result)
+                // `eo::define` is basically an alias to `let`, but always expands
+                self.parse_let_term(true)
             }
             Token::Symbol(s) if self.state.function_defs.contains_key(s) => {
                 let head_pos = self.current_position;
@@ -1712,7 +1723,7 @@ impl<'p, 's> Parser<'p, 's> {
                                 .make_var(op_symbol.clone())
                                 .map_err(|err| self.err(err, self.current_position))?;
                             let var_sort = self.pool.sort(&var);
-                            if let Sort::Par(_, f_sort) = var_sort.as_ref()
+                            if let Sort::Par(vars, f_sort) = var_sort.as_ref()
                                 && let Sort::Function(sorts) = f_sort.as_ref()
                             {
                                 let sort = self.parse_sort()?;
@@ -1720,7 +1731,7 @@ impl<'p, 's> Parser<'p, 's> {
                                 // unify return sort with as_sort
                                 let ret_sort = sorts.last().unwrap();
                                 let mut map = RapidHashMap::new();
-                                if !ret_sort.is_compatible_with_map(&sort, &mut map) {
+                                if !ret_sort.match_with(vars, &sort, &mut map) {
                                     return Err(self.err(
                                         ParserError::IncompatibleSorts(
                                             ret_sort.clone(),
@@ -1866,6 +1877,7 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
                 }
                 let sort = if let Some(width) = args[0].as_integer() {
+                    assert_indexed_op_args_value(&args, 0..)?;
                     Sort::BitVec(width.to_usize().unwrap())
                 } else {
                     // TODO: used to be an error. maybe still should be an error outside rare files

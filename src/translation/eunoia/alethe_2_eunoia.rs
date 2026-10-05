@@ -1,4 +1,6 @@
 //! Translator for `EunoiaProof`.
+use std::path::Path;
+
 use crate::ast::*;
 use crate::translation::{
     Symbol, Translator, TranslatorData, VecToVecTranslator,
@@ -13,7 +15,7 @@ pub struct EunoiaTranslator {
 }
 
 impl EunoiaTranslator {
-    pub fn new(eunoia_mech: &str) -> EunoiaTranslator {
+    pub fn new(eunoia_mech: &Path) -> EunoiaTranslator {
         Self {
             alethe_signature: AletheTheory::new(eunoia_mech),
             translation: TranslatorData::new(),
@@ -939,7 +941,9 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             .mechanization_files
             .iter()
             .for_each(|path| {
-                eunoia_prelude.push(EunoiaCommand::Include { path: path.clone() });
+                eunoia_prelude.push(EunoiaCommand::Include {
+                    path: path.to_string_lossy().into_owned(),
+                });
             });
 
         // Sorts declarations.

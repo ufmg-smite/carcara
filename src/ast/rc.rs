@@ -23,7 +23,7 @@ use std::{fmt, hash::Hash, ops::Deref, sync};
 /// Therefore, this wrapper also overrides the implementation of the `Hash` trait.
 ///
 /// Note: when using this struct, it's important to avoid constructing terms with `Rc::new` and
-/// instead prefer to construct them by adding them to a `TermPool`. This is because `Rc::new` will
+/// instead prefer to construct them by adding them to a `Pool`. This is because `Rc::new` will
 /// create a brand new allocation for that term, instead of reusing the existing allocation if that
 /// term was already added to the pool. Two identical terms created independently with `Rc::new`
 /// will not compare as equal.
@@ -67,13 +67,6 @@ impl<T: ?Sized> AsRef<T> for Rc<T> {
     }
 }
 
-impl<T, const N: usize> Rc<[T; N]> {
-    /// Converts an `Rc` of an array into an `Rc` of a slice.
-    pub fn to_rc_of_slice(self) -> Rc<[T]> {
-        Rc(self.0 as _)
-    }
-}
-
 impl<T: ?Sized + fmt::Debug> fmt::Debug for Rc<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.0, f)
@@ -98,17 +91,12 @@ impl<T> Rc<T> {
     /// `HashMap`/`HashSet`.
     ///
     /// In most cases, instead of using this method, you should use add the raw term into a term
-    /// pool, using `TermPool::add`; or clone the `Rc<Term>` from an existing allocation, if it
-    /// exists. Unless you know what you are doing, prefer one of those options instead of using
-    /// this method.
+    /// pool, using `Pool::add`; or clone the `Rc<Term>` from an existing allocation, if it exists.
+    /// Unless you know what you are doing, prefer one of those options instead of using this
+    /// method.
     pub(super) unsafe fn new_raw(value: T) -> Self {
         #[allow(clippy::disallowed_methods)]
         Self(sync::Arc::new(value))
-    }
-
-    /// Similar to [`std::rc::Rc::strong_count`].
-    pub fn strong_count(this: &Self) -> usize {
-        sync::Arc::strong_count(&this.0)
     }
 
     /// Provides a raw pointer to the data.

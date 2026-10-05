@@ -726,6 +726,9 @@ fn aci_simp() {
             (declare-fun a () (_ BitVec 4))
             (declare-fun b () (_ BitVec 4))
             (declare-fun c () (_ BitVec 4))
+            (declare-fun u () String)
+            (declare-fun v () String)
+            (declare-fun w () String)
         ",
         "Flattening (associativity)" {
             "(step t1 (cl (= (and (and p q) (and r s)) (and p q r s))) :rule aci_simp)": true,
@@ -760,6 +763,18 @@ fn aci_simp() {
             // so the `(and p p)` is left untouched and differs from `p`.
             "(step t1 (cl (= (or s (and p p)) (or s p))) :rule aci_simp)": false,
         }
+        "Duplicates are kept for non-idempotent operators" {
+            "(step t1 (cl (= (+ i (+ j i)) (+ j i i))) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvxor a (bvxor b a)) (bvxor b a a))) :rule aci_simp)": true,
+
+            "(step t1 (cl (= (+ i i) i)) :rule aci_simp)": false,
+            "(step t1 (cl (= (+ i j i) (+ i j))) :rule aci_simp)": false,
+            "(step t1 (cl (= (* x x) x)) :rule aci_simp)": false,
+            "(step t1 (cl (= (bvadd a a) a)) :rule aci_simp)": false,
+            "(step t1 (cl (= (bvmul a a) a)) :rule aci_simp)": false,
+            "(step t1 (cl (= (bvxor a a) a)) :rule aci_simp)": false,
+            "(step t1 (cl (= (bvxor a b a) (bvxor a b))) :rule aci_simp)": false,
+        }
         "Identity removal" {
             "(step t1 (cl (= (or p false) p)) :rule aci_simp)": true,
             "(step t1 (cl (= (and p true) p)) :rule aci_simp)": true,
@@ -774,6 +789,18 @@ fn aci_simp() {
             // The identity is only removed for the top-level operator; a nested,
             // different operator is opaque, so `true` is not stripped here.
             "(step t1 (cl (= (or p (and q true)) (or p q))) :rule aci_simp)": false,
+        }
+        "All arguments are the identity" {
+            "(step t1 (cl (= (and true true) true)) :rule aci_simp)": true,
+            "(step t1 (cl (= (or false (or false false)) false)) :rule aci_simp)": true,
+            "(step t1 (cl (= (+ 0 0) 0)) :rule aci_simp)": true,
+            "(step t1 (cl (= (* 1.0 1.0) 1.0)) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvand #b1111 #b1111) #b1111)) :rule aci_simp)": true,
+            "(step t1 (cl (= (bvadd #b0000 (bvadd #b0000 #b0000)) #b0000)) :rule aci_simp)": true,
+            "(step t1 (cl (= (str.++ \"\" \"\") \"\")) :rule aci_simp)": true,
+
+            "(step t1 (cl (= (and true true) false)) :rule aci_simp)": false,
+            "(step t1 (cl (= (+ 0 0) 1)) :rule aci_simp)": false,
         }
         "Bitvector operators" {
             "(step t1 (cl (= (bvadd a b) (bvadd b a))) :rule aci_simp)": true,
@@ -797,6 +824,17 @@ fn aci_simp() {
 
             // Concat not commutative
             "(step t1 (cl (= (concat (concat a b) c) (concat a (concat c b)))) :rule aci_simp)": false,
+        }
+        "String concatenation" {
+            "(step t1 (cl (= (str.++ u (str.++ v w)) (str.++ u v w))) :rule aci_simp)": true,
+            "(step t1 (cl (= (str.++ u (str.++ \"\" v)) (str.++ u v))) :rule aci_simp)": true,
+            "(step t1 (cl (= (str.++ u \"\") u)) :rule aci_simp)": true,
+
+            // String concatenation is neither commutative nor idempotent
+            "(step t1 (cl (= (str.++ u v) (str.++ v u))) :rule aci_simp)": false,
+            "(step t1 (cl (= (str.++ u v w) (str.++ w v u))) :rule aci_simp)": false,
+            "(step t1 (cl (= (str.++ u u) u)) :rule aci_simp)": false,
+            "(step t1 (cl (= (str.++ u v u) (str.++ u v))) :rule aci_simp)": false,
         }
     }
 }

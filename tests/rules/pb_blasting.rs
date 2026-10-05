@@ -62,6 +62,9 @@ fn pbblast_bveq_1() {
                                    (+ ((_ @int_of 0) y1) 0))
                                 0))) :rule pbblast_bveq)"#: false,
         }
+        "Wrong number of conclusion clauses" {
+            r#"(step t1 (cl) :rule pbblast_bveq)"#: false,
+        }
     }
 }
 
@@ -442,6 +445,12 @@ fn pbblast_bvult_2() {
                                  1))) :rule pbblast_bvult)"#: false,
         }
 
+        "Missing summands" {
+            r#"(step t1 (cl (= (bvult x2 y2)
+                             (>= (- (* 1 ((_ @int_of 0) y2))
+                                    (* 1 ((_ @int_of 0) x2)))
+                                 1))) :rule pbblast_bvult)"#: false,
+        }
     }
 }
 
@@ -474,6 +483,12 @@ fn pbblast_bvult_2_short_circuit() {
                                  1))) :rule pbblast_bvult)"#: false,
         }
 
+        "Missing summands" {
+            r#"(step t1 (cl (= (bvult (@pbbterm @x0 @x1) (@pbbterm @y0 @y1))
+                             (>= (- (* 1 @y0)
+                                    (* 1 @x0))
+                                 1))) :rule pbblast_bvult)"#: false,
+        }
     }
 }
 
@@ -1614,6 +1629,8 @@ fn pbblast_bvslt_4() {
         definitions = "
             (declare-const x4 (_ BitVec 4))
             (declare-const y4 (_ BitVec 4))
+            (declare-const x0 (_ BitVec 0))
+            (declare-const y0 (_ BitVec 0))
         ",
         // Using explicit multiplication everywhere.
         "bvslt on 4 bits with explicit multiplication" {
@@ -1722,6 +1739,48 @@ fn pbblast_bvslt_4() {
         }
 
 
+        "Missing summands" {
+            r#"(step t1 (cl (= (bvslt x4 y4)
+                            (>= (+
+                                    (-
+                                        (+ (* 1 ((_ @int_of 0) y4))
+                                           (* 2 ((_ @int_of 1) y4)))
+                                        (* 8 ((_ @int_of 3) y4)))
+                                    (-
+                                        (* 8 ((_ @int_of 3) x4))
+                                        (+ (* 1 ((_ @int_of 0) x4))
+                                           (* 2 ((_ @int_of 1) x4)))
+                                    )
+                                ) 1))) :rule pbblast_bvslt)"#: false,
+        }
+
+        // The sign bit must not be part of the sums
+        "Sign bit in the sums" {
+            r#"(step t1 (cl (= (bvslt x4 y4)
+                            (>= (+
+                                    (-
+                                        (+ (* 1 ((_ @int_of 0) y4))
+                                           (* 2 ((_ @int_of 1) y4))
+                                           (* 4 ((_ @int_of 2) y4))
+                                           (* 8 ((_ @int_of 3) y4)))
+                                        (* 8 ((_ @int_of 3) y4)))
+                                    (-
+                                        (* 8 ((_ @int_of 3) x4))
+                                        (+ (* 1 ((_ @int_of 0) x4))
+                                           (* 2 ((_ @int_of 1) x4))
+                                           (* 4 ((_ @int_of 2) x4))
+                                           (* 8 ((_ @int_of 3) x4)))
+                                    )
+                                ) 1))) :rule pbblast_bvslt)"#: false,
+        }
+
+        "Zero-width bitvectors" {
+            r#"(step t1 (cl (= (bvslt x0 y0)
+                            (>= (+
+                                    (- (* 1 ((_ @int_of 0) y0)) (* 1 ((_ @int_of 0) y0)))
+                                    (- (* 1 ((_ @int_of 0) x0)) (* 1 ((_ @int_of 0) x0)))
+                                ) 1))) :rule pbblast_bvslt)"#: false,
+        }
     }
 }
 
@@ -3778,6 +3837,9 @@ fn pbblast_bvxor_ith_bit() {
 
             r#"(step t1 (cl (and (>= (+ x y) r_swap) (>= (+ r_swap x) y) (>= (+ r y) x) (>= 2 (+ r x y)))
                     ) :rule pbblast_bvxor_ith_bit :args (x y))"#: false,
+        }
+        "Wrong number of conclusion clauses" {
+            r#"(step t1 (cl) :rule pbblast_bvxor_ith_bit :args (x y))"#: false,
         }
     }
 }

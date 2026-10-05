@@ -26,4 +26,5 @@ rules affected by this elaboration pass are:
 - `forall_inst`
 - `subproof`
 - `ite_intro`
+- `distinct_elim`
 - `bfun_elim`

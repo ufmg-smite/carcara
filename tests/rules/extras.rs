@@ -298,6 +298,8 @@ fn la_mult_pos() {
             (declare-fun b () Int)
             (declare-fun x () Real)
             (declare-fun y () Real)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
         ",
         "Simple working examples" {
             "(step t1 (cl (=> (and (> 2 0) (> a b)) (> (* 2 a) (* 2 b))))
@@ -306,6 +308,9 @@ fn la_mult_pos() {
                 (and (> (/ 10.0 13.0) 0.0) (= x y))
                 (= (* (/ 10.0 13.0) x) (* (/ 10.0 13.0) y)))
             ) :rule la_mult_pos)": true,
+        }
+        "Not a comparison" {
+            "(step t1 (cl (=> (and (> 2 0) (or p q)) (or p q))) :rule la_mult_pos)": false,
         }
     }
 }
@@ -318,7 +323,12 @@ fn la_mult_neg() {
             (declare-fun b () Int)
             (declare-fun x () Real)
             (declare-fun y () Real)
+            (declare-fun p () Bool)
+            (declare-fun q () Bool)
         ",
+        "Not a comparison" {
+            "(step t1 (cl (=> (and (< (- 2) 0) (or p q)) (or p q))) :rule la_mult_neg)": false,
+        }
         "Simple working examples" {
             "(step t1 (cl (=> (and (< (- 2) 0) (>= a b)) (<= (* (- 2) a) (* (- 2) b))))
                 :rule la_mult_neg)": true,
@@ -368,6 +378,12 @@ fn la_mult_sign() {
                 (and (> a 0.0) (not (= b 0.0)) (> c 0.0))
                 (not (= (* a b c) 0.0)))
             ) :rule la_mult_sign)": false,
+        }
+        "Missing comparison for a monomial variable" {
+            // Regression test: this used to hit a `todo!()` and panic instead of returning a
+            // checker error
+            "(step t1 (cl (=> (> a 0.0) (> (* a b) 0.0))) :rule la_mult_sign)": false,
+            "(step t1 (cl (=> (> a 0.0) (> (* a b b) 0.0))) :rule la_mult_sign)": false,
         }
     }
 }
@@ -437,6 +453,8 @@ fn evaluate() {
         definitions = "
             (declare-const x Int)
             (declare-fun f (Int Int) Int)
+            (declare-datatype Color ((red) (green)))
+            (declare-const c Color)
         ",
         "Booleans" {
             "(step t1 (cl (=
@@ -448,7 +466,9 @@ fn evaluate() {
         }
         "Arithmetic" {
             "(step t1 (cl (= (+ 1 2 (* 3 (- 1))) 0)) :rule evaluate)": true,
-            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 0)) :rule evaluate)": true,
+            // `mod` uses Euclidean division, so `(mod (- 7) (- 3))` is 2, not -1
+            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 3)) :rule evaluate)": true,
+            "(step t1 (cl (= (+ (div 3 (abs 2)) (mod (- 7) (- 3))) 0)) :rule evaluate)": false,
             "(step t1 (cl (= (/ 1.0 (to_real 7)) 1/7)) :rule evaluate)": true,
         }
         "Bitvectors" {
@@ -464,10 +484,34 @@ fn evaluate() {
 
             // Regression
             "(step t1 (cl (= ((_ extract 0 0) (_ bv1 1)) #b1)) :rule evaluate)": true,
+            "(step t1 (cl (= (bvslt #b1111 #b0001) true)) :rule evaluate)": true,
+            "(step t1 (cl (= (bvslt #b1111 #b0001) false)) :rule evaluate)": false,
+        }
+        "Strings" {
+            "(step t1 (cl (= (str.< \"a\" \"b\") true)) :rule evaluate)": true,
+            "(step t1 (cl (= (str.< \"a\" \"b\") false)) :rule evaluate)": false,
         }
         "Partial evaluation" {
             "(step t1 (cl (= (+ x (+ 1 1)) (+ x 2))) :rule evaluate)": true,
             "(step t1 (cl (= (f x (+ 1 1)) (f x 2))) :rule evaluate)": false,
+        }
+        "Terms that are currently not evaluated" {
+            "(step t1 (cl (= (let ((y (+ 1 1))) y) (let ((y (+ 1 1))) y))) :rule evaluate)": true,
+
+            "(step t1 (cl (=
+                (match c ((red true) (green false)))
+                (match c ((red true) (green false)))
+            )) :rule evaluate)": true,
+
+            "(step t1 (cl (= (forall ((z Int)) true) (forall ((z Int)) true)))
+                :rule evaluate)": true,
+            "(step t1 (cl (= (choice ((z Int)) (= z 0)) (choice ((z Int)) (= z 0))))
+                :rule evaluate)": true,
+
+            "(step t1 (cl (= (f x (+ 1 1)) (f x (+ 1 1)))) :rule evaluate)": true,
+
+            "(step t1 (cl (= ((as const (Array Int Int)) 0) ((as const (Array Int Int)) 0)))
+                :rule evaluate)": true,
         }
         "Invalid examples" {
             "(step t1 (cl (= 2 (+ 1 1))) :rule evaluate)": false,
@@ -479,7 +523,7 @@ fn evaluate() {
 #[test]
 fn beta_equiv() {
     test_cases! {
-        definitions = "",
+        definitions = "(declare-fun y () Int)",
         "Simple working examples" {
             "(step t1 (cl (= ((lambda ((a Int) (b Int) (c Int)) (+ a b c)) 1 2 3) (+ 1 2 3)))
                 :rule beta_equiv)": true,
@@ -495,17 +539,28 @@ fn beta_equiv() {
                 (lambda ((a Int) (b Int) (c Int)) (+ a b c))
             )) :rule beta_equiv)": false,
         }
-        "Wrong arg names" {
+        "Alpha equivalence" {
             "(step t1 (cl (=
                 ((lambda ((a Int) (b Int) (c Int)) (+ a b c)) 1)
                 (lambda ((c Int) (b Int)) (+ 1 c b))
-            )) :rule beta_equiv)": false,
+            )) :rule beta_equiv)": true,
         }
         "Wrong body" {
             "(step t1 (cl (=
                 ((lambda ((a Int) (b Int) (c Int)) (+ a b c)) 1)
                 (lambda ((b Int) (c Int)) (+ 1 c b))
             )) :rule beta_equiv)": false,
+        }
+        "Argument captured by a remaining binding" {
+            "(step t1 (cl (=
+                ((lambda ((x Int) (y Int)) (+ x y)) y)
+                (lambda ((y Int)) (+ y y))
+            )) :rule beta_equiv)": false,
+
+            "(step t1 (cl (=
+                ((lambda ((x Int) (y Int)) (+ x y)) y)
+                (lambda ((w Int)) (+ y w))
+            )) :rule beta_equiv)": true,
         }
     }
 }

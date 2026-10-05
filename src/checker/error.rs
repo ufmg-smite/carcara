@@ -7,7 +7,7 @@ use crate::{
     utils::{Range, TypeName},
 };
 use rug::{Integer, Rational};
-use std::fmt;
+use std::{fmt, path::Path};
 use thiserror::Error;
 
 /// An error that occurred while checking a proof.
@@ -144,6 +144,14 @@ pub enum CheckerError {
     #[error("monomial relation does not match expected, got: '{0}'")]
     LaMultSignWrongRelation(Rc<Term>),
 
+    /// The `la_mult_sign` step is missing a comparison for a monomial variable.
+    #[error("missing comparison for monomial variable '{0}'")]
+    LaMultSignMissingComparison(Rc<Term>),
+
+    /// The operator in a `la_mult_pos` or `la_mult_neg` step is not a comparison operator.
+    #[error("'{0}' is not a comparison operator")]
+    InvalidComparisonOperator(Operator),
+
     // General errors
     /// A rule received the wrong number of premises.
     #[error("expected {0} premises, got {1}")]
@@ -160,10 +168,6 @@ pub enum CheckerError {
     /// An operation term contained the wrong number of terms.
     #[error("expected {1} terms in '{0}' term, got {2}")]
     WrongNumberOfTermsInOp(Operator, Range, usize),
-
-    /// A term was expected to appear in an operation term, but did not.
-    #[error("expected term '{1}' to appear in '{0}' term")]
-    TermDoesntAppearInOp(Operator, Rc<Term>),
 
     /// The conclusion clause of a premise had the wrong length.
     #[error("expected {1} terms in clause of step '{0}', got {2}")]
@@ -284,7 +288,7 @@ pub enum CheckerError {
     RareRuleExpectedLiteral(Rc<Term>),
 
     /// A `rare` rule with the given name was not found.
-    #[error("the rule {0} wasn`t found")]
+    #[error("the rule {0} was not found")]
     RareRuleNotFound(String),
 
     /// A `rare` rule received an unexpected number of premises.
@@ -306,6 +310,17 @@ pub enum CheckerError {
     /// An unknown rule was encountered.
     #[error("unknown rule")]
     UnknownRule,
+}
+
+impl CheckerError {
+    pub fn at(self, id: &str, rule: &str, file: &Path) -> crate::Error {
+        crate::Error::Checker {
+            inner: Box::new(self),
+            rule: rule.into(),
+            step: id.into(),
+            file: file.to_path_buf(),
+        }
+    }
 }
 
 /// Errors in which we expected two things to be equal but they weren't.

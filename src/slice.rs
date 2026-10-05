@@ -2,10 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::ast::{
-    Proof, ProofCommand, ProofStep, Rc, Subproof, Term,
-    pool::{PrimitivePool, TermPool},
-};
+use crate::ast::{Proof, ProofCommand, ProofStep, Rc, Subproof, Term, pool::Pool};
 
 enum PremiseType {
     Discharge,
@@ -104,7 +101,7 @@ struct Frame {
 fn get_slice_body(
     proof: &Proof,
     id: &str,
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     max_distance: usize,
 ) -> Option<Vec<ProofCommand>> {
     // The constant string trust to be used in the args list for every trust step
@@ -172,10 +169,8 @@ fn get_slice_body(
                 let ProofCommand::Step(ult) = &ult else {
                     unreachable!()
                 };
-                for (depth, i) in ult.premises.iter().chain(&ult.discharge) {
-                    // depth - 1 because root proof is not stored in subproof stack
-                    let id = subproof_stack[*depth - 1].commands[*i].id().to_owned();
-                    to_keep.insert(id, false);
+                for p in ult.premises.iter().chain(&ult.discharge) {
+                    to_keep.insert(iter.get_premise(*p).id().to_owned(), false);
                 }
             }
         }
@@ -233,7 +228,11 @@ fn get_slice_body(
                                         .filter(|(_, t)| matches!(t, PremiseType::Premise))
                                         .map(|(s, _)| id_to_index[s])
                                         .collect(),
-                                    proof_step.discharge.clone(),
+                                    premise_ids
+                                        .iter()
+                                        .filter(|(_, t)| matches!(t, PremiseType::Discharge))
+                                        .map(|(s, _)| id_to_index[s])
+                                        .collect(),
                                 )
                             } else {
                                 (Vec::new(), Vec::new())
@@ -345,7 +344,7 @@ fn get_slice_body(
 pub fn slice(
     proof: &Proof,
     id: &str,
-    pool: &mut PrimitivePool,
+    pool: &mut Pool,
     max_distance: usize,
 ) -> Option<(Proof, Vec<Rc<Term>>)> {
     let sliced_step_commands = get_slice_body(proof, id, pool, max_distance)?;
@@ -374,7 +373,7 @@ mod tests {
     use super::*;
     use crate::{
         ast::{ProofNodeForest, compare_forests},
-        parser::{self, parse_instance, parse_instance_with_pool},
+        parser::{self, parse, parse_with_pool},
     };
 
     const PROBLEM_STRING: &str = "
@@ -404,9 +403,16 @@ mod tests {
         (step t5.t2 (cl (not c)) :rule hole)
         (step t5 (cl c) :rule hole :premises (t5.t1))
         (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
+        (anchor :step t7)
+        (assume t7.a0 b)
+        (assume t7.a1 c)
+        (step t7.t0 (cl c) :rule hole :premises (t7.a1))
+        (step t7.t1 (cl (not c)) :rule hole)
+        (step t7 (cl (not c) c) :rule hole :premises (a0) :discharge (t7.a1))
+        (step t8 (cl) :rule hole :premises (t7))
     ";
 
-    const PAIRS: [(&str, (&str, usize)); 6] = [
+    const PAIRS: [(&str, (&str, usize)); 8] = [
         // from t4, d=0 (normal step)
         (
             "(step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
@@ -475,15 +481,39 @@ mod tests {
             (step slice_end (cl) :rule hole :premises (t6) :args (\"trust\"))",
             ("t6", 2),
         ),
+        // from t7.t1, the last step of the enclosing subproof has a premise in the root proof
+        (
+            "(assume a0 a)
+            (anchor :step t7)
+            (assume t7.a0 b)
+            (assume t7.a1 c)
+            (step t7.t1 (cl (not c)) :rule hole)
+            (step t7 (cl (not c) c) :rule hole :premises (a0) :discharge (t7.a1))
+            (step slice_end (cl) :rule hole :premises (t7) :args (\"trust\"))",
+            ("t7.t1", 0),
+        ),
+        // from t8, `t7.a0` is not kept, so the index of the discharged `t7.a1` changes
+        (
+            "(assume a0 a)
+            (anchor :step t7)
+            (assume t7.a1 c)
+            (step t7.t1 (cl (not c)) :rule hole :args (\"trust\"))
+            (step t7 (cl (not c) c) :rule hole :premises (a0) :discharge (t7.a1))
+            (step t8 (cl) :rule hole :premises (t7))
+            (step slice_end (cl) :rule hole :premises (t8) :args (\"trust\"))",
+            ("t8", 1),
+        ),
     ];
 
     #[test]
     fn test_slice() {
         let parser_config = parser::Config::new().parse_hole_args(true);
-        let (_, proof, _, mut pool) = parse_instance(
-            PROBLEM_STRING.into(),
-            PROOF_STRING.into(),
-            None,
+        let (_, proof, _, mut pool) = parse(
+            crate::Input {
+                problem: PROBLEM_STRING.into(),
+                proof: PROOF_STRING.into(),
+                rare_rules: None,
+            },
             parser_config,
         )
         .unwrap();
@@ -496,10 +526,12 @@ mod tests {
         assert!(slice(&proof, "a1", &mut pool, 0).is_none());
 
         for (expected, (id, d)) in PAIRS {
-            let (_, expected, _) = parse_instance_with_pool(
-                PROBLEM_STRING.into(),
-                expected.into(),
-                None,
+            let (_, expected, _) = parse_with_pool(
+                crate::Input {
+                    problem: PROBLEM_STRING.into(),
+                    proof: expected.into(),
+                    rare_rules: None,
+                },
                 parser_config,
                 &mut pool,
             )

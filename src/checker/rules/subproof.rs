@@ -2,7 +2,11 @@ use super::{
     CheckerError, EqualityError, RuleArgs, RuleResult, assert_clause_len, assert_eq,
     assert_is_expected, assert_num_premises, assert_polyeq, get_premise_term,
 };
-use crate::{ast::*, checker::error::SubproofError};
+use crate::{
+    ast::{pool::Pool, *},
+    checker::error::SubproofError,
+    utils::MultiSet,
+};
 use indexmap::{IndexMap, IndexSet};
 use std::collections::{HashMap, HashSet};
 
@@ -91,7 +95,6 @@ pub fn bind(
     // Since we are closing a subproof, we only care about the substitutions that were introduced
     // in it
     let context = context.last().unwrap();
-    let context = context.as_ref().unwrap();
 
     let (xs, ys): (IndexSet<_>, IndexSet<_>) = {
         let (mut xs, mut ys) = (IndexSet::new(), IndexSet::new());
@@ -118,7 +121,7 @@ pub fn bind(
 
     let (l_bindings, r_bindings): (IndexSet<_>, IndexSet<_>) = (
         l_bindings.difference(&r_bindings).cloned().collect(),
-        r_bindings.difference(&r_bindings).cloned().collect(),
+        r_bindings.difference(&l_bindings).cloned().collect(),
     );
 
     // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
@@ -148,8 +151,7 @@ pub fn r#let(
     assert_clause_len(conclusion, 1)?;
 
     // Since we are closing a subproof, we only care about the mappings that were introduced in it
-    let context = context.last().unwrap();
-    let args = &context.as_ref().unwrap().args;
+    let args = &context.last().unwrap().args;
     let mappings: IndexMap<Rc<Term>, Rc<Term>> = args
         .iter()
         .filter_map(|arg| {
@@ -205,10 +207,12 @@ pub fn r#let(
     Ok(())
 }
 
-fn extract_points(quant: Binder, term: &Rc<Term>) -> HashSet<(String, Rc<Term>)> {
+fn extract_points(pool: &mut Pool, quant: Binder, term: &Rc<Term>) -> HashSet<(String, Rc<Term>)> {
     fn find_points(
+        pool: &mut Pool,
         acc: &mut HashSet<(String, Rc<Term>)>,
         seen: &mut HashSet<(Rc<Term>, bool)>,
+        shadowed: &mut MultiSet<String>,
         polarity: bool,
         term: &Rc<Term>,
     ) {
@@ -219,33 +223,57 @@ fn extract_points(quant: Binder, term: &Rc<Term>) -> HashSet<(String, Rc<Term>)>
         seen.insert(key);
 
         if let Some(inner) = term.remove_negation() {
-            return find_points(acc, seen, !polarity, inner);
+            return find_points(pool, acc, seen, shadowed, !polarity, inner);
         }
-        if let Some((_, _, inner)) = term.as_quant() {
-            return find_points(acc, seen, polarity, inner);
+        if let Some((_, bindings, inner)) = term.as_quant() {
+            // When entering a nested quantifier, all variables it binds are shadowed, so we don't
+            // count its points as points for the outer variable
+            shadowed.extend(bindings.iter().map(|(var, _)| var.clone()));
+
+            // The bindings also invalidate the seen cache, so we must use a fresh one
+            find_points(pool, acc, &mut HashSet::new(), shadowed, polarity, inner);
+
+            for (var, _) in bindings {
+                shadowed.remove(var);
+            }
+            return;
         }
+
+        // An equality (= x t) cannot be a point if it contains a shadowed variable. That could
+        // either be `x` itself, or a free variable in `t`.
+        let mut contains_shadowed_var = |a: &str, b: &Rc<Term>| {
+            shadowed.contains(a)
+                || pool
+                    .free_vars(b)
+                    .iter()
+                    .any(|v| shadowed.contains(v.as_var().unwrap()))
+        };
         match polarity {
             true => {
                 if let Some((a, b)) = match_term!((= a b) = term) {
-                    if let Some(a) = a.as_var() {
+                    if let Some(a) = a.as_var()
+                        && !contains_shadowed_var(a, b)
+                    {
                         acc.insert((a.to_owned(), b.clone()));
                     }
-                    if let Some(b) = b.as_var() {
+                    if let Some(b) = b.as_var()
+                        && !contains_shadowed_var(b, a)
+                    {
                         acc.insert((b.to_owned(), a.clone()));
                     }
                 } else if let Some(args) = match_term!((and ...) = term) {
                     for a in args {
-                        find_points(acc, seen, true, a);
+                        find_points(pool, acc, seen, shadowed, true, a);
                     }
                 }
             }
             false => {
                 if let Some((p, q)) = match_term!((=> p q) = term) {
-                    find_points(acc, seen, true, p);
-                    find_points(acc, seen, false, q);
+                    find_points(pool, acc, seen, shadowed, true, p);
+                    find_points(pool, acc, seen, shadowed, false, q);
                 } else if let Some(args) = match_term!((or ...) = term) {
                     for a in args {
-                        find_points(acc, seen, false, a);
+                        find_points(pool, acc, seen, shadowed, false, a);
                     }
                 }
             }
@@ -253,8 +281,14 @@ fn extract_points(quant: Binder, term: &Rc<Term>) -> HashSet<(String, Rc<Term>)>
     }
 
     let mut result = HashSet::new();
-    let mut seen = HashSet::new();
-    find_points(&mut result, &mut seen, quant == Binder::Exists, term);
+    find_points(
+        pool,
+        &mut result,
+        &mut HashSet::new(),
+        &mut MultiSet::new(),
+        quant == Binder::Exists,
+        term,
+    );
     result
 }
 
@@ -293,7 +327,7 @@ pub fn onepoint(
         }
     );
 
-    let points = extract_points(quant, left);
+    let points = extract_points(pool, quant, left);
 
     // Since a substitution may use a variable introduced in a previous substitution, we apply the
     // substitution to the points in order to replace these variables by their value.
@@ -303,7 +337,6 @@ pub fn onepoint(
         .collect();
 
     let context = context.last().unwrap();
-    let context = context.as_ref().unwrap();
     let mut mappings = context.args.iter().filter_map(AnchorArg::as_assign);
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
@@ -386,8 +419,7 @@ fn generic_skolemization_rule(
         current_phi = context.apply_previous(pool, &current_phi);
     }
 
-    let context = context.last().unwrap();
-    let args = context.as_ref().unwrap().args.iter();
+    let args = context.last().unwrap().args.iter();
 
     let substitution: HashMap<Rc<Term>, Rc<Term>> = args
         .filter_map(AnchorArg::as_assign)

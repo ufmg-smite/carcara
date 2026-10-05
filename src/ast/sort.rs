@@ -142,14 +142,14 @@ impl Sort {
 
     /// Computes whether this sort is compatible with another.
     ///
-    /// That is, this method returns `true` if we can find a substitution to the sort variables of
-    /// `self` that will make it equal to `target`.
+    /// That is, this method returns `true` if there exists a substitution to the sort variables of
+    /// `self` that will make it equal to `other`.
     pub fn is_compatible(&self, other: &Self) -> bool {
-        fn all_compatible<'i, I: IntoIterator<Item = &'i Rc<Sort>>>(xs: I, ys: I) -> bool {
-            xs.into_iter().zip(ys).all(|(x, y)| x.is_compatible(y))
+        fn all_compatible(xs: &[Rc<Sort>], ys: &[Rc<Sort>]) -> bool {
+            xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.is_compatible(y))
         }
 
-        if self == other {
+        if self.param_eq(other) {
             return true;
         }
 
@@ -157,8 +157,6 @@ impl Sort {
             (Sort::Var(_), _) | (_, Sort::Var(_)) => true,
             (Sort::Par(_, a), b) => a.is_compatible(b),
             (a, Sort::Par(_, b)) => a.is_compatible(b),
-            (Sort::ParamBitVec, Sort::BitVec(_) | Sort::ParamBitVec)
-            | (Sort::BitVec(_), Sort::ParamBitVec) => true,
 
             (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
                 a == b && all_compatible(sorts_a, sorts_b)
@@ -169,7 +167,7 @@ impl Sort {
                 Sort::Datatype { name: name_b, args: args_b },
             ) => name_a == name_b && all_compatible(args_a, args_b),
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
-                all_compatible([x_a, y_a], [x_b, y_b])
+                x_a.is_compatible(x_b) && y_a.is_compatible(y_b)
             }
             (Sort::Set(a), Sort::Set(b)) => a.is_compatible(b),
             (Sort::Tuple(sorts_a), Sort::Tuple(sorts_b)) => all_compatible(sorts_a, sorts_b),
@@ -177,45 +175,63 @@ impl Sort {
         }
     }
 
-    /// Computes whether this sort is compatible with another, and constructs the needed
-    /// substitution.
+    /// Computes whether this sort can be matched with another, given the set of sort parameters,
+    /// and constructs the needed substitution.
     ///
-    /// That is, this method returns `true` if we can find a substitution to the sort variables of
-    /// `self` that will make it equal to `target`. In that case, the `map` argument will store the
+    /// That is, this method returns `true` if we can find a substitution to the sort parameters
+    /// that will make `self` equal to `target`. In that case, the `map` argument will store the
     /// constructed substitution.
-    pub fn is_compatible_with_map(
+    pub fn match_with(
         &self,
+        params: &[String],
         target: &Rc<Sort>,
         map: &mut RapidHashMap<String, Rc<Sort>>,
     ) -> bool {
-        fn all_compatible<'i, I>(xs: I, ys: I, map: &mut RapidHashMap<String, Rc<Sort>>) -> bool
-        where
-            I: IntoIterator<Item = &'i Rc<Sort>>,
-        {
-            xs.into_iter()
-                .zip(ys)
-                .all(|(x, y)| x.is_compatible_with_map(y, map))
+        fn all_match(
+            xs: &[Rc<Sort>],
+            ys: &[Rc<Sort>],
+            params: &[String],
+            map: &mut RapidHashMap<String, Rc<Sort>>,
+        ) -> bool {
+            xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.match_with(params, y, map))
         }
 
         if self == target.as_ref() {
             return true;
         }
 
-        match (self, target.as_ref()) {
-            (Sort::Var(a), _) => {
-                match map.entry(a.clone()) {
-                    Entry::Vacant(e) => e.insert(target.clone()),
-                    Entry::Occupied(e) => return e.get() == target,
-                };
-                true
+        if let Sort::Var(a) = self {
+            if !params.contains(a) {
+                return false;
             }
-            (Sort::Par(_, a), _) => a.is_compatible_with_map(target, map),
-            (a, Sort::Par(_, b)) => a.is_compatible_with_map(b, map),
+            match map.entry(a.clone()) {
+                Entry::Vacant(e) => e.insert(target.clone()),
+                Entry::Occupied(e) => return e.get().param_eq(target),
+            };
+            return true;
+        }
+
+        match (self, target.as_ref()) {
+            (Sort::Par(vars, a), _) => {
+                // A `par` on the pattern side introduces further bindable variables.
+                let mut params = params.to_vec();
+                params.extend(vars.iter().cloned());
+                a.match_with(&params, target, map)
+            }
+            (a, Sort::Par(vars, b)) => {
+                // A target `par` is only instantiable if all of its bound variables are pattern
+                // parameters. Otherwise they are private to the target and could be captured by
+                // the substitution.
+                if !vars.iter().all(|v| params.contains(v)) {
+                    return false;
+                }
+                a.match_with(params, b, map)
+            }
             (Sort::Atom(a, sorts_a), Sort::Atom(b, sorts_b)) => {
-                a == b && all_compatible(sorts_a, sorts_b, map)
+                a == b && all_match(sorts_a, sorts_b, params, map)
             }
             (Sort::Function(sorts_a), Sort::Function(sorts_b)) => {
-                all_compatible(sorts_a, sorts_b, map)
+                all_match(sorts_a, sorts_b, params, map)
             }
 
             // The datatype name and arguments are sufficient to uniquely specify a datatype sort,
@@ -223,13 +239,177 @@ impl Sort {
             (
                 Sort::Datatype { name: name_a, args: args_a, .. },
                 Sort::Datatype { name: name_b, args: args_b, .. },
-            ) => name_a == name_b && all_compatible(args_a, args_b, map),
+            ) => name_a == name_b && all_match(args_a, args_b, params, map),
             (Sort::Array(x_a, y_a), Sort::Array(x_b, y_b)) => {
-                all_compatible([x_a, y_a], [x_b, y_b], map)
+                x_a.match_with(params, x_b, map) && y_a.match_with(params, y_b, map)
             }
-            (Sort::Set(a), Sort::Set(b)) => a.is_compatible_with_map(b, map),
-            (Sort::Tuple(sorts_a), Sort::Tuple(sorts_b)) => all_compatible(sorts_a, sorts_b, map),
+            (Sort::Set(a), Sort::Set(b)) => a.match_with(params, b, map),
+            (Sort::Tuple(sorts_a), Sort::Tuple(sorts_b)) => {
+                all_match(sorts_a, sorts_b, params, map)
+            }
             _ => self.param_eq(target),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::build_sort;
+    use crate::ast::pool::Pool;
+    use rapidhash::{HashMapExt, RapidHashMap};
+
+    /// Collects the free sort variables occurring in `sort`
+    fn free_vars(sort: &Sort) -> Vec<String> {
+        match sort {
+            Sort::Var(name) => vec![name.clone()],
+            Sort::Atom(_, args) => args.iter().flat_map(|s| free_vars(s)).collect(),
+            Sort::Function(args) | Sort::Tuple(args) => {
+                args.iter().flat_map(|s| free_vars(s)).collect()
+            }
+            Sort::Datatype { args, .. } => args.iter().flat_map(|s| free_vars(s)).collect(),
+            Sort::Array(x, y) => {
+                let mut names = free_vars(x);
+                names.extend(free_vars(y));
+                names
+            }
+            Sort::Set(s) => free_vars(s),
+            Sort::Par(vars, s) => {
+                let mut names = free_vars(s);
+                names.retain(|n| !vars.contains(n));
+                names
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    #[test]
+    fn compatible_cases() {
+        let mut pool = Pool::new();
+
+        let cases = [
+            (build_sort!(pool, Int), build_sort!(pool, Int)),
+            (build_sort!(pool, Bool), build_sort!(pool, Bool)),
+            (build_sort!(pool, (BitVec 8)), build_sort!(pool, (BitVec 8))),
+            (
+                build_sort!(pool, ParamBitVec),
+                build_sort!(pool, (BitVec 8)),
+            ),
+            (
+                build_sort!(pool, (BitVec 8)),
+                build_sort!(pool, ParamBitVec),
+            ),
+            (build_sort!(pool, a), build_sort!(pool, Int)),
+            (build_sort!(pool, a), build_sort!(pool, a)),
+            (build_sort!(pool, (par (a) Int)), build_sort!(pool, Int)),
+            (
+                build_sort!(pool, (Atom "S" Int)),
+                build_sort!(pool, (Atom "S" Int)),
+            ),
+            (
+                build_sort!(pool, (-> Int Bool)),
+                build_sort!(pool, (-> Int Bool)),
+            ),
+            (
+                build_sort!(pool, (Datatype "D" Int)),
+                build_sort!(pool, (Datatype "D" Int)),
+            ),
+            (
+                build_sort!(pool, (Array Int Bool)),
+                build_sort!(pool, (Array Int Bool)),
+            ),
+            (build_sort!(pool, (Set Int)), build_sort!(pool, (Set Int))),
+            (
+                build_sort!(pool, (Tuple Int Bool)),
+                build_sort!(pool, (Tuple Int Bool)),
+            ),
+            // A sort variable can be bound to make both sides compatible.
+            (
+                build_sort!(pool, (Atom "S" a)),
+                build_sort!(pool, (Atom "S" Int)),
+            ),
+            (build_sort!(pool, (-> a)), build_sort!(pool, (-> Int))),
+        ];
+
+        for (a, b) in cases {
+            assert!(a.is_compatible(&b));
+            let mut map = RapidHashMap::new();
+            assert!(a.match_with(&free_vars(&a), &b, &mut map));
+        }
+    }
+
+    #[test]
+    fn arity_mismatch_is_incompatible() {
+        let mut pool = Pool::new();
+
+        let cases = [
+            (
+                build_sort!(pool, (-> Int)),
+                build_sort!(pool, (-> Int Bool)),
+            ),
+            (
+                build_sort!(pool, (Atom "S" Int)),
+                build_sort!(pool, (Atom "S" Int Bool)),
+            ),
+            (
+                build_sort!(pool, (Datatype "D" Int)),
+                build_sort!(pool, (Datatype "D" Int Bool)),
+            ),
+            (
+                build_sort!(pool, (Tuple Int Bool)),
+                build_sort!(pool, (Tuple Int)),
+            ),
+        ];
+
+        for (a, b) in cases {
+            assert!(!a.is_compatible(&b));
+            let mut map = RapidHashMap::new();
+            assert!(!a.match_with(&free_vars(&a), &b, &mut map));
+        }
+    }
+
+    #[test]
+    fn repeated_var_consistency_uses_param_eq() {
+        let mut pool = Pool::new();
+        let func = build_sort!(pool, (-> n n));
+
+        // `n` is first bound to `ParamBitVec`, then matched against `BitVec(8)`.
+        let target = build_sort!(pool, (-> ParamBitVec (BitVec 8)));
+        let mut map = RapidHashMap::new();
+        assert!(func.match_with(&free_vars(&func), &target, &mut map));
+        assert_eq!(map["n"], build_sort!(pool, ParamBitVec));
+
+        // Same, but with the two bitvector sorts swapped.
+        let target = build_sort!(pool, (-> (BitVec 8) ParamBitVec));
+        let mut map = RapidHashMap::new();
+        assert!(func.match_with(&free_vars(&func), &target, &mut map));
+        assert_eq!(map["n"], build_sort!(pool, (BitVec 8)));
+    }
+
+    #[test]
+    fn par_target_bound_variables_are_not_captured() {
+        let mut pool = Pool::new();
+
+        // self = (-> x x), with parameter x
+        let self_sort = build_sort!(pool, (-> x x));
+        // target = (par (y) (-> y y))
+        let target = build_sort!(pool, (par (y) (-> y y)));
+
+        let mut map = RapidHashMap::new();
+        assert!(!self_sort.match_with(&free_vars(&self_sort), &target, &mut map),);
+    }
+
+    /// A `Par` on the target side is still instantiable when its variables are already accounted
+    /// for. This mirrors using a polymorphic constant (such as `nil`, of sort `(par (T) (List T))`)
+    /// where the surrounding context has already fixed `T`.
+    #[test]
+    fn target_par_is_instantiable_when_its_variable_is_known() {
+        let mut pool = Pool::new();
+        let list_t = build_sort!(pool, (Datatype "List" T));
+        let target = build_sort!(pool, (par (T) (Datatype "List" T)));
+
+        let mut map = RapidHashMap::new();
+        map.insert("T".into(), build_sort!(pool, Bool));
+        assert!(list_t.match_with(&free_vars(&list_t), &target, &mut map));
     }
 }

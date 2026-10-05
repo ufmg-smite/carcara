@@ -156,7 +156,7 @@ impl Rc<ProofNode> {
                     continue;
                 }
                 ProofNode::Subproof(s) if !is_done => {
-                    // First, we add all of the subproof's outbound premises if he haven't already
+                    // First, we add all of the subproof's outbound premises if we haven't already
                     if !did_outbound.contains(&node) {
                         did_outbound.insert(node);
                         todo.push((node, false));
@@ -174,17 +174,6 @@ impl Rc<ProofNode> {
             visit_func(node);
             seen.insert(node);
         }
-    }
-
-    /// Returns a vector containing this proofs root-level assumptions
-    pub fn get_assumptions(&self) -> Vec<Rc<ProofNode>> {
-        let mut result = Vec::new();
-        self.traverse(|node| {
-            if let ProofNode::Assume { depth: 0, .. } = node.as_ref() {
-                result.push(node.clone());
-            }
-        });
-        result
     }
 
     /// Returns a vector containing this proof's assumptions of the desired level
@@ -239,7 +228,7 @@ pub struct SubproofNode {
     /// The arguments of the subproof.
     ///
     /// They can be either a variable declaration, of the form `(<symbol> <sort>)`, or an
-    /// assignment, of the form `(:= <symbol> <term>)`.
+    /// assignment, of the form `(:= (<symbol> <sort>) <term>)`.
     pub args: Vec<AnchorArg>,
 
     /// The outbound premises of a subproof, that is, the premises from steps in the subproof that
@@ -425,7 +414,7 @@ fn proof_nodes_to_list(proof: &ProofNodeForest) -> Vec<ProofCommand> {
                     "all outbound premises should have already been dealt with!"
                 );
 
-                // First, we add all of the subproof's outbound premises if he haven't already
+                // First, we add all of the subproof's outbound premises if we haven't already
                 if !did_outbound.contains(&node) {
                     did_outbound.insert(node);
                     todo.push((node, false));
