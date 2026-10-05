@@ -112,7 +112,7 @@ fn test_metrics_add() {
 
 #[test]
 fn test_metrics_combine() {
-    fn run_tests(num_chunks: usize, chunk_size: usize, error_margin: f64) {
+    fn run_tests(num_chunks: usize, chunk_size: usize) {
         let mut rng = rand::rng();
         let mut overall_metrics = Metrics::new();
         let mut combined_metrics = Metrics::new();
@@ -135,25 +135,18 @@ fn test_metrics_combine() {
         let delta =
             combined_metrics.sum_of_squared_distances - overall_metrics.sum_of_squared_distances;
         let error = delta.abs() / overall_metrics.sum_of_squared_distances;
-        assert!(error < error_margin, "{} ({})", error, num_chunks);
+        assert!(error < 1.0e-4, "{} ({})", error, num_chunks);
 
         assert_eq!(combined_metrics.max(), overall_metrics.max());
         assert_eq!(combined_metrics.min(), overall_metrics.min());
     }
 
-    // Depending on how big the chunks are, the numerical error may be bigger or smaller. For a
-    // small number of very large chunks, the error margin is pretty low
-    run_tests(100, 10_000, 1.0e-5);
-    run_tests(100, 1_000, 1.0e-5);
-
-    // As the chunks get smaller, the error increases rapidly
-    run_tests(1_000, 100, 0.0001);
-    run_tests(1_000, 50, 0.001);
-    run_tests(10_000, 10, 0.02);
-    run_tests(10_000, 5, 0.05);
-    run_tests(10_000, 2, 0.3); // The worst case happens when the chunk size is 2
-
-    // When the chunks are only one data entry in size, `Metrics::combine` simply calls
-    // `Metrics::add_sample` with that entry, which makes the numerical error small again
-    run_tests(10_000, 1, 1.0e-6);
+    run_tests(100, 10_000);
+    run_tests(100, 1_000);
+    run_tests(1_000, 100);
+    run_tests(1_000, 50);
+    run_tests(10_000, 10);
+    run_tests(10_000, 5);
+    run_tests(10_000, 2);
+    run_tests(10_000, 1);
 }

@@ -215,22 +215,12 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
         }
     }
 
-    /// Combines two metrics into one. If one the metrics has only one data point, this is
-    /// equivalent to `Metrics::add_sample`. This is generally numerically stable if the metrics
-    /// have many data points, or exactly one. If one of the metrics is small, the error in the
-    /// variance introduced by using this method (as opposed to using `Metrics::add_sample` on each
-    /// data point) can be as high as 30%.
+    /// Combines two metrics into one. Up to floating-point error, this is equivalent to adding
+    /// every data point of `other` to `self` using `Metrics::add_sample`.
     pub fn combine(self, other: Self) -> Self {
         match (self.count, other.count) {
             (0, _) => return other,
             (_, 0) => return self,
-            (1, _) => {
-                let mut result = other;
-                let only_entry = self.min();
-                result.add_sample(&only_entry.0, only_entry.1);
-                return result;
-            }
-            (_, 1) => return other.combine(self),
             _ => (),
         }
         let total = self.total + other.total;
@@ -242,7 +232,7 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
         let delta = other.mean.absolute_diff(self.mean).as_f64();
         let sum_of_squared_distances = self.sum_of_squared_distances
             + other.sum_of_squared_distances
-            + delta * delta * (self.count * other.count / count) as f64;
+            + delta * delta * (self.count * other.count) as f64 / count as f64;
 
         let max_min = match (self.max_min, other.max_min) {
             (a, None) => a,
