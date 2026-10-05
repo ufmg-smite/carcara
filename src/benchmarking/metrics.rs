@@ -253,6 +253,11 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
         }
     }
 
+    /// Like [`Self::combine`], but modifies `self` in-place.
+    pub fn combine_in_place(&mut self, other: Self) {
+        *self = std::mem::take(self).combine(other);
+    }
+
     /// Returns `true` if the collection contains no samples.
     pub fn is_empty(&self) -> bool {
         self.count == 0

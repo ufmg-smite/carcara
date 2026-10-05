@@ -6,33 +6,8 @@ mod tests;
 
 pub use metrics::*;
 
-use indexmap::{IndexMap, IndexSet, map::Entry};
+use indexmap::{IndexMap, IndexSet};
 use std::{fmt, fs, hash::Hash, io, sync::Arc, time::Duration};
-
-fn combine_map<S, K, V>(
-    mut a: IndexMap<S, Metrics<K, V>>,
-    b: IndexMap<S, Metrics<K, V>>,
-) -> IndexMap<S, Metrics<K, V>>
-where
-    S: Eq + Hash,
-    K: Clone,
-    V: MetricsUnit,
-{
-    for (k, v) in b {
-        match a.entry(k) {
-            Entry::Occupied(mut e) => {
-                // To take the old value from the entry without moving it entirely, we have
-                // to insert something in its place, so we insert an empty `Metrics`
-                let old = e.insert(Metrics::default());
-                e.insert(old.combine(v));
-            }
-            Entry::Vacant(e) => {
-                e.insert(v);
-            }
-        }
-    }
-    a
-}
 
 /// The unique identifier of a single proof step, given by its file, step ID, and rule.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -480,7 +455,13 @@ impl CollectStats for SummaryStats {
             total_accounted_for: a.total_accounted_for.combine(b.total_accounted_for),
             total: a.total.combine(b.total),
             step_time: a.step_time.combine(b.step_time),
-            step_time_by_rule: combine_map(a.step_time_by_rule, b.step_time_by_rule),
+            step_time_by_rule: {
+                let mut res = a.step_time_by_rule;
+                for (k, v) in b.step_time_by_rule {
+                    res.entry(k).or_default().combine_in_place(v);
+                }
+                res
+            },
 
             polyeq_time: a.polyeq_time.combine(b.polyeq_time),
             polyeq_time_ratio: a.polyeq_time_ratio.combine(b.polyeq_time_ratio),
