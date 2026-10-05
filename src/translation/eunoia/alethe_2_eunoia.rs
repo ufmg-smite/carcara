@@ -66,15 +66,13 @@ impl EunoiaTranslator {
             EunoiaList { list: arguments }
         };
 
-        self.get_mut_translator_data()
-            .translated_proof
-            .push(EunoiaCommand::Step {
-                id: id.to_owned(),
-                conclusion_clause: Some(conclusion),
-                rule: rule.clone(),
-                premises: EunoiaList { list: premises },
-                arguments: eunoia_arguments,
-            });
+        self.translation.translated_proof.push(EunoiaCommand::Step {
+            id: id.to_owned(),
+            conclusion_clause: Some(conclusion),
+            rule: rule.clone(),
+            premises: EunoiaList { list: premises },
+            arguments: eunoia_arguments,
+        });
     }
 
     /// Implements the construction of an Eunoia `step-pop` command, for the
@@ -103,7 +101,7 @@ impl EunoiaTranslator {
         // subproof's context.
         arguments.push(EunoiaTerm::Id(self.get_last_introduced_context_id()));
 
-        self.get_mut_translator_data()
+        self.translation
             .translated_proof
             .push(EunoiaCommand::StepPop {
                 id: id.to_owned(),
@@ -140,7 +138,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             // First call to the method. We create a dummy context with no actual
             // information.
             None => {
-                self.get_mut_translator_data()
+                self.translation
                     .translated_proof
                     .push(EunoiaCommand::Define {
                         name: new_context_id.clone(),
@@ -149,34 +147,30 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         attrs: Vec::new(),
                     });
 
-                let ctx_assumption = self.alethe_signature.ctx_assumption.to_owned();
-                self.get_mut_translator_data()
+                self.translation
                     .translated_proof
                     .push(EunoiaCommand::Assume {
-                        name: ctx_assumption,
+                        name: self.alethe_signature.ctx_assumption.to_owned(),
                         term: EunoiaTerm::Id(new_context_id.clone()),
                     });
             }
 
             Some(ctx_params) => {
                 // { not ctx_params.is_empty() }
-                // Accessed here to avoid a mutable borrow later.
-                let ctx_constructor = self.alethe_signature.ctx.to_owned();
-                self.get_mut_translator_data()
+                self.translation
                     .translated_proof
                     .push(EunoiaCommand::Define {
                         name: new_context_id.clone(),
                         typed_params: EunoiaList { list: Vec::new() },
-                        term: EunoiaTerm::App(ctx_constructor, ctx_params),
+                        term: EunoiaTerm::App(self.alethe_signature.ctx.to_owned(), ctx_params),
                         attrs: Vec::new(),
                     });
 
                 // (assume-push context ctxn)
-                let ctx_assumption = self.alethe_signature.ctx_assumption.to_owned();
-                self.get_mut_translator_data()
+                self.translation
                     .translated_proof
                     .push(EunoiaCommand::AssumePush {
-                        name: ctx_assumption,
+                        name: self.alethe_signature.ctx_assumption.to_owned(),
                         term: EunoiaTerm::Id(new_context_id.clone()),
                     });
             }
@@ -203,23 +197,16 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 // TODO: encapsulate variables_in_scope
                 // TODO: see how to abstract this into a single function
                 match self
-                    .get_read_translator_data()
+                    .translation
                     .alethe_scopes
                     .variables_in_scope
                     .get_with_depth(name)
                 {
                     Some((depth, _)) => {
-                        if depth
-                            < self
-                                .get_read_translator_data()
-                                .alethe_scopes
-                                .variables_in_scope
-                                .height()
-                                - 1
-                        {
+                        if depth < self.translation.alethe_scopes.variables_in_scope.height() - 1 {
                             // This variable is bound somewhere else.  We
                             // shadow any previous def.
-                            self.get_mut_translator_data()
+                            self.translation
                                 .alethe_scopes
                                 .insert_variable_in_scope(name, &eunoia_sort);
 
@@ -232,7 +219,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
                     None => {
                         // This variable is not bound somewhere else.
-                        self.get_mut_translator_data()
+                        self.translation
                             .alethe_scopes
                             .insert_variable_in_scope(name, &eunoia_sort);
 
@@ -265,25 +252,17 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 // TODO: see how to abstract this into a single function, it is repeated
                 // above.
                 match self
-                    .get_read_translator_data()
+                    .translation
                     .alethe_scopes
                     .variables_in_scope
                     .get_with_depth(name)
                 {
                     Some((depth, _)) => {
                         // TODO: some better way to implement this
-                        // get_read_translator_data abstraction?
-                        if depth
-                            < self
-                                .get_read_translator_data()
-                                .alethe_scopes
-                                .variables_in_scope
-                                .height()
-                                - 1
-                        {
+                        if depth < self.translation.alethe_scopes.variables_in_scope.height() - 1 {
                             // This variable is bound somewhere else.  We
                             // shadow any previous def.
-                            self.get_mut_translator_data()
+                            self.translation
                                 .alethe_scopes
                                 .insert_variable_in_scope(name, &eunoia_sort);
 
@@ -305,7 +284,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
                     None => {
                         // This variable is not bound somewhere else.
-                        self.get_mut_translator_data()
+                        self.translation
                             .alethe_scopes
                             .insert_variable_in_scope(name, &eunoia_sort);
 
@@ -373,11 +352,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             // TODO: not considering the sort of the variable.
             Term::Var(string, _) => {
                 // Check if it is a variable introduced by some binder
-                match self
-                    .get_read_translator_data()
-                    .alethe_scopes
-                    .get_variable_in_scope(string)
-                {
+                match self.translation.alethe_scopes.get_variable_in_scope(string) {
                     Some(_) => self.build_var_binding(string),
 
                     None => EunoiaTerm::Id(string.clone()),
@@ -396,9 +371,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
             Term::Let(binding_list, scope) => {
                 // New scope.
-                self.get_mut_translator_data()
-                    .alethe_scopes
-                    .open_non_context_scope();
+                self.translation.alethe_scopes.open_non_context_scope();
 
                 let (bindings, translated_values) = self.translate_let_binding_list(binding_list);
 
@@ -413,7 +386,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                             }
                         };
 
-                        self.get_mut_translator_data()
+                        self.translation
                             .alethe_scopes
                             .insert_variable_in_scope(id, eunoia_sort);
                     }
@@ -432,7 +405,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                     translated_values,
                 );
 
-                self.get_mut_translator_data().alethe_scopes.close_scope();
+                self.translation.alethe_scopes.close_scope();
 
                 final_let_trans
             }
@@ -440,9 +413,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             Term::Binder(binder, binding_list, scope) => {
                 // New scope to shadow those context variables that
                 // now bound by this binder.
-                self.get_mut_translator_data()
-                    .alethe_scopes
-                    .open_non_context_scope();
+                self.translation.alethe_scopes.open_non_context_scope();
                 let translated_bindings = Self::translate_binding_list(binding_list);
                 match translated_bindings {
                     EunoiaTerm::List(ref bindings) => {
@@ -457,7 +428,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                                     }
                                 };
 
-                                self.get_mut_translator_data()
+                                self.translation
                                     .alethe_scopes
                                     .insert_variable_in_scope(id, eunoia_sort);
                             }
@@ -518,7 +489,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 };
 
                 // Closing the context...
-                self.get_mut_translator_data().alethe_scopes.close_scope();
+                self.translation.alethe_scopes.close_scope();
                 // self.local_steps.pop();
 
                 translated_binder
@@ -538,7 +509,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     /// PRE : { id is in scope }
     fn build_var_binding(&self, id: &str) -> EunoiaTerm {
         let sort = self
-            .get_read_translator_data()
+            .translation
             .alethe_scopes
             .get_variable_in_scope(&id.to_owned())
             .expect("Id is not in scope.")
@@ -680,11 +651,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     fn translate_assume(&mut self, id: &str, term: &Rc<Term>) -> EunoiaCommand {
         // Check last instruction in actual subproof
 
-        if self
-            .get_read_translator_data()
-            .last_steps
-            .last_steps_empty()
-        {
+        if self.translation.last_steps.last_steps_empty() {
             // Regular introduction of assumptions
             EunoiaCommand::Assume {
                 name: id.to_owned(),
@@ -694,12 +661,8 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 ),
             }
         } else {
-            // { not self.get_read_translator_data().last_steps.last_steps_empty() }
-            match self
-                .get_read_translator_data()
-                .last_steps
-                .get_last_step_rule()
-            {
+            // { not self.translation.last_steps.last_steps_empty() }
+            match self.translation.last_steps.get_last_step_rule() {
                 // "subproof" receives every "assume" command as an actual
                 // ethos assumption; we need to push every assumption
                 "subproof" => EunoiaCommand::AssumePush {
@@ -725,7 +688,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     /// Implements the translation of an Alethe `ProofStep`, taking into
     /// account technical differences in the way Alethe rules are
     /// expressed within Eunoia.
-    /// Updates `self.get_mut_translator_data().translated_proof`.
+    /// Updates `self.translation.translated_proof`.
     fn translate_step(
         &mut self,
         command: &ProofCommand,
@@ -832,14 +795,13 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                                     );
 
                                     // Get id of previous step
-                                    let eunoia_proof =
-                                        &self.get_read_translator_data().translated_proof;
+                                    let eunoia_proof = &self.translation.translated_proof;
 
                                     id_premise = eunoia_proof[eunoia_proof.len() - 1].get_step_id();
 
                                     // TODO: change id!
                                     // TODO: ethos does not complain about repeated ids
-                                    self.get_mut_translator_data().translated_proof.push(
+                                    self.translation.translated_proof.push(
                                         EunoiaCommand::StepPop {
                                             id: id.to_owned(),
                                             conclusion_clause: Some(implied_conclusion.clone()),
