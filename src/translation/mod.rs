@@ -216,7 +216,7 @@ pub trait VecToVecTranslator<'a> {
     /// context, it builds and returns its @var representation.
     /// That is, its representation as a variable bound by some
     /// enclosing context.
-    fn build_var_binding(&self, id: &str) -> Self::TermType;
+    fn build_var_binding(&mut self, id: &str) -> Self::TermType;
 
     /// Translates a `BindingList`: it builds a list of pairs (variable, type) for the binding
     /// occurrences, and returns this coupled with the original list of actual values, as a `@VarList`.
@@ -234,7 +234,7 @@ pub trait VecToVecTranslator<'a> {
     /// Hence the self reference.
     fn translate_operator(&self, operator: Operator) -> Self::OperatorType;
 
-    fn translate_constant(constant: &Constant) -> Self::TermType;
+    fn translate_constant(&mut self, constant: &Constant) -> Self::TermType;
 
     fn translate_sort(sort: &Sort) -> Self::TypeTermType;
 

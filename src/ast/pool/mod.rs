@@ -8,7 +8,7 @@ use super::{
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use std::sync::Arc;
-use storage::Storage;
+pub(crate) use storage::Storage;
 
 type RapidIndexMap<K, V> = IndexMap<K, V, rapidhash::fast::RandomState>;
 
