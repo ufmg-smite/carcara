@@ -373,7 +373,7 @@ mod tests {
     use super::*;
     use crate::{
         ast::{ProofNodeForest, compare_forests},
-        parser::{self, parse_instance, parse_instance_with_pool},
+        parser::{self, parse, parse_with_pool},
     };
 
     const PROBLEM_STRING: &str = "
@@ -508,10 +508,12 @@ mod tests {
     #[test]
     fn test_slice() {
         let parser_config = parser::Config::new().parse_hole_args(true);
-        let (_, proof, _, mut pool) = parse_instance(
-            PROBLEM_STRING.into(),
-            PROOF_STRING.into(),
-            None,
+        let (_, proof, _, mut pool) = parse(
+            crate::Input {
+                problem: PROBLEM_STRING.into(),
+                proof: PROOF_STRING.into(),
+                rare_rules: None,
+            },
             parser_config,
         )
         .unwrap();
@@ -524,10 +526,12 @@ mod tests {
         assert!(slice(&proof, "a1", &mut pool, 0).is_none());
 
         for (expected, (id, d)) in PAIRS {
-            let (_, expected, _) = parse_instance_with_pool(
-                PROBLEM_STRING.into(),
-                expected.into(),
-                None,
+            let (_, expected, _) = parse_with_pool(
+                crate::Input {
+                    problem: PROBLEM_STRING.into(),
+                    proof: expected.into(),
+                    rare_rules: None,
+                },
                 parser_config,
                 &mut pool,
             )

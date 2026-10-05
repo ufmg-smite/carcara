@@ -71,6 +71,14 @@ use thiserror::Error;
 /// A type alias for a `Result` whose error type is a Carcara error.
 pub type CarcaraResult<T> = Result<T, Error>;
 
+/// An input to Carcara: an SMT-LIB problem instance, its associated Alethe proof, and an optional
+/// set of Rare rules.
+pub struct Input<'s> {
+    pub problem: parser::Source<'s>,
+    pub proof: parser::Source<'s>,
+    pub rare_rules: Option<parser::Source<'s>>,
+}
+
 /// The result of a checking a proof, if no errors were found. Can be either "valid" or "holey"
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -162,22 +170,19 @@ pub enum Error {
 /// Parses and checks an Alethe proof against an SMT-LIB problem.
 ///
 /// The `Result` returned is `Ok` if the proof did not have errors, and contains the proof status.
-/// The `problem` and `proof` strings are the SMT-LIB problem and the Alethe proof to check. If
-/// `rules` is `Some`, it should contain a set of Rare rewrite rules to be used when checking.
+/// The `input` contains the SMT-LIB problem and the Alethe proof to check, and optionally a set of
+/// Rare rewrite rules to be used when checking.
 ///
 /// If `collect_stats` is true, benchmarking statistics will be collected and printed.
 pub fn check<'s>(
-    problem: parser::Source<'s>,
-    proof: parser::Source<'s>,
-    rules: Option<parser::Source<'s>>,
+    input: Input<'s>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
 ) -> Result<Status, Error> {
     // Parsing
     let start = Instant::now();
-    let (problem, proof, rules, mut pool) =
-        parser::parse_instance(problem, proof, rules, parser_config)?;
+    let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
 
     let parsing = start.elapsed();
 
@@ -218,9 +223,7 @@ pub fn check<'s>(
 /// otherwise, the platform's default stack size is used.
 #[allow(clippy::too_many_arguments)]
 pub fn check_parallel<'s>(
-    problem: parser::Source<'s>,
-    proof: parser::Source<'s>,
-    rules: Option<parser::Source<'s>>,
+    input: Input<'s>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     collect_stats: bool,
@@ -229,8 +232,7 @@ pub fn check_parallel<'s>(
 ) -> Result<Status, Error> {
     // Parsing
     let start = Instant::now();
-    let (problem, proof, rules, pool) =
-        parser::parse_instance(problem, proof, rules, parser_config)?;
+    let (problem, proof, rules, pool) = parser::parse(input, parser_config)?;
 
     let parsing = start.elapsed();
 
@@ -278,9 +280,7 @@ pub fn check_parallel<'s>(
 /// used.
 #[allow(clippy::too_many_arguments)]
 pub fn check_and_elaborate<'s>(
-    problem: parser::Source<'s>,
-    proof: parser::Source<'s>,
-    rules: Option<parser::Source<'s>>,
+    input: Input<'s>,
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: elaborator::Config,
@@ -291,8 +291,7 @@ pub fn check_and_elaborate<'s>(
 
     // Parsing (Complete rare rules)
     let total = Instant::now();
-    let (problem, proof, rules, mut pool) =
-        parser::parse_instance(problem, proof, rules, parser_config)?;
+    let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
     run.parsing = total.elapsed();
 
     let mut stats = OnlineBenchmarkResults::new();
@@ -354,14 +353,12 @@ pub fn check_and_elaborate<'s>(
 /// Each returned pair contains the ID of a `lia_generic` step and an SMT-LIB problem that
 /// corresponds to the negation of that step's conclusion clause.
 pub fn generate_lia_smt_instances<'s>(
-    problem: parser::Source<'s>,
-    proof: parser::Source<'s>,
-    rules: Option<parser::Source<'s>>,
+    input: Input<'s>,
     config: parser::Config,
     use_sharing: bool,
 ) -> Result<Vec<(String, String)>, Error> {
     use std::fmt::Write;
-    let (problem, proof, _, _) = parser::parse_instance(problem, proof, rules, config)?;
+    let (problem, proof, _, _) = parser::parse(input, config)?;
 
     let mut iter = proof.iter();
     let mut result = Vec::new();

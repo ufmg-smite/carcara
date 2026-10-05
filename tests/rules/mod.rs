@@ -7,10 +7,12 @@ use owo_colors::{AnsiColors, OwoColorize};
 fn run_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, &(proof, expected)) in cases.iter().enumerate() {
         // This parses the definitions again for every case, which is not ideal
-        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
-            definitions.into(),
-            proof.into(),
-            None,
+        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse(
+            carcara::Input {
+                problem: definitions.into(),
+                proof: proof.into(),
+                rare_rules: None,
+            },
             parser::Config::new().apply_function_defs(true),
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));

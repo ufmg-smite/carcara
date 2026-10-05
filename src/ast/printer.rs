@@ -964,10 +964,12 @@ mod tests {
             (step t6.t1 (cl (= (! (+ x 2) :named @p_3) @p_3)) :rule hole)\n\
             (step t6 (cl) :rule hole)\n\
         ";
-        let (_, proof, _, _) = parser::parse_instance(
-            definitions.into(),
-            proof.into(),
-            None,
+        let (_, proof, _, _) = parser::parse(
+            crate::Input {
+                problem: definitions.into(),
+                proof: proof.into(),
+                rare_rules: None,
+            },
             parser::Config::new(),
         )
         .unwrap();

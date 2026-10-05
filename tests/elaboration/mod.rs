@@ -18,9 +18,15 @@ fn run_tests(
     let mut result = true;
     let parser_config = parser::Config::new().apply_function_defs(true);
     for (i, case) in cases.iter().enumerate() {
-        let (problem, proof, _, mut pool) =
-            parser::parse_instance(case.problem.into(), case.proof.into(), None, parser_config)
-                .unwrap();
+        let (problem, proof, _, mut pool) = parser::parse(
+            carcara::Input {
+                problem: case.problem.into(),
+                proof: case.proof.into(),
+                rare_rules: None,
+            },
+            parser_config,
+        )
+        .unwrap();
 
         let mut elab = elaborator::Elaborator::new(&mut pool, &problem, config.clone());
         let elaborated = elab
@@ -32,10 +38,12 @@ fn run_tests(
             .expect("elaboration error")
             .into_commands();
 
-        let (_, expected, _) = parser::parse_instance_with_pool(
-            case.problem.into(),
-            case.expected.into(),
-            None,
+        let (_, expected, _) = parser::parse_with_pool(
+            carcara::Input {
+                problem: case.problem.into(),
+                proof: case.expected.into(),
+                rare_rules: None,
+            },
             parser_config,
             &mut pool,
         )

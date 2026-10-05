@@ -144,10 +144,12 @@ const BV_CONCAT_EXTRACT_MERGE_ALETHE: &str = r#"
 
 fn run_rare_tests(test_name: &str, definitions: &str, cases: &[(&str, bool)]) {
     for (i, &(proof, expected)) in cases.iter().enumerate() {
-        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse_instance(
-            definitions.into(),
-            proof.into(),
-            Some(RARE_RULES.into()),
+        let (mut problem, mut proof, rare_rules, mut pool) = parser::parse(
+            carcara::Input {
+                problem: definitions.into(),
+                proof: proof.into(),
+                rare_rules: Some(RARE_RULES.into()),
+            },
             parser::Config::new().apply_function_defs(true),
         )
         .unwrap_or_else(|e| panic!("parser error during test \"{}\": {}", test_name, e));
@@ -210,10 +212,12 @@ fn run_rare_file_test(
     rare_rules: &str,
     expected_status: Status,
 ) {
-    let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        problem.into(),
-        proof.into(),
-        Some(rare_rules.into()),
+    let (problem, proof, rare_rules, mut pool) = parser::parse(
+        carcara::Input {
+            problem: problem.into(),
+            proof: proof.into(),
+            rare_rules: Some(rare_rules.into()),
+        },
         parser::Config::new()
             .apply_function_defs(true)
             .expand_lets(true)

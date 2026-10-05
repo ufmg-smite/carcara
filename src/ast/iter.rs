@@ -27,7 +27,8 @@ use super::*;
 ///         :rule equiv1 :premises (t3))
 ///     (step t5 (cl) :rule resolution :premises (t4 h1 h2))
 /// ";
-/// let (_, proof, _, _) = parser::parse_instance("".into(), proof.into(), None, parser::Config::new())?;
+/// let input = Input { problem: "".into(), proof: proof.into(), rare_rules: None };
+/// let (_, proof, _, _) = parser::parse(input, parser::Config::new())?;
 /// let ids: Vec<_> = proof.iter().map(|c| c.id()).collect();
 /// assert_eq!(ids, ["h1", "h2", "t3", "t3.t1", "t3.t2", "t3", "t4", "t5"]);
 /// # Ok(())

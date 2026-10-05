@@ -37,10 +37,12 @@ fn run_job<T: CollectResults + Default + Send>(
     let total = Instant::now();
 
     let parsing = Instant::now();
-    let (problem, proof, rules, mut pool) = parser::parse_instance(
-        parser::Source::file(job.problem_file)?,
-        parser::Source::file(job.proof_file)?,
-        None,
+    let (problem, proof, rules, mut pool) = parser::parse(
+        carcara::Input {
+            problem: parser::Source::file(job.problem_file)?,
+            proof: parser::Source::file(job.proof_file)?,
+            rare_rules: None,
+        },
         parser_config,
     )?;
     let parsing = parsing.elapsed();

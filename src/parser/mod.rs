@@ -7,7 +7,7 @@ mod rare;
 pub(crate) mod tests;
 
 use crate::{
-    CarcaraResult, Error,
+    CarcaraResult, Error, Input,
     ast::{
         AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
         Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
@@ -179,37 +179,30 @@ impl Config {
 }
 
 /// Parses an SMT problem instance (in the SMT-LIB format) and its associated proof (in the Alethe
-/// format). If the optional argument `rules` is provided, also parses a set of Rare rewrite rules.
+/// format). If the instance includes a set of Rare rewrite rules, also parses them.
 ///
 /// This returns the parsed problem, proof, and rules, as well as the `Pool` used in parsing.
-pub fn parse_instance<'s>(
-    problem: Source<'s>,
-    proof: Source<'s>,
-    rules: Option<Source<'s>>,
-    config: Config,
-) -> CarcaraResult<(Problem, Proof, Rules, Pool)> {
+pub fn parse<'s>(input: Input<'s>, config: Config) -> CarcaraResult<(Problem, Proof, Rules, Pool)> {
     let mut pool = Pool::new();
-    parse_instance_with_pool(problem, proof, rules, config, &mut pool)
+    parse_with_pool(input, config, &mut pool)
         .map(|(prelude, proof, rules)| (prelude, proof, rules, pool))
 }
 
 /// Given an existing [`Pool`], parses an SMT problem instance (in the SMT-LIB format) and its
-/// associated proof (in the Alethe format). If the optional argument `rules` is provided, also
-/// parses a set of Rare rewrite rules.
+/// associated proof (in the Alethe format). If the instance includes a set of Rare rewrite rules,
+/// also parses them.
 ///
 /// This returns the parsed problem, proof, and rules.
-pub fn parse_instance_with_pool<'s>(
-    problem: Source<'s>,
-    proof: Source<'s>,
-    rules: Option<Source<'s>>,
+pub fn parse_with_pool<'s>(
+    input: Input<'s>,
     config: Config,
     pool: &mut Pool,
 ) -> CarcaraResult<(Problem, Proof, Rules)> {
-    let mut parser = Parser::new(pool, config, problem)?;
+    let mut parser = Parser::new(pool, config, input.problem)?;
     let problem = parser.parse_problem()?;
-    parser.reset(proof)?;
+    parser.reset(input.proof)?;
     let proof = parser.parse_proof()?;
-    if let Some(rules) = rules {
+    if let Some(rules) = input.rare_rules {
         parser.reset(rules)?;
         parser.config.allow_higher_order_indexed_ops = true;
         let rules = parser.parse_rare()?;

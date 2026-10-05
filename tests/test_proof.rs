@@ -1,10 +1,12 @@
 use carcara::{checker::*, parser};
 
 fn run_test(problem: &str, proof: &str, expected_result: bool) {
-    let (problem, proof, rare_rules, mut pool) = parser::parse_instance(
-        problem.into(),
-        proof.into(),
-        None,
+    let (problem, proof, rare_rules, mut pool) = parser::parse(
+        carcara::Input {
+            problem: problem.into(),
+            proof: proof.into(),
+            rare_rules: None,
+        },
         parser::Config::default(),
     )
     .unwrap();

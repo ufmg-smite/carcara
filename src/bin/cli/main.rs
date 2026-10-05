@@ -83,47 +83,35 @@ fn main() {
 }
 
 /// Reads the problem, proof and (optional) Rare rules sources given in the command-line input.
-fn get_instance(
-    options: &Input,
-) -> CliResult<(Source<'static>, Source<'static>, Option<Source<'static>>)> {
+fn get_input(options: &Input) -> CliResult<carcara::Input<'static>> {
     let problem_file = match &options.problem_file {
         Some(f) => f.clone(),
         None => infer_problem_path(&options.proof_file)?,
     };
     let problem = Source::file(problem_file)?;
     let proof = Source::file_or_stdin(&options.proof_file)?;
-    let rules = options.rare_file.as_ref().map(Source::file).transpose()?;
-    Ok((problem, proof, rules))
+    let rare_rules = options.rare_file.as_ref().map(Source::file).transpose()?;
+    Ok(carcara::Input { problem, proof, rare_rules })
 }
 
 fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::Pool)> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
-    let result = parser::parse_instance(problem, proof, rules, options.parsing.into_config())?;
+    let result = parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
     Ok(result)
 }
 
 fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
+    let input = get_input(&options.input)?;
     let parser_config = options.parsing.into_config();
     let checker_config = (options.checking, options.tools).into_config();
 
     let collect_stats = options.stats.stats;
     if options.num_threads.get() == 1 {
-        check(
-            problem,
-            proof,
-            rules,
-            parser_config,
-            checker_config,
-            collect_stats,
-        )
+        check(input, parser_config, checker_config, collect_stats)
     } else {
         check_parallel(
-            problem,
-            proof,
-            rules,
+            input,
             parser_config,
             checker_config,
             collect_stats,
@@ -137,15 +125,13 @@ fn check_command(options: CheckCommandOptions) -> CliResult<carcara::Status> {
 fn elaborate_command(
     options: ElaborateCommandOptions,
 ) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
+    let input = get_input(&options.input)?;
 
     let checker_config = (options.checking, options.tools.clone()).into_config();
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
     check_and_elaborate(
-        problem,
-        proof,
-        rules,
+        input,
         options.parsing.into_config(),
         checker_config,
         elab_config,
@@ -213,9 +199,8 @@ fn slice_command(
     options: SliceCommandOptions,
     no_print_with_sharing: bool,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::pool::Pool)> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
     let (problem, proof, _, mut pool) =
-        parser::parse_instance(problem, proof, rules, options.parsing.into_config())?;
+        parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
 
     let sliced = {
         let (sliced_proof, sliced_asserts) = slice::slice(
@@ -269,11 +254,8 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
     use std::io::Write;
 
     let root_file_name = options.input.proof_file.clone();
-    let (problem, proof, rules) = get_instance(&options.input)?;
     let instances = generate_lia_smt_instances(
-        problem,
-        proof,
-        rules,
+        get_input(&options.input)?,
         options.parsing.into_config(),
         use_sharing,
     )?;
@@ -291,10 +273,8 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 
 // Translation-related commands.
 fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
-    let (problem, proof, rules) = get_instance(&options.input)?;
-
     let (alethe_problem, mut alethe_proof, _, _) =
-        parser::parse_instance(problem, proof, rules, options.parsing.into_config())?;
+        parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
 
     // NOTE: currently supporting only translation into Eunoia.
     match &options.target {

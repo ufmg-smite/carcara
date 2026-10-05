@@ -155,10 +155,12 @@ pub fn parse_and_check_solver_proof(
         .expand_lets(true)
         .allow_int_real_subtyping(true);
 
-    let problem = parser::Source::new(Path::new("<problem sent to external tool>"), problem);
-    let proof = parser::Source::new(Path::new("<proof from external tool>"), proof);
-    let (problem, proof, rules) =
-        parser::parse_instance_with_pool(problem, proof, None, config, pool)?;
+    let input = crate::Input {
+        problem: parser::Source::new(Path::new("<problem sent to external tool>"), problem),
+        proof: parser::Source::new(Path::new("<proof from external tool>"), proof),
+        rare_rules: None,
+    };
+    let (problem, proof, rules) = parser::parse_with_pool(input, config, pool)?;
     let config = checker::Config::new().ignore_unknown_rules(true);
     let res = checker::Checker::new(pool, &rules, config).check(&problem, &proof)?;
     Ok((proof.commands, res))

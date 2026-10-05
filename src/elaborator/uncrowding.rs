@@ -415,7 +415,7 @@ mod tests {
     use super::*;
     use crate::{
         ast::{ProofNodeForest, compare_nodes},
-        parser::{self, parse_instance, parse_instance_with_pool},
+        parser::{self, parse, parse_with_pool},
     };
 
     #[test]
@@ -444,8 +444,15 @@ mod tests {
                 :premises (t1 t2 t3 t4 t5 t6 t7 t8)
                 :args (x true y true a true z true b true c true d true))
         ";
-        let (_, proof, _, mut pool) =
-            parse_instance(problem.into(), proof.into(), None, parser::Config::new()).unwrap();
+        let (_, proof, _, mut pool) = parse(
+            crate::Input {
+                problem: problem.into(),
+                proof: proof.into(),
+                rare_rules: None,
+            },
+            parser::Config::new(),
+        )
+        .unwrap();
         let proof = ProofNodeForest::from_commands(proof.commands)
             .0
             .pop()
@@ -475,10 +482,12 @@ mod tests {
             (step t9.t6 (cl d w) :rule contraction :premises (t9.t5))
             (step t9 (cl w) :rule resolution :premises (t9.t6 t8) :args (d true))
         ";
-        let (_, expected, _) = parse_instance_with_pool(
-            problem.into(),
-            expected.into(),
-            None,
+        let (_, expected, _) = parse_with_pool(
+            crate::Input {
+                problem: problem.into(),
+                proof: expected.into(),
+                rare_rules: None,
+            },
             parser::Config::new(),
             &mut pool,
         )
