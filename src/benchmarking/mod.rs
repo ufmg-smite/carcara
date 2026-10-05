@@ -92,8 +92,8 @@ pub struct SummaryStats {
     /// The time spent comparing `assume`d terms with their premises.
     pub assume_core_time: Metrics<RunId>,
 
-    /// The time spent in each elaboration pass.
-    pub pipeline_times: Vec<Duration>,
+    /// For each elaboration pass, the time per run spent in that pass.
+    pub pipeline_times: Vec<Metrics<RunId>>,
 
     /// The depth of each polyequality check that was performed.
     pub polyeq_depths: Metrics<(), usize>,
@@ -153,10 +153,15 @@ impl SummaryStats {
 
         println!("parsing:             {}", parsing);
         println!("checking:            {}", checking);
-        if !elaborating.is_empty() {
+        if !self.pipeline_times.is_empty() {
             println!("elaborating:         {}", elaborating);
-            for (i, p) in self.pipeline_times.iter().enumerate() {
-                println!("    pass {}:  {:?}", i, p);
+            for (i, pass) in self.pipeline_times.iter().enumerate() {
+                print!("    pass {}:          ", i);
+                if sort_by_total {
+                    println!("{:#}", pass);
+                } else {
+                    println!("{}", pass);
+                }
             }
         }
 
@@ -444,7 +449,13 @@ impl CollectStats for SummaryStats {
         self.polyeq_time_ratio.add_sample(id, polyeq_ratio);
         self.assume_time_ratio.add_sample(id, assume_ratio);
 
-        self.pipeline_times = elaboration_pipeline;
+        if self.pipeline_times.len() < elaboration_pipeline.len() {
+            self.pipeline_times
+                .resize_with(elaboration_pipeline.len(), Metrics::new);
+        }
+        for (pass, time) in self.pipeline_times.iter_mut().zip(elaboration_pipeline) {
+            pass.add_sample(id, time);
+        }
     }
 
     fn combine(a: Self, b: Self) -> Self {
@@ -474,12 +485,16 @@ impl CollectStats for SummaryStats {
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
             is_holey: a.is_holey || b.is_holey,
             had_error: a.had_error || b.had_error,
-            pipeline_times: a
-                .pipeline_times
-                .into_iter()
-                .zip(b.pipeline_times)
-                .map(|(a, b)| a + b)
-                .collect(),
+            pipeline_times: {
+                let mut res = a.pipeline_times;
+                if res.len() < b.pipeline_times.len() {
+                    res.resize_with(b.pipeline_times.len(), Metrics::new);
+                }
+                for (pass, other) in res.iter_mut().zip(b.pipeline_times) {
+                    pass.combine_in_place(other);
+                }
+                res
+            },
         }
     }
 
