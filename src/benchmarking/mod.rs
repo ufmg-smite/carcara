@@ -104,12 +104,6 @@ pub struct SummaryStats {
 
     /// The number of `assume` steps that required no polyequality.
     pub num_easy_assumes: usize,
-
-    /// Whether any of the checked proofs contained holes.
-    pub is_holey: bool,
-
-    /// Whether any of the runs finished with an error.
-    pub had_error: bool,
 }
 
 impl SummaryStats {
@@ -252,24 +246,12 @@ pub struct CsvStats {
     strings: RapidHashSet<Arc<str>>,
     runs: Vec<(RunId, RunMeasurement)>,
     steps: Vec<(Arc<str>, Duration)>,
-    is_holey: bool,
-    num_errors: usize,
 }
 
 impl CsvStats {
     /// Creates a new, empty `CsvStats`.
     pub fn new() -> Self {
         Default::default()
-    }
-
-    /// Returns `true` if any of the checked proofs contained holes.
-    pub fn is_holey(&self) -> bool {
-        self.is_holey
-    }
-
-    /// Returns the number of runs that finished with an error.
-    pub fn num_errors(&self) -> usize {
-        self.num_errors
     }
 
     fn intern(&mut self, s: &str) -> Arc<str> {
@@ -366,12 +348,6 @@ pub trait CollectStats {
     /// Records the timing measurements of a single run.
     fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement);
 
-    /// Records that a checked proof contained holes.
-    fn register_holey(&mut self);
-
-    /// Records that a run finished with an error.
-    fn register_error(&mut self, error: &crate::Error);
-
     /// Combines two sets of results into one.
     fn combine(a: Self, b: Self) -> Self
     where
@@ -465,8 +441,6 @@ impl CollectStats for SummaryStats {
             polyeq_depths: a.polyeq_depths.combine(b.polyeq_depths),
             num_assumes: a.num_assumes + b.num_assumes,
             num_easy_assumes: a.num_easy_assumes + b.num_easy_assumes,
-            is_holey: a.is_holey || b.is_holey,
-            had_error: a.had_error || b.had_error,
             pipeline_times: {
                 let mut res = a.pipeline_times;
                 if res.len() < b.pipeline_times.len() {
@@ -478,14 +452,6 @@ impl CollectStats for SummaryStats {
                 res
             },
         }
-    }
-
-    fn register_holey(&mut self) {
-        self.is_holey = true;
-    }
-
-    fn register_error(&mut self, _: &crate::Error) {
-        self.had_error = true;
     }
 }
 
@@ -505,20 +471,11 @@ impl CollectStats for CsvStats {
         self.runs.push((id.clone(), measurement));
     }
 
-    fn register_holey(&mut self) {
-        self.is_holey = true;
-    }
-
-    fn register_error(&mut self, _: &crate::Error) {
-        self.num_errors += 1;
-    }
-
     fn combine(mut a: Self, b: Self) -> Self {
         // This assumes that the same run never appears in both `a` and `b`. This should be the case
         // in benchmarks anyway
         a.runs.extend(b.runs);
         a.steps.extend(b.steps);
-        a.num_errors += b.num_errors;
         a
     }
 }

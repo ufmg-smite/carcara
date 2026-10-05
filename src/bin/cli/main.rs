@@ -8,7 +8,7 @@ mod path_args;
 use app::*;
 use carcara::{
     ast::{self, Proof, printer, rare_rules::Rules},
-    benchmarking::SummaryStats,
+    benchmarking::{CsvStats, SummaryStats},
     check, check_and_elaborate, check_parallel, generate_lia_smt_instances,
     parser::{self, Source},
     slice,
@@ -158,40 +158,32 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
 
     if options.dump_to_csv {
-        benchmarking::run_csv_benchmark(
+        let result = benchmarking::run_benchmark::<CsvStats>(
             &instances,
             options.num_runs,
             options.num_jobs,
             options.parsing.into_config(),
             checker_config,
             options.elaborate.then_some((elab_config, pipeline)),
-            "runs.csv",
-            "steps.csv",
-        )?;
-        return Ok(());
-    }
-
-    let results: SummaryStats = benchmarking::run_benchmark(
-        &instances,
-        options.num_runs,
-        options.num_jobs,
-        options.parsing.into_config(),
-        checker_config,
-        options.elaborate.then_some((elab_config, pipeline)),
-    );
-    if results.is_empty() {
-        println!("no benchmark data collected");
-        return Ok(());
-    }
-
-    if results.had_error {
-        println!("invalid");
-    } else if results.is_holey {
-        println!("holey");
+        );
+        result.print_status();
+        result.stats.write_csv("runs.csv", "steps.csv")?;
     } else {
-        println!("valid");
+        let result = benchmarking::run_benchmark::<SummaryStats>(
+            &instances,
+            options.num_runs,
+            options.num_jobs,
+            options.parsing.into_config(),
+            checker_config,
+            options.elaborate.then_some((elab_config, pipeline)),
+        );
+        result.print_status();
+        if result.stats.is_empty() {
+            println!("no benchmark data collected");
+        } else {
+            result.stats.print(options.sort_by_total);
+        }
     }
-    results.print(options.sort_by_total);
     Ok(())
 }
 

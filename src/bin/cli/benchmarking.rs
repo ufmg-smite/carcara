@@ -1,6 +1,6 @@
 use carcara::{
     ast,
-    benchmarking::{CollectStats, CsvStats, RunMeasurement},
+    benchmarking::{CollectStats, RunMeasurement},
     checker, elaborator, parser,
 };
 use crossbeam_queue::ArrayQueue;
@@ -16,6 +16,34 @@ struct JobDescriptor<'a> {
     problem_file: &'a Path,
     proof_file: &'a Path,
     run_index: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct BenchResult<S> {
+    pub num_errors: usize,
+    pub is_holey: bool,
+    pub stats: S,
+}
+
+impl<S: CollectStats> BenchResult<S> {
+    fn combine(a: Self, b: Self) -> Self {
+        Self {
+            num_errors: a.num_errors + b.num_errors,
+            is_holey: a.is_holey || b.is_holey,
+            stats: S::combine(a.stats, b.stats),
+        }
+    }
+
+    pub fn print_status(&self) {
+        println!("{} errors encountered during benchmark", self.num_errors);
+        if self.num_errors > 0 {
+            println!("invalid");
+        } else if self.is_holey {
+            println!("holey");
+        } else {
+            println!("valid");
+        }
+    }
 }
 
 fn run_job<T: CollectStats + Default + Send>(
@@ -91,28 +119,32 @@ fn worker_thread<T: CollectStats + Default + Send>(
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
-) -> T {
-    let mut results = T::default();
+) -> BenchResult<T> {
+    let mut res = BenchResult {
+        num_errors: 0,
+        is_holey: false,
+        stats: T::default(),
+    };
 
     while let Some(job) = jobs_queue.pop() {
         let result = run_job(
-            &mut results,
+            &mut res.stats,
             job,
             parser_config,
             checker_config.clone(),
             elaborator_config.clone(),
         );
         match result {
-            Ok(carcara::Status::Holey) => results.register_holey(),
-            Err(e) => {
+            Ok(carcara::Status::Holey) => res.is_holey = true,
+            Err(_) => {
                 log::error!("encountered error in file '{}'", job.proof_file.display());
-                results.register_error(&e);
+                res.num_errors += 1;
             }
             _ => (),
         }
     }
 
-    results
+    res
 }
 
 pub fn run_benchmark<T: CollectStats + Default + Send>(
@@ -122,7 +154,7 @@ pub fn run_benchmark<T: CollectStats + Default + Send>(
     parser_config: parser::Config,
     checker_config: checker::Config,
     elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
-) -> T {
+) -> BenchResult<T> {
     const STACK_SIZE: usize = 128 * 1024 * 1024;
 
     let jobs_queue = ArrayQueue::new(instances.len() * num_runs.get());
@@ -159,40 +191,7 @@ pub fn run_benchmark<T: CollectStats + Default + Send>(
         workers
             .into_iter()
             .map(|w| w.join().unwrap())
-            .reduce(T::combine)
+            .reduce(BenchResult::combine)
             .unwrap()
     })
-}
-
-#[allow(clippy::too_many_arguments)] // TODO: refactor this
-pub fn run_csv_benchmark(
-    instances: &[(PathBuf, PathBuf)],
-    num_runs: NonZero<usize>,
-    num_jobs: NonZero<usize>,
-    parser_config: parser::Config,
-    checker_config: checker::Config,
-    elaborator_config: Option<(elaborator::Config, Vec<elaborator::ElaborationPass>)>,
-    runs_file: &str,
-    steps_file: &str,
-) -> Result<(), carcara::Error> {
-    let result: CsvStats = run_benchmark(
-        instances,
-        num_runs,
-        num_jobs,
-        parser_config,
-        checker_config,
-        elaborator_config,
-    );
-    println!(
-        "{} errors encountered during benchmark",
-        result.num_errors()
-    );
-    if result.num_errors() > 0 {
-        println!("invalid");
-    } else if result.is_holey() {
-        println!("holey");
-    } else {
-        println!("valid");
-    }
-    result.write_csv(runs_file, steps_file)
 }
