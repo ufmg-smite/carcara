@@ -423,6 +423,7 @@ impl Pool {
                     let tuple = self.sorts.add(Sort::Tuple(left));
                     self.sorts.add(Sort::Set(tuple))
                 }
+                Operator::Custom(custom) => self.sorts.add(custom.def().return_sort.clone()),
             },
             Term::App(f, args) => {
                 let func_sort = self.compute_sort(f).clone();

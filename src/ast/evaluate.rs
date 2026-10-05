@@ -750,7 +750,8 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
         | Operator::RelTranspose
         | Operator::RelTclosure
         | Operator::RelJoin
-        | Operator::RelProduct => return None,
+        | Operator::RelProduct
+        | Operator::Custom(_) => return None,
     })
 }
 

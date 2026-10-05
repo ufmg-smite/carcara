@@ -1,4 +1,7 @@
-use super::{Rc, Sort, macros::impl_str_conversion_traits, match_term, match_term_err, pool::Pool};
+use super::{
+    Rc, Sort, custom_operator::CustomOperator, macros::impl_str_conversion_traits, match_term,
+    match_term_err, pool::Pool,
+};
 use crate::{CheckerError, automata::Automaton};
 use rug::{Integer, Rational};
 use std::{hash::Hash, ops::Deref};
@@ -543,6 +546,9 @@ pub enum Operator {
 
     /// The `rel.product` operator.
     RelProduct,
+
+    /// A custom operator, defined via `custom_operators.toml`.
+    Custom(CustomOperator),
 }
 
 /// A case for a `match` term.
@@ -764,6 +770,8 @@ impl Operator {
             | Operator::RelTclosure
             | Operator::RelJoin
             | Operator::RelProduct => None,
+
+            Operator::Custom(_) => None,
         }
     }
 }
@@ -968,6 +976,8 @@ impl_str_conversion_traits!(Operator {
     RelTclosure: "rel.tclosure",
     RelJoin: "rel.join",
     RelProduct: "rel.product",
+}, extra_display: |f| {
+    Operator::Custom(op) => write!(f, "{}", op.def().name),
 });
 
 impl_str_conversion_traits!(ParamOperator {
