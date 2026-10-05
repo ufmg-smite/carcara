@@ -6,6 +6,7 @@ use crate::translation::{
     Symbol, Translator, TranslatorData, VecToVecTranslator,
     eunoia::{alethe_signature::theory::*, ast::*},
 };
+use crate::utils::HashMapStack;
 
 pub struct EunoiaTranslator {
     /// "Alethe in Eunoia" signature considered during translation.
@@ -14,6 +15,8 @@ pub struct EunoiaTranslator {
     translation: TranslatorData<EunoiaType, EunoiaProof>,
 
     terms: pool::Storage<EunoiaTerm>,
+
+    cache: HashMapStack<Rc<Term>, Rc<EunoiaTerm>>,
 }
 
 impl EunoiaTranslator {
@@ -22,6 +25,7 @@ impl EunoiaTranslator {
             alethe_signature: AletheTheory::new(eunoia_mech),
             translation: TranslatorData::new(),
             terms: pool::Storage::default(),
+            cache: HashMapStack::default(),
         }
     }
 
@@ -29,6 +33,17 @@ impl EunoiaTranslator {
         let id = self.terms.add(EunoiaTerm::Id(id.to_owned()));
         let sort = self.terms.add(EunoiaTerm::Type(ty));
         self.terms.add(EunoiaTerm::List(vec![id.clone(), sort]))
+    }
+
+    /// Binds a variable in the current scope.
+    ///
+    /// Since this changes how terms that mention the variable are translated, it also invalidates
+    /// the current scope's cache.
+    fn bind_variable(&mut self, name: &str, sort: &EunoiaType) {
+        self.translation
+            .alethe_scopes
+            .insert_variable_in_scope(name, sort);
+        self.cache.clear_top();
     }
 
     /// Translates `BindingList` constructs, as used for binder terms forall, exists,
@@ -142,6 +157,18 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
         &self.translation
     }
 
+    fn scope_opened(&mut self) {
+        self.cache.push_scope();
+    }
+
+    fn scope_closed(&mut self) {
+        self.cache.pop_scope();
+    }
+
+    fn scopes_cleaned(&mut self) {
+        self.cache.clear();
+    }
+
     /// Abstracts the steps required to define and push a new context.
     /// PARAMS:
     /// `option_ctx_params`: a vector with the variables introduced by the context (optionally)
@@ -223,9 +250,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         if depth < self.translation.alethe_scopes.variables_in_scope.height() - 1 {
                             // This variable is bound somewhere else.  We
                             // shadow any previous def.
-                            self.translation
-                                .alethe_scopes
-                                .insert_variable_in_scope(name, &eunoia_sort);
+                            self.bind_variable(name, &eunoia_sort);
 
                             context_domain.push(self.make_var(name, eunoia_sort.clone()));
                         }
@@ -233,9 +258,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
                     None => {
                         // This variable is not bound somewhere else.
-                        self.translation
-                            .alethe_scopes
-                            .insert_variable_in_scope(name, &eunoia_sort);
+                        self.bind_variable(name, &eunoia_sort);
 
                         context_domain.push(self.make_var(name, eunoia_sort.clone()));
                     }
@@ -273,9 +296,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         if depth < self.translation.alethe_scopes.variables_in_scope.height() - 1 {
                             // This variable is bound somewhere else.  We
                             // shadow any previous def.
-                            self.translation
-                                .alethe_scopes
-                                .insert_variable_in_scope(name, &eunoia_sort);
+                            self.bind_variable(name, &eunoia_sort);
 
                             context_domain.push(self.make_var(name, eunoia_sort.clone()));
 
@@ -293,9 +314,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
                     None => {
                         // This variable is not bound somewhere else.
-                        self.translation
-                            .alethe_scopes
-                            .insert_variable_in_scope(name, &eunoia_sort);
+                        self.bind_variable(name, &eunoia_sort);
 
                         context_domain.push(self.make_var(name, eunoia_sort.clone()));
 
@@ -342,8 +361,12 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
     /// Translates a given Term into its corresponding `EunoiaTerm`, possibly
     /// modifying scoping information contained in self, to deal with
     /// translation of binding constructions.
-    fn translate_term(&mut self, term: &Term) -> Rc<EunoiaTerm> {
-        match term {
+    fn translate_term(&mut self, term: &Rc<Term>) -> Rc<EunoiaTerm> {
+        if let Some(cached) = self.cache.get_top(term) {
+            return cached.clone();
+        }
+
+        let translated = match term.as_ref() {
             Term::Const(constant) => self.translate_constant(constant),
 
             Term::Op(operator, operands) => {
@@ -387,6 +410,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             Term::Let(binding_list, scope) => {
                 // New scope.
                 self.translation.alethe_scopes.open_non_context_scope();
+                self.scope_opened();
 
                 let (bindings, translated_values) = self.translate_let_binding_list(binding_list);
 
@@ -401,9 +425,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                             }
                         };
 
-                        self.translation
-                            .alethe_scopes
-                            .insert_variable_in_scope(id, eunoia_sort);
+                        self.bind_variable(id, eunoia_sort);
                     }
 
                     _ => {
@@ -423,6 +445,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                     .add(EunoiaTerm::HOApp(let_binder, translated_values));
 
                 self.translation.alethe_scopes.close_scope();
+                self.scope_closed();
 
                 final_let_trans
             }
@@ -431,6 +454,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 // New scope to shadow those context variables that
                 // now bound by this binder.
                 self.translation.alethe_scopes.open_non_context_scope();
+                self.scope_opened();
                 let translated_bindings = self.translate_binding_list(binding_list);
                 match translated_bindings.as_ref() {
                     EunoiaTerm::List(bindings) => {
@@ -445,9 +469,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                                     }
                                 };
 
-                                self.translation
-                                    .alethe_scopes
-                                    .insert_variable_in_scope(id, eunoia_sort);
+                                self.bind_variable(id, eunoia_sort);
                             }
 
                             _ => {
@@ -509,7 +531,7 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
 
                 // Closing the context...
                 self.translation.alethe_scopes.close_scope();
-                // self.local_steps.pop();
+                self.scope_closed();
 
                 translated_binder
             }
@@ -518,7 +540,9 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                 println!("No defined translation for term {:?}", term);
                 panic!()
             }
-        }
+        };
+        self.cache.insert(term.clone(), translated.clone());
+        translated
     }
 
     /// For a given variable name "id", that is bound by some

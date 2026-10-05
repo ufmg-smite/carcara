@@ -139,6 +139,13 @@ impl<K, V> HashMapStack<K, V> {
         *self = Self::new();
     }
 
+    /// Clears the top scope in the stack.
+    pub fn clear_top(&mut self) {
+        if let Some(top) = self.scopes.last_mut() {
+            top.clear();
+        }
+    }
+
     /// Pushes a new, empty scope onto the stack.
     pub fn push_scope(&mut self) {
         self.scopes.push(RapidHashMap::new());

@@ -228,7 +228,7 @@ pub trait VecToVecTranslator<'a> {
     /// Translates a given Alethe Term into its corresponding representation, possibly
     /// modifying scoping information contained in self, to deal with
     /// translation of binding constructions.
-    fn translate_term(&mut self, term: &Term) -> Self::TermType;
+    fn translate_term(&mut self, term: &Rc<Term>) -> Self::TermType;
 
     /// In some situations, we need to access to the `VecToVecTranslator` object.
     /// Hence the self reference.
@@ -266,6 +266,18 @@ pub trait VecToVecTranslator<'a> {
     /// PRE : { the scope representing the context to be processed is already
     ///         opened }
     fn process_anchor_context(&mut self, context: &[AnchorArg]) -> Vec<Self::TermType>;
+
+    // TODO: these ooks are a bit of a hack, but it was the best way I found to implement a
+    // scope-sensitive cache in the Eunoia translation without having to mess with `AletheScopes`
+    // directly. A future refactor might want to remove this.
+    /// Called right after the default methods of this trait open a new scope.
+    fn scope_opened(&mut self) {}
+
+    /// Called right after the default methods of this trait close a scope.
+    fn scope_closed(&mut self) {}
+
+    /// Called right after the default methods of this trait discard all scopes.
+    fn scopes_cleaned(&mut self) {}
 
     /// Returns the identifier of the last context actually introduced within the proof certificate.
     /// PRE: { 0 < `self.contexts_opened`}
@@ -363,6 +375,7 @@ pub trait VecToVecTranslator<'a> {
 
                                 // Closing the context...
                                 self.get_mut_translator_data().alethe_scopes.close_scope();
+                                self.scope_closed();
 
                                 // self.get_mut_translator_data().local_steps.pop();
                                 // Exiting the subproof.
@@ -384,6 +397,7 @@ pub trait VecToVecTranslator<'a> {
                             self.get_mut_translator_data()
                                 .alethe_scopes
                                 .open_non_context_scope();
+                            self.scope_opened();
                         } else {
                             // { !args.is_empty() }
 
@@ -391,6 +405,7 @@ pub trait VecToVecTranslator<'a> {
                             self.get_mut_translator_data()
                                 .alethe_scopes
                                 .open_context_scope();
+                            self.scope_opened();
 
                             // Process the vector of AnchorArgs.
                             let ctx_params = self.process_anchor_context(args);
@@ -437,25 +452,31 @@ pub trait VecToVecTranslator<'a> {
     where
         Self::TypeTermType: 'b,
     {
-        // Mutable borrow to translator data
+        // We only translate pre-ordered proofs.
+
+        // Clean previously created data.
+        if self
+            .get_read_translator_data()
+            .alethe_scopes
+            .get_contexts_opened()
+            > 0
         {
-            // We only translate pre-ordered proofs.
             let mut_data = self.get_mut_translator_data();
-
-            // Clean previously created data.
-            if mut_data.alethe_scopes.get_contexts_opened() > 0 {
-                mut_data.translated_proof = Vec::new();
-                mut_data.alethe_scopes.clean_scopes();
-                mut_data.last_steps = LastSteps::new();
-            }
-
-            // TODO: Subproof has a context_id that could be used instead of contexts_opened
-            // TODO: is it possible to define a private name-space prefixing some
-            // symbol?
-            // Some rules query the context (e.g., refl). We need to always have
-            // opened at least one context
-            mut_data.alethe_scopes.open_context_scope();
+            mut_data.translated_proof = Vec::new();
+            mut_data.alethe_scopes.clean_scopes();
+            mut_data.last_steps = LastSteps::new();
+            self.scopes_cleaned();
         }
+
+        // TODO: Subproof has a context_id that could be used instead of contexts_opened
+        // TODO: is it possible to define a private name-space prefixing some
+        // symbol?
+        // Some rules query the context (e.g., refl). We need to always have
+        // opened at least one context
+        self.get_mut_translator_data()
+            .alethe_scopes
+            .open_context_scope();
+        self.scope_opened();
 
         self.define_push_new_context(None);
 
