@@ -124,63 +124,52 @@ impl SummaryStats {
 
     /// Prints the benchmark results
     pub fn print(&self, sort_by_total: bool) {
-        let [
-            parsing,
-            checking,
-            elaborating,
-            accounted_for,
-            total,
-            assume_time,
-            assume_core_time,
-            polyeq_time,
-        ] = [
-            &self.parsing,
-            &self.checking,
-            &self.elaborating,
-            &self.total_accounted_for,
-            &self.total,
-            &self.assume_time,
-            &self.assume_core_time,
-            &self.polyeq_time,
-        ]
-        .map(|m| {
-            if sort_by_total {
-                format!("{:#}", m)
-            } else {
-                format!("{}", m)
-            }
-        });
-
-        println!("parsing:             {}", parsing);
-        println!("checking:            {}", checking);
+        println!(
+            "parsing:             {}",
+            self.parsing.display(sort_by_total)
+        );
+        println!(
+            "checking:            {}",
+            self.checking.display(sort_by_total)
+        );
         if !self.pipeline_times.is_empty() {
-            println!("elaborating:         {}", elaborating);
+            println!(
+                "elaborating:         {}",
+                self.elaborating.display(sort_by_total)
+            );
             for (i, pass) in self.pipeline_times.iter().enumerate() {
-                print!("    pass {}:          ", i);
-                if sort_by_total {
-                    println!("{:#}", pass);
-                } else {
-                    println!("{}", pass);
-                }
+                println!("    pass {}:          {}", i, pass.display(sort_by_total));
             }
         }
 
         println!(
             "on assume:           {} ({:.02}% of checking time)",
-            assume_time,
+            self.assume_time.display(sort_by_total),
             100.0 * self.assume_time.mean().as_secs_f64() / self.checking.mean().as_secs_f64(),
         );
-        println!("on assume (core):    {}", assume_core_time);
-        println!("assume ratio:        {}", self.assume_time_ratio);
+        println!(
+            "on assume (core):    {}",
+            self.assume_core_time.display(sort_by_total)
+        );
+        println!(
+            "assume ratio:        {}",
+            self.assume_time_ratio.display(false)
+        );
         println!(
             "on polyeq:           {} ({:.02}% of checking time)",
-            polyeq_time,
+            self.polyeq_time.display(sort_by_total),
             100.0 * self.polyeq_time.mean().as_secs_f64() / self.checking.mean().as_secs_f64(),
         );
-        println!("polyeq ratio:        {}", self.polyeq_time_ratio);
+        println!(
+            "polyeq ratio:        {}",
+            self.polyeq_time_ratio.display(false)
+        );
 
-        println!("total accounted for: {}", accounted_for);
-        println!("total:               {}", total);
+        println!(
+            "total accounted for: {}",
+            self.total_accounted_for.display(sort_by_total)
+        );
+        println!("total:               {}", self.total.display(sort_by_total));
 
         let data_by_rule = &self.step_time_by_rule;
         let mut data_by_rule: Vec<_> = data_by_rule.iter().collect();
@@ -188,12 +177,7 @@ impl SummaryStats {
 
         println!("by rule:");
         for (rule, data) in data_by_rule {
-            print!("    {: <18}", rule);
-            if sort_by_total {
-                println!("{:#}", data);
-            } else {
-                println!("{}", data);
-            }
+            println!("    {: <18}{}", rule, data.display(sort_by_total));
         }
 
         println!("worst cases:");

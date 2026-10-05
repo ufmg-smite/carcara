@@ -162,27 +162,6 @@ impl<K, T: MetricsUnit> Default for Metrics<K, T> {
     }
 }
 
-impl<K: Clone, T: MetricsUnit> fmt::Display for Metrics<K, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if f.alternate() {
-            write!(
-                f,
-                "{} ({} * {})",
-                DisplayUnit(self.total()),
-                DisplayUnit(self.mean()),
-                DisplayUnit(self.count())
-            )
-        } else {
-            write!(
-                f,
-                "{} ± {}",
-                DisplayUnit(self.mean()),
-                DisplayUnit(self.standard_deviation())
-            )
-        }
-    }
-}
-
 impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
     /// Adds a new sample to the metrics. This updates all the fields of the struct to equal the
     /// new mean, standard deviation, etc. For simplicity, these are calculated every time a new
@@ -292,5 +271,34 @@ impl<K: Clone, T: MetricsUnit> Metrics<K, T> {
     pub fn standard_deviation(&self) -> T::MeanType {
         let count = cmp::max(2, self.count) - 1;
         T::from_f64((self.sum_of_squared_distances / count as f64).sqrt())
+    }
+
+    /// Returns an `Display`-able object that represents a `Metrics`.
+    ///
+    /// If `total` is true, it will display the total, mean and count; otherwise, it will display
+    /// the mean and standard deviation.
+    pub fn display(&self, total: bool) -> impl fmt::Display {
+        struct DisplayMetrics<'a, K, T: MetricsUnit>(&'a Metrics<K, T>, bool);
+        impl<'a, K: Clone, T: MetricsUnit> fmt::Display for DisplayMetrics<'a, K, T> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                if self.1 {
+                    write!(
+                        f,
+                        "{} ({} * {})",
+                        DisplayUnit(self.0.total()),
+                        DisplayUnit(self.0.mean()),
+                        DisplayUnit(self.0.count())
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{} ± {}",
+                        DisplayUnit(self.0.mean()),
+                        DisplayUnit(self.0.standard_deviation())
+                    )
+                }
+            }
+        }
+        DisplayMetrics(self, total)
     }
 }
