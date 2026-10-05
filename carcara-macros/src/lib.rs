@@ -676,6 +676,7 @@ pub fn version_string(input: TokenStream) -> TokenStream {
 
 /// A parsed `custom_operators.toml` file.
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CustomOperatorsConfig {
     #[serde(default)]
     operator: Vec<CustomOperatorEntry>,
@@ -683,6 +684,7 @@ struct CustomOperatorsConfig {
 
 /// One `[[operator]]` entry parsed from the config file.
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CustomOperatorEntry {
     name: String,
     return_type: String,
