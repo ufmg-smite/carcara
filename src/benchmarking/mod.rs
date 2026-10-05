@@ -6,7 +6,8 @@ mod tests;
 
 pub use metrics::*;
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
+use rapidhash::RapidHashSet;
 use std::{fmt, fs, hash::Hash, io, sync::Arc, time::Duration};
 
 /// The unique identifier of a single proof step, given by its file, step ID, and rule.
@@ -245,13 +246,11 @@ impl SummaryStats {
     }
 }
 
-type InternedRunId = (Arc<str>, usize);
-
 /// Benchmark results that can be written to CSV files.
 #[derive(Default)]
 pub struct CsvStats {
-    strings: IndexSet<Arc<str>>,
-    runs: IndexMap<InternedRunId, RunMeasurement>,
+    strings: RapidHashSet<Arc<str>>,
+    runs: Vec<(RunId, RunMeasurement)>,
     steps: Vec<(Arc<str>, Duration)>,
     is_holey: bool,
     num_errors: usize,
@@ -296,12 +295,11 @@ impl CsvStats {
     }
 
     fn write_runs_csv(
-        data: IndexMap<InternedRunId, RunMeasurement>,
+        data: Vec<(RunId, RunMeasurement)>,
         dest: &mut dyn io::Write,
     ) -> io::Result<()> {
         let pipeline_length = data
-            .iter()
-            .next()
+            .first()
             .map_or(0, |(_, m)| m.elaboration_pipeline.len());
         write!(
             dest,
@@ -503,9 +501,8 @@ impl CollectStats for CsvStats {
 
     fn add_polyeq_depth(&mut self, _: usize) {}
 
-    fn add_run_measurement(&mut self, (file, i): &RunId, measurement: RunMeasurement) {
-        let id = (self.intern(file), *i);
-        self.runs.insert(id, measurement);
+    fn add_run_measurement(&mut self, id: &RunId, measurement: RunMeasurement) {
+        self.runs.push((id.clone(), measurement));
     }
 
     fn register_holey(&mut self) {
