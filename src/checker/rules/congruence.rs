@@ -1,5 +1,6 @@
 use super::{
-    CheckerError, RuleArgs, RuleResult, assert_clause_len, assert_num_premises, get_premise_term,
+    CheckerError, RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_premises,
+    get_premise_term,
 };
 use crate::{
     ast::*,
@@ -49,14 +50,14 @@ where
 
     let (p, q) = conclusion;
     let (f_args, g_args) = match (p.as_ref(), q.as_ref()) {
-        (Term::App(f, f_args), Term::App(g, g_args)) => match f == g {
-            true => Ok((f_args, g_args)),
-            false => Err(CongruenceError::DifferentFunctions(f.clone(), g.clone())),
-        },
-        (Term::Op(f, f_args), Term::Op(g, g_args)) => match f == g {
-            true => Ok((f_args, g_args)),
-            false => Err(CongruenceError::DifferentOperators(*f, *g)),
-        },
+        (Term::App(f, f_args), Term::App(g, g_args)) => {
+            assert_eq(f, g)?;
+            Ok((f_args, g_args))
+        }
+        (Term::Op(f, f_args), Term::Op(g, g_args)) => {
+            assert_eq(f, g)?;
+            Ok((f_args, g_args))
+        }
         (Term::Op(..) | Term::App(..), _) => {
             Err(CongruenceError::NotApplicationOrOperation(q.clone()))
         }
@@ -166,14 +167,14 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
             return if any_valid { Ok(()) } else { original_result };
         }
 
-        (Term::App(f, f_args), Term::App(g, g_args)) => match f == g {
-            true => Ok((f_args, g_args)),
-            false => Err(CongruenceError::DifferentFunctions(f.clone(), g.clone())),
-        },
-        (Term::Op(f, f_args), Term::Op(g, g_args)) => match f == g {
-            true => Ok((f_args, g_args)),
-            false => Err(CongruenceError::DifferentOperators(*f, *g)),
-        },
+        (Term::App(f, f_args), Term::App(g, g_args)) => {
+            assert_eq(f, g)?;
+            Ok((f_args, g_args))
+        }
+        (Term::Op(f, f_args), Term::Op(g, g_args)) => {
+            assert_eq(f, g)?;
+            Ok((f_args, g_args))
+        }
         (
             Term::ParamOp {
                 op: f_op,

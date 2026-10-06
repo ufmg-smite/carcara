@@ -1,4 +1,4 @@
-use crate::ast::{Binder, BindingList, Rc, Sort, Term};
+use crate::ast::{Binder, BindingList, Operator, Rc, Sort, Term};
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use rug::Integer;
@@ -473,4 +473,8 @@ impl<T> TypeName for BindingList<T> {
 
 impl TypeName for Integer {
     const NAME: &'static str = "integer";
+}
+
+impl TypeName for Operator {
+    const NAME: &'static str = "operator";
 }

@@ -260,6 +260,10 @@ pub enum CheckerError {
     #[error(transparent)]
     IntegerEquality(#[from] EqualityError<Integer>),
 
+    /// Two operators were expected to be equal.
+    #[error(transparent)]
+    OperatorEquality(#[from] EqualityError<Operator>),
+
     // Rare Rules Error
     /// A `rare` rule was not specified in the step's arguments.
     #[error("expected a rare rule specified in the arguments")]
@@ -361,14 +365,6 @@ pub enum CongruenceError {
         /// The premise that should justify their equality.
         premise: (Rc<Term>, Rc<Term>),
     },
-
-    /// The functions of the two terms do not match.
-    #[error("functions don't match: '{0}' and '{1}'")]
-    DifferentFunctions(Rc<Term>, Rc<Term>),
-
-    /// The operators of the two terms do not match.
-    #[error("operators don't match: '{0}' and '{1}'")]
-    DifferentOperators(Operator, Operator),
 
     /// The two terms have different numbers of arguments.
     #[error("different numbers of arguments: {0} and {1}")]
