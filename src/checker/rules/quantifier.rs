@@ -266,7 +266,7 @@ fn conjunctive_normal_form(term: &Rc<Term>) -> CnfFormula {
 pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
 
-    let (l_bindings, phi, r_bindings, phi_prime) = {
+    let (l, l_bindings, phi, r_bindings, phi_prime) = {
         let (l, r) = match_term_err!((or (not l) r) = &conclusion[0])?;
         let (l_q, l_b, phi) = l.as_quant_err()?;
         let (r_q, r_b, phi_prime) = r.as_quant_err()?;
@@ -275,7 +275,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         assert_is_expected(&l_q, Binder::Forall)?;
         assert_is_expected(&r_q, Binder::Forall)?;
 
-        (l_b, phi, r_b, phi_prime)
+        (l, l_b, phi, r_b, phi_prime)
     };
 
     let r_bindings = r_bindings.iter().cloned().collect::<IndexSet<_>>();
@@ -292,6 +292,16 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
             })
             .collect()
     };
+
+    // Prenexing `A ∨ ∀y. B` into `∀y. (A ∨ B)` is only sound if `y` doesn't occur free in `A`.
+    // We detect this be seeing if any of the newly introduced bindings are in the free variables
+    // of `A`.
+    let l_free_vars = pool.free_vars(l).clone();
+    for var in new_bindings.iter().skip(l_bindings.len()) {
+        if l_free_vars.contains(&pool.add(var.clone().into())) {
+            return err!("prenexing would capture the free variable '{}'", var.0);
+        }
+    }
 
     // `new_bindings` contains all bindings that existed in the original term, plus all bindings
     // added by the prenexing step. All bindings in the right side must be in this set
