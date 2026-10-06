@@ -15,7 +15,7 @@ use crate::{
 };
 
 use carcara_macros::GenerateSetters;
-use error::{CheckerError, SubproofError};
+use error::{CheckerError, err};
 use indexmap::{IndexMap, IndexSet};
 use rules::{Premise, RuleArgs, RuleResult, get_rule};
 use std::{
@@ -332,7 +332,7 @@ impl<'c> Checker<'c> {
             return Ok(());
         }
         if !step.discharge.is_empty() && step.rule != "subproof" {
-            return Err(CheckerError::Subproof(SubproofError::DischargeInWrongRule));
+            return err!("only the `subproof` rule may discharge local assumptions");
         }
 
         // Collect premises and discharge
@@ -426,9 +426,10 @@ fn check_discharge(
         .enumerate()
         .find(|&(i, command)| command.is_assume() && !discharge.contains(&(depth, i)))
     {
-        Err(CheckerError::Subproof(
-            SubproofError::LocalAssumeNotDischarged(not_discharged.id().to_owned()),
-        ))
+        err!(
+            "local assumption '{}' was not discharged",
+            not_discharged.id(),
+        )
     } else {
         Ok(())
     }

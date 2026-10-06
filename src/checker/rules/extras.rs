@@ -7,7 +7,7 @@ use super::{
 use crate::{
     ast::*,
     checker::{
-        error::{CongruenceError, rassert},
+        error::{CongruenceError, err, rassert},
         rules::{assert_alpha_equiv, assert_operation_len},
     },
     utils::{MultiSet, MultiSetDifference},
@@ -39,7 +39,7 @@ pub fn shuffle(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         }
         match l_op {
             Operator::Add | Operator::Mult | Operator::And | Operator::Or => (l, r),
-            other => return Err(CheckerError::OperatorNotCommutative(other)),
+            other => return err!("operator '{other}' is not commutative"),
         }
     };
 
@@ -289,7 +289,7 @@ pub fn la_mult_sign(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         .into_iter()
         .map(|(var, quantity)| {
             let Some(comp) = map.get(var) else {
-                return Err(CheckerError::LaMultSignMissingComparison(var.clone()));
+                return err!("missing comparison for monomial variable '{var}'");
             };
             // The contribution for this variable will always be `>` if its power is even
             if quantity % 2 == 0 {
@@ -313,7 +313,7 @@ pub fn la_mult_sign(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     if got == monomial_comp {
         Ok(())
     } else {
-        Err(CheckerError::LaMultSignWrongRelation(right.clone()))
+        err!("monomial relation does not match expected, got: '{right}'")
     }
 }
 

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     ast::{pool::Pool, *},
-    checker::error::{SubproofError, rassert},
+    checker::error::{err, rassert},
     utils::MultiSet,
 };
 use indexmap::{IndexMap, IndexSet};
@@ -30,7 +30,7 @@ pub fn subproof(
                 let t = t.remove_negation_err()?;
                 assert_polyeq(term, t, polyeq_time)?;
             }
-            other => return Err(SubproofError::DischargeMustBeAssume(other.id().to_owned()).into()),
+            other => return err!("discharge must be 'assume' command: '{}'", other.id()),
         }
     }
 
@@ -88,8 +88,8 @@ pub fn bind(
         .iter()
         .find(|&y| free_vars.contains(y) && !l_bindings.contains(y))
     {
-        let y = y.as_var().unwrap().to_owned();
-        return Err(SubproofError::BindBindingIsFreeVarInPhi(y).into());
+        let y = y.as_var().unwrap();
+        return err!("binding '{y}' appears as free variable in phi");
     }
 
     // Since we are closing a subproof, we only care about the substitutions that were introduced
@@ -101,7 +101,7 @@ pub fn bind(
         for arg in &context.args {
             match arg {
                 AnchorArg::Variable((name, _)) if !xs.is_empty() => {
-                    return Err(SubproofError::BindUnexpectedVarArgument(name.clone()).into());
+                    return err!("unexpected anchor argument: '{name}'");
                 }
                 AnchorArg::Variable(var) => {
                     ys.insert(pool.add(var.clone().into()));
@@ -116,7 +116,9 @@ pub fn bind(
 
     rassert!(
         l_bindings.len() == r_bindings.len(),
-        SubproofError::BindDifferentNumberOfBindings(l_bindings.len(), r_bindings.len())
+        "right and left quantifiers have different number of bindings: {} and {}",
+        l_bindings.len(),
+        r_bindings.len(),
     );
 
     let (l_bindings, r_bindings): (IndexSet<_>, IndexSet<_>) = (
@@ -124,14 +126,14 @@ pub fn bind(
         r_bindings.difference(&l_bindings).cloned().collect(),
     );
 
-    // `l_bindings` should be a subset of `xs` and `r_bindigns` should be a subset of `ys`
+    // `l_bindings` should be a subset of `xs` and `r_bindings` should be a subset of `ys`
     if let Some(x) = l_bindings.iter().find(|&x| !xs.contains(x)) {
         let x = x.as_var().unwrap().to_owned();
-        return Err(SubproofError::BindingIsNotInContext(x).into());
+        return Err(CheckerError::BindingIsNotInContext(x));
     }
     if let Some(y) = r_bindings.iter().find(|&y| !ys.contains(y)) {
         let y = y.as_var().unwrap().to_owned();
-        return Err(SubproofError::BindingIsNotInContext(y).into());
+        return Err(CheckerError::BindingIsNotInContext(y));
     }
     Ok(())
 }
@@ -176,7 +178,9 @@ pub fn r#let(
 
     rassert!(
         let_bindings.len() == mappings.len(),
-        SubproofError::WrongNumberOfLetBindings(mappings.len(), let_bindings.len())
+        "expected {} bindings in 'let' term, got {}",
+        mappings.len(),
+        let_bindings.len(),
     );
 
     let mut pairs: Vec<_> = let_bindings
@@ -184,9 +188,9 @@ pub fn r#let(
         .map(|(x, t)| {
             let sort = pool.sort(t);
             let x_term = pool.add((x.clone(), sort).into());
-            let s = mappings
-                .get(&x_term)
-                .ok_or_else(|| SubproofError::BindingIsNotInContext(x.clone()))?;
+            let Some(s) = mappings.get(&x_term) else {
+                return Err(CheckerError::BindingIsNotInContext(x.clone()));
+            };
             Ok((s, t))
         })
         .collect::<Result<_, CheckerError>>()?;
@@ -198,10 +202,7 @@ pub fn r#let(
         let (a, b) = match_term_err!((= a b) = get_premise_term(premise)?)?;
         rassert!(
             (a, b) == (s, t) || (a, b) == (t, s),
-            SubproofError::PremiseDoesntJustifyLet {
-                substitution: (s.clone(), t.clone()),
-                premise: (a.clone(), b.clone()),
-            }
+            "premise '(= {a} {b})' doesn't justify substitution of '{s}' for '{t}'",
         );
     }
     Ok(())
@@ -341,7 +342,7 @@ pub fn onepoint(
 
     // For each substitution (:= x t) in the context, the equality (= x t) must appear in phi
     if let Some((k, v)) = mappings.find(|&(k, v)| !points.contains(&(k.clone(), v.clone()))) {
-        return Err(SubproofError::NoPointForSubstitution(k.clone(), v.clone()).into());
+        return err!("substitution '(:= {k} {v})' doesn't appear as a point in phi");
     }
 
     // Here we check that the right variables were eliminated. Using the notation in the
@@ -372,7 +373,10 @@ pub fn onepoint(
     let point_vars: HashSet<_> = point_vars.iter().collect();
 
     if var_args != r_bindings.as_ref() {
-        return Err(SubproofError::OnepointWrongRightBindings(BindingList(var_args)).into());
+        return err!(
+            "expected binding list in right-hand side to be '{}'",
+            BindingList(var_args),
+        );
     }
 
     let l_bindings: HashSet<_> = l_bindings.iter().collect();
@@ -383,7 +387,10 @@ pub fn onepoint(
     let expected = &var_args | &point_vars;
     if l_bindings != expected {
         let expected: Vec<_> = expected.into_iter().cloned().collect();
-        return Err(SubproofError::OnepointWrongLeftBindings(BindingList(expected)).into());
+        return err!(
+            "expected binding list in left-hand side to be '{}'",
+            BindingList(expected),
+        );
     }
 
     Ok(())
@@ -431,9 +438,9 @@ fn generic_skolemization_rule(
 
     for (i, x) in bindings.iter().enumerate() {
         let x_term = pool.add(Term::from(x.clone()));
-        let t = substitution
-            .get(&x_term)
-            .ok_or_else(|| SubproofError::BindingIsNotInContext(x.0.clone()))?;
+        let Some(t) = substitution.get(&x_term) else {
+            return Err(CheckerError::BindingIsNotInContext(x.0.clone()));
+        };
 
         // To check that `t` is of the correct form, we construct the expected term and compare
         // them

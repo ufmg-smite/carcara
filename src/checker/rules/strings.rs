@@ -7,7 +7,10 @@ use crate::{
         Binder, BindingList, Constant, Operator, Rc, Sort, Term, build_term, match_term,
         match_term_err, polyeq, pool::Pool,
     },
-    checker::{error::CheckerError, rules::assert_polyeq},
+    checker::{
+        error::{CheckerError, err},
+        rules::assert_polyeq,
+    },
 };
 use std::{cmp, time::Duration};
 
@@ -518,7 +521,7 @@ fn re_unfold_pos_concat(
                     ))
                 }
             }
-            _ => Err(CheckerError::CannotApplyReUnfoldPos(r.clone())),
+            _ => err!("cannot apply the re_unfold_pos rule to the regular expression term '{r}'"),
         }
     }
 
@@ -694,10 +697,7 @@ pub fn concat_conflict(
     } else if let Some(ts_head) = ts.first() {
         string_check_length_one(ts_head.clone())?;
     } else {
-        return Err(CheckerError::ExpectedDifferentConstantPrefixes(
-            s.clone(),
-            t.clone(),
-        ));
+        return err!("expected terms '{s}' and '{t}' to have different constant prefixes");
     }
 
     Ok(())
