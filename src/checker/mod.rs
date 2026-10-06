@@ -218,6 +218,14 @@ impl<'c> Checker<'c> {
 
                     let time = Instant::now();
                     self.check_step(step, previous_command, &iter, &problem.prelude)
+                        .and_then(|()| match iter.current_subproof() {
+                            // The last step of a subproof must discharge all of its local
+                            // assumptions
+                            Some(subproof) if is_end_of_subproof => {
+                                check_discharge(subproof, iter.depth(), &step.discharge)
+                            }
+                            _ => Ok(()),
+                        })
                         .map_err(|e| e.at(&step.id, &step.rule, proof_file_name))?;
                     let time = time.elapsed();
                     stats.add_step_measurement(proof_file_name, &step.id, &step.rule, time);
@@ -357,6 +365,7 @@ impl<'c> Checker<'c> {
                 step.premises.iter().map(|&p| iter.get_premise(p)).collect();
             return sat_refutation::sat_refutation(
                 self.pool,
+                &step.clause,
                 premises_steps,
                 prelude,
                 &self.config.sat_ref_config,
@@ -403,12 +412,6 @@ impl<'c> Checker<'c> {
 
         // Execute the rule with the provided arguments
         rule(rule_args)?;
-
-        if iter.is_end_step()
-            && let Some(subproof) = iter.current_subproof()
-        {
-            check_discharge(subproof, iter.depth(), &step.discharge)?;
-        }
 
         self.run_stats.polyeq_time += polyeq_time;
         Ok(())

@@ -6,7 +6,7 @@ use crate::{
     checker::{
         SatRefConfig, check_external,
         error::{CheckerError, err},
-        rules::RuleResult,
+        rules::{RuleResult, assert_clause_len},
     },
     external,
 };
@@ -80,10 +80,13 @@ fn sat_refutation_external_check(
 
 pub fn sat_refutation(
     pool: &mut Pool,
+    conclusion: &[Rc<Term>],
     premise_steps: Vec<&ProofCommand>,
     prelude: &ProblemPrelude,
     config: &SatRefConfig,
 ) -> RuleResult {
+    assert_clause_len(conclusion, 0)?;
+
     if matches!(config, SatRefConfig::None) {
         // TODO: better error message
         return err!(
