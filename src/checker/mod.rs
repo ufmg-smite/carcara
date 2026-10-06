@@ -132,6 +132,7 @@ pub struct Checker<'c> {
     context: ContextStack,
     reached_empty_clause: bool,
     is_holey: bool,
+    automata_cache: indexmap::IndexMap<Rc<Term>, std::sync::Arc<crate::automata::Automaton>>,
     rare_rules: &'c Rules,
     run_stats: CheckingStats,
 }
@@ -145,6 +146,7 @@ impl<'c> Checker<'c> {
             context: ContextStack::new(),
             reached_empty_clause: false,
             is_holey: false,
+            automata_cache: indexmap::IndexMap::new(),
             rare_rules,
             run_stats: CheckingStats::default(),
         }
@@ -374,6 +376,7 @@ impl<'c> Checker<'c> {
             previous_command,
             discharge: &discharge,
             polyeq_time: &mut polyeq_time,
+            automata_cache: &mut self.automata_cache,
             rare_rules: self.rare_rules,
         };
         // TODO: only passing args, not conclusion?

@@ -102,7 +102,7 @@ pub fn intersection(a1: Automaton, a2: Automaton) -> Result<Automaton, CheckerEr
 ///
 /// Adapted for testing the equivalence of deterministic finite automata (DFAs), as described
 /// in the paper "A Linear Algorithm for Testing Equivalence of Finite Automata".
-pub fn is_equivalent(a1: Automaton, a2: Automaton) -> bool {
+pub fn is_equivalent(a1: &Automaton, a2: &Automaton) -> bool {
     let offset = a1.all_states.len();
 
     let accepting_states: Vec<StateId> = a1
@@ -209,7 +209,7 @@ pub fn complement(a: Automaton) -> Automaton {
 /// # Returns
 /// - `true` if `p` is a subautomaton of `q`
 /// - `false` otherwise
-pub fn is_subautomaton(p: Automaton, q: Automaton) -> bool {
+pub fn is_subautomaton(p: &Automaton, q: &Automaton) -> bool {
     // Check if states of p are subset of states of q
     let p_states: HashSet<String> = p.all_states.iter().map(|state| state.id.clone()).collect();
     let q_states: HashSet<String> = q.all_states.iter().map(|state| state.id.clone()).collect();
@@ -377,7 +377,7 @@ mod tests {
             vec!["b3"],
         );
 
-        assert!(is_equivalent(a1, a2));
+        assert!(is_equivalent(&a1, &a2));
     }
 
     #[test]
@@ -408,7 +408,7 @@ mod tests {
             vec!["p1"],
         );
 
-        assert!(!is_equivalent(a1, a2));
+        assert!(!is_equivalent(&a1, &a2));
     }
 
     // is_subautomaton tests
@@ -416,7 +416,7 @@ mod tests {
     fn test_identical_automata() {
         let p = Automaton::new("p", "q0", vec![("q0", "q1", (97, 97))], vec!["q1"]);
         let q = Automaton::new("q", "q0", vec![("q0", "q1", (97, 97))], vec!["q1"]);
-        assert!(is_subautomaton(p, q));
+        assert!(is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -428,7 +428,7 @@ mod tests {
             vec![("q0", "q1", (97, 97)), ("q1", "q2", (98, 98))],
             vec!["q1", "q2"],
         );
-        assert!(is_subautomaton(p, q));
+        assert!(is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -447,7 +447,7 @@ mod tests {
             vec![],
         );
 
-        assert!(is_subautomaton(p, q));
+        assert!(is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -467,7 +467,7 @@ mod tests {
             ],
             vec![],
         );
-        assert!(is_subautomaton(p, q));
+        assert!(is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -487,28 +487,28 @@ mod tests {
             initial_state: 0,
         };
 
-        assert!(is_subautomaton(p, q));
+        assert!(is_subautomaton(&p, &q));
     }
 
     #[test]
     fn test_state_not_subset() {
         let p = Automaton::new("p", "q0", vec![("q0", "qX", (97, 97))], vec![]);
         let q = Automaton::new("q", "q0", vec![], vec![]);
-        assert!(!is_subautomaton(p, q));
+        assert!(!is_subautomaton(&p, &q));
     }
 
     #[test]
     fn test_accepting_not_subset() {
         let p = Automaton::new("p", "q0", vec![], vec!["q0"]);
         let q = Automaton::new("q", "q0", vec![], vec![]);
-        assert!(!is_subautomaton(p, q));
+        assert!(!is_subautomaton(&p, &q));
     }
 
     #[test]
     fn test_different_initial_state() {
         let p = Automaton::new("p", "q0", vec![], vec![]);
         let q = Automaton::new("q", "q1", vec![], vec![]);
-        assert!(!is_subautomaton(p, q));
+        assert!(!is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -527,7 +527,7 @@ mod tests {
             vec![],
         );
 
-        assert!(!is_subautomaton(p, q));
+        assert!(!is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -550,7 +550,7 @@ mod tests {
             initial_state: 0,
         };
 
-        assert!(!is_subautomaton(p, q));
+        assert!(!is_subautomaton(&p, &q));
     }
 
     #[test]
@@ -574,6 +574,6 @@ mod tests {
             initial_state: 0,
         };
 
-        assert!(!is_subautomaton(p, q));
+        assert!(!is_subautomaton(&p, &q));
     }
 }
