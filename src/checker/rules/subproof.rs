@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     ast::{pool::Pool, *},
-    checker::error::SubproofError,
+    checker::error::{SubproofError, rassert},
     utils::MultiSet,
 };
 use indexmap::{IndexMap, IndexSet};

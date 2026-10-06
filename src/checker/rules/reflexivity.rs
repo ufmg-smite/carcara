@@ -1,5 +1,5 @@
 use super::{CheckerError, RuleArgs, RuleResult, assert_clause_len, assert_eq};
-use crate::ast::*;
+use crate::{ast::*, checker::error::rassert};
 
 pub fn eq_reflexive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;

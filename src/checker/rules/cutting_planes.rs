@@ -3,7 +3,7 @@ use super::{
 };
 use crate::ast::{Constant, Operator, build_term, match_term, match_term_err};
 use crate::checker::Rc;
-use crate::checker::error::{CheckerError, EqualityError};
+use crate::checker::error::{CheckerError, EqualityError, err, rassert};
 use rug::Integer;
 use std::collections::HashMap;
 
@@ -70,7 +70,7 @@ fn get_pb_hashmap(pbsum: &Rc<Term>) -> Result<PbHash, CheckerError> {
             } else if let Some((coeff, var)) = match_term!((* coeff var) = term) {
                 (coeff, PbLiteral { var: var.clone(), negated: false })
             } else {
-                return Err(CheckerError::Explanation(format!("Term is neither plain nor negated: {}",term)));
+                return err!("Term is neither plain nor negated: {term}");
             };
 
         // Repeated literals have their coefficients added together
@@ -148,10 +148,7 @@ fn assert_pbsum_subset_keys(pbsum_a: &PbHash, pbsum_b: &PbHash) -> Result<(), Ch
         }
 
         if pbsum_b.get(key).is_none() {
-            return Err(CheckerError::Explanation(format!(
-                "Key {} of {:?} not found in {:?}",
-                key, pbsum_b, pbsum_a
-            )));
+            return err!("Key {key} of {pbsum_b:?} not found in {pbsum_a:?}");
         }
     }
     Ok(())
@@ -200,13 +197,7 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // Verify constants match (with slack)
     rassert!(
         constant_l.clone() + constant_r.clone() == constant_c.clone() + slack.clone(),
-        CheckerError::Explanation(format!(
-            "Expected {} + {} == {} + {} ",
-            constant_l.clone(),
-            constant_r.clone(),
-            constant_c.clone(),
-            slack.clone()
-        ))
+        "Expected {constant_l} + {constant_r} == {constant_c} + {slack}",
     );
 
     // Verify premise and conclusion share same keys
@@ -226,10 +217,7 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
             }
             // ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
             _ => {
-                return Err(CheckerError::Explanation(format!(
-                    "Literal of the conclusion not present in either premises: {}",
-                    literal
-                )));
+                return err!("Literal of the conclusion not present in either premises: {literal}");
             }
         }
     }
@@ -355,14 +343,10 @@ pub fn cp_saturation(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> R
     // Saturation is only sound if the constant and all coefficients are non-negative
     rassert!(
         constant_p >= 0,
-        CheckerError::Explanation(format!(
-            "Saturation requires a non-negative constant, got {constant_p}"
-        ))
+        "Saturation requires a non-negative constant, got {constant_p}",
     );
     if let Some((literal, coeff)) = pbsum_p.iter().find(|(_, coeff)| **coeff < 0) {
-        return Err(CheckerError::Explanation(format!(
-            "Saturation requires non-negative coefficients, got {coeff} for {literal}"
-        )));
+        return err!("Saturation requires non-negative coefficients, got {coeff} for {literal}");
     }
 
     // Verify constants match
@@ -395,10 +379,7 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
 
     // The argument must be a literal, that is, a variable `l` or its negation `(- 1 l)`
     let var = match_term!((- 1 l) = &args[0]).unwrap_or(&args[0]);
-    rassert!(
-        var.is_var(),
-        CheckerError::Explanation(format!("Expected a literal, got {}", args[0]))
-    );
+    rassert!(var.is_var(), "Expected a literal, got {}", args[0]);
 
     if let Some((c, l)) = match_term!((>= (* c (- 1 l)) 0) = &conclusion[0]) {
         rassert!(
@@ -422,9 +403,7 @@ pub fn cp_literal(RuleArgs { pool, args, conclusion, .. }: RuleArgs) -> RuleResu
     if let Some(l) = match_term!((>= l 0) = &conclusion[0]) {
         return assert_eq(l, &args[0]);
     }
-    Err(CheckerError::Explanation(
-        "No valid pattern was found".into(),
-    ))
+    err!("No valid pattern was found")
 }
 
 /// Matches against a supported boolean relation ⋈ ∈ {≥,≤,=,>,<}.
@@ -446,12 +425,8 @@ fn match_supported_relation_err(
                 Err(CheckerError::WrongNumberOfArgs(2.into(), args.len()))
             }
         }
-        Term::Op(op, _) => Err(CheckerError::Explanation(format!(
-            "Operator {op} is not a valid relation"
-        ))),
-        _ => Err(CheckerError::Explanation(
-            "Expected relation operator".into(),
-        )),
+        Term::Op(op, _) => err!("Operator {op} is not a valid relation"),
+        _ => err!("Expected relation operator"),
     }
 }
 
@@ -554,11 +529,10 @@ fn term_to_ctv(term: &Rc<Term>) -> Result<CoeffTimesVar<'_>, Integer> {
 fn collect_addition_list(term: &Rc<Term>) -> Result<Vec<CoeffTimesVar<'_>>, CheckerError> {
     let mut add_list = vec![];
     for t in split_summation(term) {
-        let ctv = term_to_ctv(t).map_err(|i| {
-            CheckerError::Explanation(format!(
-                "Found integer constant {i} in LHS of normalized term"
-            ))
-        })?;
+        let ctv = match term_to_ctv(t) {
+            Ok(ctv) => ctv,
+            Err(i) => return err!("Found integer constant {i} in LHS of normalized term"),
+        };
         add_list.push(ctv);
     }
     Ok(add_list)
@@ -638,18 +612,13 @@ fn check_pb_inequalities(
 ) -> RuleResult {
     rassert!(
         vars_l.len() == vars_r.len(),
-        CheckerError::Explanation(format!(
-            "List of variables should have same length, got {} and {}",
-            vars_l.len(),
-            vars_r.len()
-        ))
+        "List of variables should have same length, got {} and {}",
+        vars_l.len(),
+        vars_r.len(),
     );
 
     for (var_l, var_r) in vars_l.iter().zip(vars_r) {
-        rassert!(
-            var_l == var_r,
-            CheckerError::Explanation(format!("{var_l:?} != {var_r:?}"))
-        );
+        rassert!(var_l == var_r, "{var_l:?} != {var_r:?}");
     }
 
     rassert!(
@@ -724,9 +693,7 @@ pub fn cp_normalize(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             Operator::GreaterEq => (), /* Nothing to be done */
             _ => {
                 // Should be impossible to get here
-                Err(CheckerError::Explanation(format!(
-                    "Invalid relation operator: {relation_operator}"
-                )))?;
+                err!("Invalid relation operator: {relation_operator}")?;
             }
         }
 

@@ -1,8 +1,9 @@
 use super::{
-    CheckerError, RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_premises,
-    assert_polyeq, get_premise_term,
+    RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_premises, assert_polyeq,
+    get_premise_term,
 };
 use crate::ast::{Binder, BindingList, Sort, Term, build_term, match_term_err};
+use crate::checker::error::err;
 
 pub fn idx(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -64,10 +65,7 @@ pub fn ext(
 
     // check index is (choice (x I) (not (= (select a x) (select b x))))
     let Sort::Array(index_sort, _) = pool.sort(ap).as_ref().clone() else {
-        return Err(CheckerError::Explanation(format!(
-            "Could not get Array sort from term {}",
-            ap
-        )));
+        return err!("Could not get Array sort from term {ap}");
     };
     let x = pool.add(Term::new_var("x", index_sort.clone()));
     let body = build_term!(pool, (or

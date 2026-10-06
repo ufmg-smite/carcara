@@ -1,7 +1,10 @@
 use super::{CheckerError, RuleArgs, RuleResult, assert_eq};
 use crate::{
     ast::{Operator, ParamOperator, Rc, Sort, Term, build_term, match_term_err, pool::Pool},
-    checker::rules::assert_clause_len,
+    checker::{
+        error::{err, rassert},
+        rules::assert_clause_len,
+    },
 };
 use rug::Integer;
 
@@ -138,24 +141,16 @@ pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
                     computed_value =
                         &computed_value + Integer::from(Integer::i_pow_u(2, i.try_into().unwrap()));
                 } else if *arg != false_term {
-                    return Err(CheckerError::Explanation(format!(
-                        "bitblasted const {}-th arg neither true nor false",
-                        i
-                    )));
+                    return err!("bitblasted const {i}-th arg neither true nor false");
                 }
             }
             if m == computed_value {
                 return Ok(());
             }
-            return Err(CheckerError::Explanation(format!(
-                "const is {} but bitblasting computes to {}",
-                m, computed_value
-            )));
+            return err!("const is {m} but bitblasting computes to {computed_value}");
         }
     }
-    Err(CheckerError::Explanation(
-        "Not a const being bitblasted.".to_owned(),
-    ))
+    err!("Not a const being bitblasted.")
 }
 
 pub fn var(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
@@ -164,10 +159,7 @@ pub fn var(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     rassert!(
         matches!(pool.sort(x).as_ref(), &Sort::BitVec(_)),
-        CheckerError::Explanation(format!(
-            "Could not get BV sort out of (expected-to-be variable) term {}",
-            x
-        ))
+        "Could not get BV sort out of (expected-to-be variable) term {x}",
     );
     let x = get_term_bits(x, pool);
 
@@ -535,11 +527,11 @@ pub fn concat(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     }
 
     if res_args.len() != size {
-        return Err(CheckerError::Explanation(format!(
+        return err!(
             "Concat size {} different from sum of argument size {}",
             res_args.len(),
-            size
-        )));
+            size,
+        );
     }
     assert_eq(
         &pool.add(Term::Op(Operator::BvBbTerm, expected_res)),
@@ -796,9 +788,7 @@ pub fn bitwise_slicing(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResul
         assert_eq(c, slice_c)?;
     }
     if done != 0 {
-        Err(CheckerError::Explanation(
-            "slices didn't cover entire term!".into(),
-        ))
+        err!("slices didn't cover entire term!")
     } else {
         Ok(())
     }

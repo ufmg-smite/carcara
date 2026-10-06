@@ -7,7 +7,7 @@ use super::{
 use crate::{
     ast::*,
     checker::{
-        error::CongruenceError,
+        error::{CongruenceError, rassert},
         rules::{assert_alpha_equiv, assert_operation_len},
     },
     utils::{MultiSet, MultiSetDifference},

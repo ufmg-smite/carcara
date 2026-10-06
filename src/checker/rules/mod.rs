@@ -59,17 +59,6 @@ fn get_premise_term<'a>(premise: &Premise<'a>) -> Result<&'a Rc<Term>, CheckerEr
     }
 }
 
-/// Asserts that the first argument is true, and returns the error specified by the second argument
-/// otherwise.
-macro_rules! rassert {
-    ($arg:expr, $err:expr $(,)?) => {
-        match $arg {
-            true => Ok(()),
-            false => Err($err),
-        }?
-    };
-}
-
 fn assert_num_premises<T: Into<Range>>(premises: &[Premise], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(premises.len()) {

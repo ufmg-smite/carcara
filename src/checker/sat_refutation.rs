@@ -3,7 +3,11 @@ use crate::{
         Binder, BindingList, Operator, ProblemPrelude, ProofCommand, Rc, Sort, Substitution, Term,
         build_term, match_term, match_term_err, pool::Pool, printer,
     },
-    checker::{SatRefConfig, check_external, error::CheckerError, rules::RuleResult},
+    checker::{
+        SatRefConfig, check_external,
+        error::{CheckerError, err},
+        rules::RuleResult,
+    },
     external,
 };
 use rapidhash::{HashMapExt, RapidHashMap};
@@ -82,12 +86,11 @@ pub fn sat_refutation(
 ) -> RuleResult {
     if matches!(config, SatRefConfig::None) {
         // TODO: better error message
-        return Err(CheckerError::Explanation(
+        return err!(
             "The `sat_refutation` rule checking requires paths to be given for a SAT \
             solver (`sat-solver`), DRAT checker (`drat-checker`), and an SMT solver \
-            (`smt-solver`) via the external-tools option"
-                .to_owned(),
-        ));
+            (`smt-solver`) via the external-tools option",
+        );
     }
 
     // Create the DIMACS file from the premises and the lemmas.
@@ -326,11 +329,11 @@ pub fn sat_refutation(
             };
 
             if clause_id_to_lemma.len() != lemmas.len() {
-                return Err(CheckerError::Explanation(format!(
+                return err!(
                     "{} lemmas in CNF but {} lemma terms",
                     clause_id_to_lemma.len(),
-                    lemmas.len()
-                )));
+                    lemmas.len(),
+                );
             }
 
             sat_refutation_external_check(

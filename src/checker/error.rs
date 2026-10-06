@@ -10,6 +10,34 @@ use rug::{Integer, Rational};
 use std::{fmt, path::Path};
 use thiserror::Error;
 
+/// Constructs an ad-hoc checker error given a format string and arguments.
+macro_rules! err {
+    ($($arg:tt)*) => {
+        Err(crate::checker::error::CheckerError::Explanation(format!($($arg)*)))
+    };
+}
+
+/// Asserts that the first argument is true, and returns the error specified by the second argument
+/// otherwise. If the second argument is a format string, the error is `err!` with the formatted
+/// message.
+macro_rules! rassert {
+    ($arg:expr, $fmt:literal $(, $args:expr)* $(,)?) => {
+        match $arg {
+            true => Ok(()),
+            false => crate::checker::error::err!($fmt $(, $args)*),
+        }?
+    };
+    ($arg:expr, $err:expr $(,)?) => {
+        match $arg {
+            true => Ok(()),
+            false => Err($err),
+        }?
+    };
+}
+
+pub(crate) use err;
+pub(crate) use rassert;
+
 /// An error that occurred while checking a proof.
 #[derive(Debug, Error)]
 pub enum CheckerError {

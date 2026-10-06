@@ -1,7 +1,10 @@
 use super::{
     CheckerError, RuleArgs, RuleResult, assert_clause_len, assert_num_premises, get_premise_term,
 };
-use crate::{ast::*, checker::error::CongruenceError};
+use crate::{
+    ast::*,
+    checker::error::{CongruenceError, rassert},
+};
 
 pub fn eq_congruent(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 2..)?;

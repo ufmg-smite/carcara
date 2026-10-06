@@ -1,7 +1,10 @@
 use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_args};
 use crate::{
     ast::{Binder, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
-    checker::{error::CheckerError, rules::cutting_planes::split_summation},
+    checker::{
+        error::{CheckerError, err, rassert},
+        rules::cutting_planes::split_summation,
+    },
 };
 use rug::Integer;
 
@@ -9,9 +12,7 @@ use rug::Integer;
 fn get_bit_width(x: &Rc<Term>, pool: &mut Pool) -> Result<usize, CheckerError> {
     // Get bit width of `x`
     let Sort::BitVec(n) = pool.sort(x).as_ref().clone() else {
-        return Err(CheckerError::Explanation(
-            "Was not able to get the bitvector sort".into(),
-        ));
+        return err!("Was not able to get the bitvector sort");
     };
     Ok(n)
 }
@@ -22,11 +23,9 @@ fn check_num_summands(width: usize, sum: &[Rc<Term>], signed: bool) -> RuleResul
     let expected = if signed { width - 1 } else { width };
     rassert!(
         sum.len() == expected,
-        CheckerError::Explanation(format!(
-            "Mismatched number of summands {} and bits {}",
-            sum.len(),
-            expected,
-        ))
+        "Mismatched number of summands {} and bits {}",
+        sum.len(),
+        expected,
     );
     Ok(())
 }
@@ -51,15 +50,11 @@ fn check_pbblast_sum(
                     match match_term!(((_ int_of idx) bitvector) = element) {
                         Some((idx, bv)) => (Integer::from(1), idx, bv),
                         None => {
-                            return Err(CheckerError::Explanation(
-                                "Summand does not match either pattern".into(),
-                            ));
+                            return err!("Summand does not match either pattern");
                         }
                     }
                 } else {
-                    return Err(CheckerError::Explanation(
-                        "Coefficient was not found and i != 0".into(),
-                    ));
+                    return err!("Coefficient was not found and i != 0");
                 }
             }
         };
@@ -67,19 +62,13 @@ fn check_pbblast_sum(
         // Convert the index term to an integer.
         let idx: Integer = idx.as_integer_err()?;
         // Check that the coefficient is 2^i.
-        rassert!(
-            c == (Integer::from(1) << i),
-            CheckerError::Explanation(format!("Coefficient {} is not 2^{}", c, i))
-        );
+        rassert!(c == (Integer::from(1) << i), "Coefficient {c} is not 2^{i}");
         // Check that the index is i.
-        rassert!(
-            idx == i,
-            CheckerError::Explanation(format!("Index {} is not {}", idx, i))
-        );
+        rassert!(idx == i, "Index {idx} is not {i}");
         // Finally, the bitvector in the summand must be the one we expect.
         rassert!(
             *bv == *bitvector,
-            CheckerError::Explanation(format!("Wrong bitvector in blasting {} {}", bv, bitvector))
+            "Wrong bitvector in blasting {bv} {bitvector}",
         );
     }
     Ok(())
@@ -102,18 +91,13 @@ fn check_pbblast_sum_short_circuit(
                 if i == 0 {
                     (Integer::from(1), element)
                 } else {
-                    return Err(CheckerError::Explanation(
-                        "Coefficient was not found and i != 0".into(),
-                    ));
+                    return err!("Coefficient was not found and i != 0");
                 }
             }
         };
 
         // Check that the coefficient is 2^i.
-        rassert!(
-            c == (Integer::from(1) << i),
-            CheckerError::Explanation(format!("Coefficient {} is not 2^{}", c, i))
-        );
+        rassert!(c == (Integer::from(1) << i), "Coefficient {c} is not 2^{i}");
 
         assert_eq(bv, &pbbterm[i])?;
     }
@@ -226,23 +210,21 @@ pub fn pbblast_bvule(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
 /// Helper that checks the the `sign` term has the format -(2<sup>n-1</sup>) x<sub>n-1</sub>
 fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>) -> RuleResult {
-    rassert!(
-        n > 0,
-        CheckerError::Explanation("Signed relation on bitvector of width 0".into())
-    );
+    rassert!(n > 0, "Signed relation on bitvector of width 0");
 
     // Short-circuited
     if let Some(pbb) = match_term!((pbbterm ...) = bitvector) {
-        let last = pbb
-            .last()
-            .ok_or(CheckerError::Explanation("No sign bit in pbbterm".into()))?;
+        let Some(last) = pbb.last() else {
+            return err!("No sign bit in pbbterm");
+        };
         let (coeff, sign_bit) = match_term_err!((* coeff sign_bit) = sign)?;
         let coeff = coeff.as_integer_err()?;
 
         // Check that the coefficient is 2^(n-1)
         rassert!(
             coeff == (Integer::from(1) << (n - 1)), // 2^(n-1)
-            CheckerError::Explanation(format!("Expected coefficient 2^{} got {coeff}", (n - 1)))
+            "Expected coefficient 2^{} got {coeff}",
+            n - 1,
         );
         return assert_eq(sign_bit, last);
     }
@@ -255,19 +237,17 @@ fn check_pbblast_signed_relation(n: usize, sign: &Rc<Term>, bitvector: &Rc<Term>
     // Check that the coefficient is 2^(n-1)
     rassert!(
         coeff == (Integer::from(1) << (n - 1)), // 2^(n-1)
-        CheckerError::Explanation(format!("Expected coefficient 2^{} got {coeff}", (n - 1)))
+        "Expected coefficient 2^{} got {coeff}",
+        n - 1,
     );
 
     // Check that the index is n-1.
-    rassert!(
-        idx == n - 1,
-        CheckerError::Explanation(format!("Index {} is not {}", idx, n - 1))
-    );
+    rassert!(idx == n - 1, "Index {} is not {}", idx, n - 1);
 
     // Finally, the bitvector in the term must be the one we expect.
     rassert!(
         *bv == *bitvector,
-        CheckerError::Explanation(format!("Wrong bitvector in sign bit {} {}", bv, bitvector))
+        "Wrong bitvector in sign bit {bv} {bitvector}",
     );
 
     Ok(())
@@ -374,15 +354,9 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         let idx: Integer = idx.as_integer_err()?;
 
         // Check that the index is `i`.
-        rassert!(
-            idx == i,
-            CheckerError::Explanation(format!("Index {} is not {}", idx, i))
-        );
+        rassert!(idx == i, "Index {idx} is not {i}");
         // Finally, the bitvector in the summand must be the one we expect.
-        rassert!(
-            *bv == *x,
-            CheckerError::Explanation(format!("Mismatched bitvectors {} {}", bv, x))
-        );
+        rassert!(*bv == *x, "Mismatched bitvectors {bv} {x}");
     }
     Ok(())
 }
@@ -390,32 +364,25 @@ pub fn pbblast_pbbvar(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 /// Implements the blasting of a constant
 pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
-    let (bv, pbs) = match_term_err!((= bv (pbbterm ...)) = &conclusion[0])
-        .map_err(|_| CheckerError::Explanation("Malformed @pbbterm equality".into()))?;
-
-    let (m, w) = bv.as_bitvector().ok_or(CheckerError::Explanation(
-        "Expected bitvector constant".into(),
-    ))?;
+    let Some((bv, pbs)) = match_term!((= bv (pbbterm ...)) = &conclusion[0]) else {
+        return err!("Malformed @pbbterm equality");
+    };
+    let Some((m, w)) = bv.as_bitvector() else {
+        return err!("Expected bitvector constant");
+    };
 
     if pbs.len() != w {
-        return Err(CheckerError::Explanation(format!(
-            "Expected {} @pbbterms, got {}",
-            w,
-            pbs.len()
-        )));
+        return err!("Expected {} @pbbterms, got {}", w, pbs.len());
     }
 
     let computed_value = pbs
         .iter()
         .enumerate()
         .try_fold(Integer::new(), |acc, (i, term)| {
-            let pb = term
-                .as_integer()
-                .ok_or(CheckerError::Explanation(format!(
-                    "Non-integer term at position {}",
-                    i
-                )))?
-                .to_i32_wrapping();
+            let Some(pb) = term.as_integer() else {
+                return err!("Non-integer term at position {i}");
+            };
+            let pb = pb.to_i32_wrapping();
 
             match pb {
                 0 => Ok(acc),
@@ -424,18 +391,12 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
                     let increment = Integer::i_pow_u(2, exponent);
                     Ok(&acc + Integer::from(increment))
                 }
-                _ => Err(CheckerError::Explanation(format!(
-                    "Invalid value {} at position {}",
-                    pb, i
-                ))),
+                _ => err!("Invalid value {pb} at position {i}"),
             }
         })?;
 
     if computed_value != m {
-        return Err(CheckerError::Explanation(format!(
-            "Computed value {} != declared value {}",
-            computed_value, m
-        )));
+        return err!("Computed value {computed_value} != declared value {m}");
     }
 
     Ok(())
@@ -478,13 +439,10 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
         // Check z -> Int
         let (z_name, z_type) = &bindings[0];
-        rassert!(
-            z_name == "z",
-            CheckerError::Explanation(format!("Expected {z_name} to be \"z\""))
-        );
+        rassert!(z_name == "z", "Expected {z_name} to be \"z\"");
         rassert!(
             *z_type.as_ref() == Sort::Int,
-            CheckerError::Explanation(format!("Expected {z_type} to be Sort::Int"))
+            "Expected {z_type} to be Sort::Int",
         );
 
         // c1 : (>= (+ xi yi) z)
@@ -493,7 +451,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(yic, yi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
 
         // c2 : (>= (+ z xi) yi)
@@ -502,7 +460,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(yic, yi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
 
         // c3 : (>= (+ z yi) xi)
@@ -511,7 +469,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(yic, yi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
 
         // c4 : (>= 2 (+ z xi yi)
@@ -520,7 +478,7 @@ pub fn pbblast_bvxor(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(yic, yi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
     }
 
@@ -541,13 +499,10 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
 
         // Check z -> Int
         let (z_name, z_type) = &bindings[0];
-        rassert!(
-            z_name == "z",
-            CheckerError::Explanation(format!("Expected {z_name} to be \"z\""))
-        );
+        rassert!(z_name == "z", "Expected {z_name} to be \"z\"");
         rassert!(
             *z_type.as_ref() == Sort::Int,
-            CheckerError::Explanation(format!("Expected {z_type} to be Sort::Int"))
+            "Expected {z_type} to be Sort::Int",
         );
 
         // c1 : (>= @x0 z)
@@ -555,7 +510,7 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(xic, xi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
 
         // c2 : (>= @y0 z)
@@ -563,14 +518,14 @@ pub fn pbblast_bvand(RuleArgs { pool, conclusion, .. }: RuleArgs) -> RuleResult 
         assert_eq(yic, yi)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
 
         // c3 : (>= (+ z 1) (+ @x0 @y0))
         let (zc, xic, yic) = match_term_err!((>= (+ z 1) (+ xi yi)) = c3)?;
         rassert!(
             zc.as_var() == Some(z_name) && pool.sort(zc) == *z_type,
-            CheckerError::Explanation(format!("Expected {z_name} but got {zc}"))
+            "Expected {z_name} but got {zc}",
         );
         assert_eq(xic, xi)?;
         assert_eq(yic, yi)?;
