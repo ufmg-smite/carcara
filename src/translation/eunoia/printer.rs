@@ -1,6 +1,7 @@
 //! A pretty printer for Eunoia proofs.
 
 use indexmap::IndexMap;
+use rapidhash::RapidHashSet;
 
 use crate::{ast::Rc, translation::eunoia::ast::*};
 use std::fmt;
@@ -19,7 +20,9 @@ impl<'a> fmt::Display for DisplayEunoiaProof<'a> {
         let names: SharingNames = self.1.then(|| {
             proof_usage(self.0)
                 .into_iter()
-                .filter(|(_, count)| *count >= SHARING_THRESHOLD)
+                .filter(|(_, (count, has_local_symbol))| {
+                    *count >= SHARING_THRESHOLD && !has_local_symbol
+                })
                 .enumerate()
                 .map(|(i, (term, _))| (term, i))
                 .collect()
@@ -315,13 +318,24 @@ where
     DisplaySequence(seq)
 }
 
-fn proof_usage(proof: &EunoiaProof) -> IndexMap<Rc<EunoiaTerm>, usize> {
+/// Maps each term to the number of times it is used, and whether it contains a symbol defined by
+/// the proof itself.
+type Usage = IndexMap<Rc<EunoiaTerm>, (usize, bool)>;
+
+fn proof_usage(proof: &EunoiaProof) -> Usage {
+    // Terms that contain symbols defined by the proof (e.g., contexts) are never shared.
+    let mut local_symbols: RapidHashSet<&str> = RapidHashSet::default();
+
     let mut usage = IndexMap::new();
     for command in proof {
         match command {
-            EunoiaCommand::Assume { term, .. }
-            | EunoiaCommand::AssumePush { term, .. }
-            | EunoiaCommand::Define { term, .. } => count_term_usage(&mut usage, term),
+            EunoiaCommand::Assume { term, .. } | EunoiaCommand::AssumePush { term, .. } => {
+                count_term_usage(&mut usage, &local_symbols, term);
+            }
+            EunoiaCommand::Define { name, term, .. } => {
+                count_term_usage(&mut usage, &local_symbols, term);
+                local_symbols.insert(name);
+            }
             EunoiaCommand::Step {
                 conclusion_clause,
                 premises,
@@ -339,7 +353,7 @@ fn proof_usage(proof: &EunoiaProof) -> IndexMap<Rc<EunoiaTerm>, usize> {
                     .chain(&premises.list)
                     .chain(&arguments.list);
                 for t in terms {
-                    count_term_usage(&mut usage, t);
+                    count_term_usage(&mut usage, &local_symbols, t);
                 }
             }
             _ => (),
@@ -348,29 +362,40 @@ fn proof_usage(proof: &EunoiaProof) -> IndexMap<Rc<EunoiaTerm>, usize> {
     usage
 }
 
-fn count_term_usage(usage: &mut IndexMap<Rc<EunoiaTerm>, usize>, term: &Rc<EunoiaTerm>) {
+/// Counts the uses of `term` and its subterms. Returns whether `term` contains a symbol in
+/// `local_symbols`.
+fn count_term_usage(
+    usage: &mut Usage,
+    local_symbols: &RapidHashSet<&str>,
+    term: &Rc<EunoiaTerm>,
+) -> bool {
     // If we've already seen this term we don't have to process its children
-    if let Some(count) = usage.get_mut(term) {
+    if let Some((count, has_local_symbol)) = usage.get_mut(term) {
         *count += 1;
-        return;
+        return *has_local_symbol;
     }
 
     // It's important to process the children before inserting the parent term to ensure the
     // resulting `IndexMap` is correctly sorted
+    let mut has_local_symbol = false;
     match term.as_ref() {
         EunoiaTerm::App(_, args) | EunoiaTerm::Op(_, args) => {
             for a in args {
-                count_term_usage(usage, a);
+                has_local_symbol |= count_term_usage(usage, local_symbols, a);
             }
-            usage.insert(term.clone(), 1);
         }
         EunoiaTerm::HOApp(func, args) => {
-            count_term_usage(usage, func);
+            has_local_symbol |= count_term_usage(usage, local_symbols, func);
             for a in args {
-                count_term_usage(usage, a);
+                has_local_symbol |= count_term_usage(usage, local_symbols, a);
             }
-            usage.insert(term.clone(), 1);
         }
-        _ => (),
+        EunoiaTerm::Id(symbol) => return local_symbols.contains(symbol.as_str()),
+        // Lists are only used as the variable lists of binders, which must be written explicitly
+        // for the binder to bind its variables, so they are never shared. Their symbols are
+        // binding occurrences, and the other atoms can't contain symbols
+        _ => return false,
     }
+    usage.insert(term.clone(), (1, has_local_symbol));
+    has_local_symbol
 }
