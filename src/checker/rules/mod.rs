@@ -67,7 +67,7 @@ fn assert_num_premises<T: Into<Range>>(premises: &[Premise], range: T) -> RuleRe
     Ok(())
 }
 
-fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResult {
+pub(super) fn assert_clause_len<T: Into<Range>>(clause: &[Rc<Term>], range: T) -> RuleResult {
     let range = range.into();
     if !range.contains(clause.len()) {
         return Err(CheckerError::WrongLengthOfClause(range, clause.len()));
