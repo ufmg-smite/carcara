@@ -84,6 +84,18 @@ fn drat() {
             (step t0 (cl a b) :rule or :premises (a3))
             (step t1 (cl) :rule drat :premises (a1 a2 t0) :args ((cl)))": true,
 
+            // `(cl c)` is not RUP, but it is RAT, since no clause contains `(not c)`
+            "(assume a0 (or a b))
+            (assume a1 (or a (not b)))
+            (assume a2 (or (not a) b))
+            (assume a3 (or (not a) (not b)))
+            (step t0 (cl a b) :rule or :premises (a0))
+            (step t1 (cl a (not b)) :rule or :premises (a1))
+            (step t2 (cl (not a) b) :rule or :premises (a2))
+            (step t3 (cl (not a) (not b)) :rule or :premises (a3))
+            (step t4 (cl) :rule drat :premises (t0 t1 t2 t3) :args ((cl c) (cl a) (cl)))": true,
+        }
+        "The conclusion must be the empty clause" {
             "(assume a0 (or a c))
             (assume a1 (or a (not c) d))
             (assume a2 (or (not d) e))
@@ -92,7 +104,10 @@ fn drat() {
             (step t1 (cl a (not c) d) :rule or :premises (a1))
             (step t2 (cl (not d) e) :rule or :premises (a2))
             (step t3 (cl (not d) (not e)) :rule or :premises (a3))
-            (step t4 (cl a b) :rule drat :premises (t0 t1 t2 t3) :args ((cl a b)))": true,
+            (step t4 (cl a b) :rule drat :premises (t0 t1 t2 t3) :args ((cl a b)))": false,
+
+            // `(cl a)` is RAT, but doesn't follow from the (empty) set of premises
+            "(step t1 (cl a) :rule drat :args ((cl a)))": false,
         }
 
         "DRAT failing examples" {
@@ -107,11 +122,11 @@ fn drat() {
             (step t0 (cl a c) :rule or :premises (a0))
             (step t1 (cl a (not c) d) :rule or :premises (a1))
             (step t2 (cl (not d) e) :rule or :premises (a2))
-            (step t4 (cl a) :rule drat :premises (t0 t1 t2) :args ((cl a b)))": false,
+            (step t4 (cl) :rule drat :premises (t0 t1 t2) :args ((cl a b)))": false,
         }
         "Arguments that are not clauses" {
             "(assume a0 a)
-            (step t1 (cl a) :rule drat :premises (a0) :args (a))": false,
+            (step t1 (cl) :rule drat :premises (a0) :args (a))": false,
         }
     }
 }

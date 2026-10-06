@@ -1,4 +1,4 @@
-use super::{CheckerError, RuleArgs, RuleResult};
+use super::{CheckerError, RuleArgs, RuleResult, assert_clause_len};
 use crate::ast::*;
 use crate::drup::*;
 
@@ -8,6 +8,12 @@ pub fn drup(
         pool, conclusion, premises, args, ..
     }: RuleArgs,
 ) -> RuleResult {
+    if check_drat {
+        // RAT additions only preserve satisfiability, not implication, so the only clause that
+        // `drat` can soundly conclude is the empty clause
+        assert_clause_len(conclusion, 0)?;
+    }
+
     let premises: Vec<Rc<Term>> = premises
         .iter()
         .map(|p| p.clause)
