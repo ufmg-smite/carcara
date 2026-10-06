@@ -12,7 +12,7 @@ use thiserror::Error;
 /// Constructs an ad-hoc checker error given a format string and arguments.
 macro_rules! err {
     ($($arg:tt)*) => {
-        Err(crate::checker::error::CheckerError::Explanation(format!($($arg)*)))
+        Err(crate::checker::error::CheckerError::Other(format!($($arg)*)))
     };
 }
 
@@ -40,13 +40,9 @@ pub(crate) use rassert;
 /// An error that occurred while checking a proof.
 #[derive(Debug, Error)]
 pub enum CheckerError {
-    /// An unspecified error.
-    #[error("unspecified error")]
-    Unspecified,
-
-    /// An unspecified error, with an explanation message.
+    /// An ad-hoc error, with an explanation message.
     #[error("{0}")]
-    Explanation(String),
+    Other(String),
 
     /// An error when applying a [`Substitution`].
     #[error(transparent)]
