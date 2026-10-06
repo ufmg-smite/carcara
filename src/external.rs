@@ -94,6 +94,9 @@ pub enum ExternalError {
     #[error("failed to spawn external tool process")]
     FailedSpawn(io::Error),
 
+    #[error("failed to read external tool output file")]
+    FailedReadOutput(io::Error),
+
     #[error("failed to write to external tool stdin")]
     FailedWriteToStdin(io::Error),
 
@@ -405,7 +408,7 @@ pub fn get_core_lemmas(
 
     let mut core_lemmas: Vec<Vec<Rc<Term>>> = Vec::new();
     fs::read_to_string("proof.core")
-        .unwrap() // panic on possible file-reading errors
+        .map_err(ExternalError::FailedReadOutput)?
         .lines() // split the string into an iterator of string slices
         .skip(1)
         .for_each(|l| {
