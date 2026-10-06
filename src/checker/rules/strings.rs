@@ -64,13 +64,13 @@ fn concat_extract(term: Rc<Term>) -> Vec<Rc<Term>> {
     flattened
 }
 
-fn is_compatible(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> bool {
-    match (&s[..], &t[..]) {
+fn is_compatible(s: &[Rc<Term>], t: &[Rc<Term>]) -> bool {
+    match (s, t) {
         (_, []) => true,
         ([], _) => true,
         ([h1, t1 @ ..], [h2, t2 @ ..]) => {
             if h1 == h2 {
-                is_compatible(t1.to_vec(), t2.to_vec())
+                is_compatible(t1, t2)
             } else {
                 false
             }
@@ -78,14 +78,14 @@ fn is_compatible(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> bool {
     }
 }
 
-fn overlap(s: Vec<Rc<Term>>, t: Vec<Rc<Term>>) -> usize {
-    match &s[..] {
+fn overlap(s: &[Rc<Term>], t: &[Rc<Term>]) -> usize {
+    match s {
         [] | [_] => 0,
         [_, tail @ ..] => {
-            if is_compatible(s.clone(), t.clone()) {
+            if is_compatible(s, t) {
                 0
             } else {
-                1 + overlap(tail.to_vec(), t.clone())
+                1 + overlap(tail, t)
             }
         }
     }
@@ -1077,7 +1077,7 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
 
     let t_2_flat = string_concat_flatten(pool, args_t[1].clone());
 
-    let v = 1 + overlap(sc_tail.clone(), t_2_flat.clone());
+    let v = 1 + overlap(&sc_tail, &t_2_flat);
     let v = pool.add(Term::new_int(v));
     let oc = build_skolem_prefix(pool, ss[0].clone(), v);
     let oc_len = build_term!(pool, (strlen {oc.clone()}));
@@ -1125,7 +1125,7 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
     let mut t_2_flat = string_concat_flatten(pool, args_t[1].clone());
     t_2_flat.reverse();
 
-    let v = 1 + overlap(sc_tail.to_vec(), t_2_flat.clone());
+    let v = 1 + overlap(sc_tail, &t_2_flat);
     let v = pool.add(Term::new_int(v));
     let oc = build_str_suffix_len(pool, ss[1].clone(), v);
 
