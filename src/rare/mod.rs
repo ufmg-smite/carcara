@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use indexmap::{IndexMap, IndexSet};
 use rug::Integer;
 
@@ -13,65 +15,68 @@ struct RewriteContext {
     in_progress: IndexSet<Rc<Term>>,
 }
 
-pub fn get_rules() -> Vec<(RewriteTerm, RewriteTerm)> {
-    // For each n-ary (right-assoc-nil) operator we need, in this order:
-    //   flatten   `(Op (RareList ..x..)) ~> (Op x)`  -- splice a rare list into the parent
-    //   singleton `(Op x) ~> x`                       -- a one-argument application is its argument
-    //   empty     `(Op) ~> <nil>`                     -- the operator's nil terminator
-    // The flatten rule MUST precede the singleton rule: `check_rewrites` returns the first
-    // matching rule, and `(Op x)` also matches `(Op (RareList ..))`, so without flatten-first a
-    // single rare-list argument would be wrongly collapsed instead of spliced.
-    //
-    // Bitvector n-ary operators have width-dependent nil terminators that cannot be written as a
-    // static constant, so they only get flatten + singleton rules here; the empty -> nil case is
-    // synthesized from the operand width in `bv_nil_if_empty`.
-    vec![
-        build_equation!((RareList ..x..) ~> x),
-        // Booleans
-        build_equation!((And (RareList ..x..)) ~> (And x)),
-        build_equation!((Or (RareList ..x..)) ~> (Or x)),
-        build_equation!((And x) ~> x),
-        build_equation!((Or x) ~> x),
-        build_equation!((Or true) ~> true),
-        build_equation!((And false) ~> false),
-        build_equation!((Or) ~> false),
-        build_equation!((And) ~> true),
-        // Arithmetic
-        build_equation!((Add (RareList ..x..)) ~> (Add x)),
-        build_equation!((Add x) ~> x),
-        build_equation!((Add) ~> 0),
-        build_equation!((Mult (RareList ..x..)) ~> (Mult x)),
-        build_equation!((Mult x) ~> x),
-        build_equation!((Mult) ~> 1),
-        // Strings
-        build_equation!((StrConcat (RareList ..x..)) ~> (StrConcat x)),
-        build_equation!((StrConcat x) ~> x),
-        build_equation!((StrConcat) ~> ""),
-        // Regular expressions
-        // re.++ has nil `(str.to_re "")`, which is not a zero-argument term, so we omit its empty
-        // rule and keep only flatten + singleton; an empty re.++ does not arise from those.
-        build_equation!((ReConcat (RareList ..x..)) ~> (ReConcat x)),
-        build_equation!((ReConcat x) ~> x),
-        build_equation!((ReUnion (RareList ..x..)) ~> (ReUnion x)),
-        build_equation!((ReUnion x) ~> x),
-        build_equation!((ReUnion) ~> (ReNone)),
-        build_equation!((ReIntersection (RareList ..x..)) ~> (ReIntersection x)),
-        build_equation!((ReIntersection x) ~> x),
-        build_equation!((ReIntersection) ~> (ReAll)),
-        // Bitvectors (empty -> nil handled in `bv_nil_if_empty`)
-        build_equation!((BvAnd (RareList ..x..)) ~> (BvAnd x)),
-        build_equation!((BvAnd x) ~> x),
-        build_equation!((BvOr (RareList ..x..)) ~> (BvOr x)),
-        build_equation!((BvOr x) ~> x),
-        build_equation!((BvXor (RareList ..x..)) ~> (BvXor x)),
-        build_equation!((BvXor x) ~> x),
-        build_equation!((BvAdd (RareList ..x..)) ~> (BvAdd x)),
-        build_equation!((BvAdd x) ~> x),
-        build_equation!((BvMul (RareList ..x..)) ~> (BvMul x)),
-        build_equation!((BvMul x) ~> x),
-        build_equation!((BvConcat (RareList ..x..)) ~> (BvConcat x)),
-        build_equation!((BvConcat x) ~> x),
-    ]
+pub fn get_rules() -> &'static [(RewriteTerm, RewriteTerm)] {
+    static RULES: OnceLock<Vec<(RewriteTerm, RewriteTerm)>> = OnceLock::new();
+    RULES.get_or_init(|| {
+        // For each n-ary (right-assoc-nil) operator we need, in this order:
+        //   flatten   `(Op (RareList ..x..)) ~> (Op x)`  -- splice a rare list into the parent
+        //   singleton `(Op x) ~> x`                       -- a one-argument application is its argument
+        //   empty     `(Op) ~> <nil>`                     -- the operator's nil terminator
+        // The flatten rule MUST precede the singleton rule: `check_rewrites` returns the first
+        // matching rule, and `(Op x)` also matches `(Op (RareList ..))`, so without flatten-first a
+        // single rare-list argument would be wrongly collapsed instead of spliced.
+        //
+        // Bitvector n-ary operators have width-dependent nil terminators that cannot be written as a
+        // static constant, so they only get flatten + singleton rules here; the empty -> nil case is
+        // synthesized from the operand width in `bv_nil_if_empty`.
+        vec![
+            build_equation!((RareList ..x..) ~> x),
+            // Booleans
+            build_equation!((And (RareList ..x..)) ~> (And x)),
+            build_equation!((Or (RareList ..x..)) ~> (Or x)),
+            build_equation!((And x) ~> x),
+            build_equation!((Or x) ~> x),
+            build_equation!((Or true) ~> true),
+            build_equation!((And false) ~> false),
+            build_equation!((Or) ~> false),
+            build_equation!((And) ~> true),
+            // Arithmetic
+            build_equation!((Add (RareList ..x..)) ~> (Add x)),
+            build_equation!((Add x) ~> x),
+            build_equation!((Add) ~> 0),
+            build_equation!((Mult (RareList ..x..)) ~> (Mult x)),
+            build_equation!((Mult x) ~> x),
+            build_equation!((Mult) ~> 1),
+            // Strings
+            build_equation!((StrConcat (RareList ..x..)) ~> (StrConcat x)),
+            build_equation!((StrConcat x) ~> x),
+            build_equation!((StrConcat) ~> ""),
+            // Regular expressions
+            // re.++ has nil `(str.to_re "")`, which is not a zero-argument term, so we omit its empty
+            // rule and keep only flatten + singleton; an empty re.++ does not arise from those.
+            build_equation!((ReConcat (RareList ..x..)) ~> (ReConcat x)),
+            build_equation!((ReConcat x) ~> x),
+            build_equation!((ReUnion (RareList ..x..)) ~> (ReUnion x)),
+            build_equation!((ReUnion x) ~> x),
+            build_equation!((ReUnion) ~> (ReNone)),
+            build_equation!((ReIntersection (RareList ..x..)) ~> (ReIntersection x)),
+            build_equation!((ReIntersection x) ~> x),
+            build_equation!((ReIntersection) ~> (ReAll)),
+            // Bitvectors (empty -> nil handled in `bv_nil_if_empty`)
+            build_equation!((BvAnd (RareList ..x..)) ~> (BvAnd x)),
+            build_equation!((BvAnd x) ~> x),
+            build_equation!((BvOr (RareList ..x..)) ~> (BvOr x)),
+            build_equation!((BvOr x) ~> x),
+            build_equation!((BvXor (RareList ..x..)) ~> (BvXor x)),
+            build_equation!((BvXor x) ~> x),
+            build_equation!((BvAdd (RareList ..x..)) ~> (BvAdd x)),
+            build_equation!((BvAdd x) ~> x),
+            build_equation!((BvMul (RareList ..x..)) ~> (BvMul x)),
+            build_equation!((BvMul x) ~> x),
+            build_equation!((BvConcat (RareList ..x..)) ~> (BvConcat x)),
+            build_equation!((BvConcat x) ~> x),
+        ]
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -459,7 +464,7 @@ mod tests {
     }
 
     fn normalize(pool: &mut Pool, term: Rc<Term>) -> Rc<Term> {
-        rewrite_meta_terms(pool, term, &get_rules())
+        rewrite_meta_terms(pool, term, get_rules())
     }
 
     #[test]
