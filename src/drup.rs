@@ -63,7 +63,10 @@ pub fn hash_term<T: Borrow<Rc<Term>>>(pool: &mut Pool, term: T) -> u64 {
 // This function search for a unit clause by using the two literals in the pair associated in each indexset
 // additionally clauses is mutable since this function also fix the two watched literal whenever a new unit clause is propagated
 fn get_implied_clause(
-    clauses: &mut Vec<((Option<Literal>, Option<Literal>), (IndexSet<Literal>, u64))>,
+    clauses: &mut Vec<(
+        (Option<Literal>, Option<Literal>),
+        (&IndexSet<Literal>, u64),
+    )>,
     env: &HashMap<Literal, bool>,
 ) -> Implied<Literal, (IndexSet<Literal>, u64)> {
     if clauses.is_empty() {
@@ -71,6 +74,7 @@ fn get_implied_clause(
     }
 
     for (schema, (lits, key)) in clauses {
+        let lits: &IndexSet<Literal> = lits;
         match schema {
             (None, None) => return Implied::Bottom(((*lits).clone(), *key)),
 
@@ -95,7 +99,7 @@ fn get_implied_clause(
                         let mut unset_literal = None;
                         let mut not_unit = false;
 
-                        for (b1, t1) in &*lits {
+                        for (b1, t1) in lits {
                             let assign_state = env.get(&(*b1, (*t1).clone()));
 
                             match assign_state {
@@ -161,33 +165,29 @@ fn rup(
 ) -> Option<RupAddition> {
     let mut unit_story: RupAddition = vec![];
 
-    let mut clauses = vec![];
-
     let mut env: HashMap<Literal, bool> = HashMap::new();
 
+    let mut goal_clauses = Vec::with_capacity(goal.len());
     for term in goal {
         let (p, regular_term) = term.remove_all_negations_with_polarity();
         let mut clause: IndexSet<Literal> = IndexSet::new();
         clause.insert((!p, regular_term.clone()));
-        clauses.push((
-            (Some((!p, regular_term.clone())), None),
-            (clause, hash_term(pool, term)),
-        ));
+        goal_clauses.push(((!p, regular_term.clone()), clause, hash_term(pool, term)));
     }
 
+    // Only the watched literals are copied, since they are updated during propagation. The clauses
+    // themselves are borrowed
+    let mut clauses: Vec<_> = goal_clauses
+        .iter()
+        .map(|(literal, clause, key)| ((Some(literal.clone()), None), (clause, *key)))
+        .collect();
     for (key, clause) in drup_clauses {
         let mut watched_literals = clause.iter().take(2);
-        let clause = (
-            (
-                watched_literals.next().map(|v| (v.0, v.1.clone())),
-                watched_literals.next().map(|v| (v.0, v.1.clone())),
-            ),
-            (
-                clause.iter().map(|(k, v)| (*k, (*v).clone())).collect(),
-                *key,
-            ),
+        let watched = (
+            watched_literals.next().map(|v| (v.0, v.1.clone())),
+            watched_literals.next().map(|v| (v.0, v.1.clone())),
         );
-        clauses.push(clause);
+        clauses.push((watched, (clause, *key)));
     }
 
     loop {
