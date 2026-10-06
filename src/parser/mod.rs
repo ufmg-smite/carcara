@@ -1417,30 +1417,20 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_indexed_operator(&mut self) -> CarcaraResult<(ParamOperator, Vec<Rc<Term>>)> {
         let op_symbol = self.expect_symbol()?;
 
+        // In `(_ bvN w)`, the constant's value is part of the symbol
         if let Some(value) = op_symbol.strip_prefix("bv")
             && !value.is_empty()
             && value.chars().all(|c| c.is_ascii_digit())
         {
-            let parsed_value = value.parse::<Integer>().unwrap();
-            let args = self.parse_sequence(Self::parse_term, true)?;
-            let mut constant_args = Vec::new();
-            for arg in args {
-                if let Some(i) = arg.as_signed_integer() {
-                    constant_args.push(self.pool.add(Term::Const(Constant::Integer(i))));
-                } else {
-                    return Err(self.err(
-                        ParserError::ExpectedIntegerConstant(arg.clone()),
-                        self.current_position,
-                    ));
-                }
-            }
-            constant_args.insert(
-                0,
-                self.pool.add(Term::Const(Constant::Integer(parsed_value))),
-            );
-            return Ok((ParamOperator::BvConst, constant_args));
+            let value = self
+                .pool
+                .add(Term::new_int(value.parse::<Integer>().unwrap()));
+            let mut op_args = vec![value];
+            op_args.extend(self.parse_indexed_op_args()?);
+            return Ok((ParamOperator::BvConst, op_args));
         }
-        let op = ParamOperator::from_str(op_symbol.as_str()).map_err(|_| {
+
+        let op = ParamOperator::from_str(&op_symbol).map_err(|_| {
             self.err(
                 ParserError::InvalidIndexedOp(op_symbol),
                 self.current_position,
@@ -1449,22 +1439,24 @@ impl<'p, 's> Parser<'p, 's> {
         if op == ParamOperator::Tester {
             let cons = self.parse_term()?;
             self.expect_token(Token::CloseParen)?;
-            let args = vec![cons.clone()];
-            return Ok((op, args));
+            return Ok((op, vec![cons]));
         }
+        Ok((op, self.parse_indexed_op_args()?))
+    }
+
+    /// Parses the `op_args` of an indexed operator, up to the closing parenthesis. Each argument
+    /// must be an integer constant.
+    fn parse_indexed_op_args(&mut self) -> CarcaraResult<Vec<Rc<Term>>> {
         let args = self.parse_sequence(Self::parse_term, true)?;
-        let mut constant_args = Vec::new();
+        let mut result = Vec::with_capacity(args.len());
         for arg in args {
-            if let Some(i) = arg.as_signed_integer() {
-                constant_args.push(self.pool.add(Term::Const(Constant::Integer(i))));
-            } else {
-                return Err(self.err(
-                    ParserError::ExpectedIntegerConstant(arg.clone()),
-                    self.current_position,
-                ));
-            }
+            let Some(i) = arg.as_signed_integer() else {
+                let e = ParserError::ExpectedIntegerConstant(arg);
+                return Err(self.err(e, self.current_position));
+            };
+            result.push(self.pool.add(Term::new_int(i)));
         }
-        Ok((op, constant_args))
+        Ok(result)
     }
 
     /// Constructs, check operation arguments and sort checks an indexed operation term.
