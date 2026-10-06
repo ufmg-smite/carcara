@@ -312,8 +312,8 @@ fn translate_2_eunoia_command(
     let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new(eunoia_mech);
     let eunoia_prelude = translator.translate_problem(alethe_problem);
     let eunoia_proof = translator.translate(proof);
-    println!("{}", DisplayEunoiaProof(&eunoia_prelude));
-    println!("{}", DisplayEunoiaProof(eunoia_proof));
+    println!("{}", DisplayEunoiaProof(&eunoia_prelude, true));
+    println!("{}", DisplayEunoiaProof(eunoia_proof, true));
 
     Ok(())
 }
