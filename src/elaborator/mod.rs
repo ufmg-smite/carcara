@@ -150,9 +150,7 @@ impl<'e> Elaborator<'e> {
                     if self.config.sat_ref_tools.is_some() {
                         current.mutate(|_, node, _| match node.as_ref() {
                             ProofNode::Step(s) if (s.rule == "sat_refutation") => {
-                                // TODO: proper error handling
-                                Ok(sat_refutation::sat_refutation(self, s)
-                                    .unwrap_or_else(|| node.clone()))
+                                sat_refutation::sat_refutation(self, s).map_err(|e| e.at(s))
                             }
                             _ => Ok(node.clone()),
                         })

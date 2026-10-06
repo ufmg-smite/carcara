@@ -1,4 +1,4 @@
-use super::{Elaborator, IdHelper};
+use super::{ElaborationError, Elaborator, IdHelper};
 use crate::{
     ast::{
         Operator, ProofCommand, ProofNode, ProofStep, Rc, StepNode, Term, build_term, pool::Pool,
@@ -73,7 +73,7 @@ fn get_resolution_refutation(
     premise_to_proof: &HashMap<Rc<Term>, Rc<ProofNode>>,
     cnf_path: String,
     term_to_var: &HashMap<&Rc<Term>, i32>,
-) -> Rc<ProofNode> {
+) -> Result<Rc<ProofNode>, ExternalError> {
     let var_to_term: HashMap<i32, &Rc<Term>> = term_to_var.iter().map(|(k, v)| (*v, *k)).collect();
     let mut id = 0;
     let mut ids = IdHelper::new(&step.id);
@@ -82,7 +82,7 @@ fn get_resolution_refutation(
     // coming from the original step's premises. Note that we must use the LRAT from DRAT-trim so
     // that we start from the same core.
     let mut clause_id_to_proof: HashMap<usize, Rc<ProofNode>> = fs::read_to_string(cnf_path)
-        .unwrap()
+        .map_err(ExternalError::FailedReadOutput)?
         .lines()
         .skip(1)
         .filter_map(|l| {
@@ -143,9 +143,9 @@ fn get_resolution_refutation(
     // We traverse the LRAT proof in reverse. Since it is coming from DRAT-trim, all clauses must
     // be useful, which should be guaranteed by the construction downstream of the proof for the
     // empty clause.
-    let mut empty_clause_id = 0;
+    let mut empty_clause_id = None;
     let res_steps: HashMap<usize, (Vec<Rc<Term>>, Vec<usize>)> = fs::read_to_string("proof.lrat")
-        .unwrap()
+        .map_err(ExternalError::FailedReadOutput)?
         .lines()
         .rev()
         .filter_map(|l| {
@@ -175,8 +175,7 @@ fn get_resolution_refutation(
                 i += 1;
             }
             if sat_clause_lits.is_empty() {
-                empty_clause_id = id;
-                sat_clause_lits.push(pool.bool_false());
+                empty_clause_id = Some(id);
             }
             // parse premises
             let premises: Vec<usize> = strings
@@ -196,15 +195,28 @@ fn get_resolution_refutation(
         res_steps.len()
     );
 
-    build_res_step(
+    let empty_clause_id = empty_clause_id.ok_or(ExternalError::InvalidOutput)?;
+    let root = build_res_step(
         empty_clause_id,
         &res_steps,
         &mut ids,
         &mut clause_id_to_proof,
-    )
+    );
+
+    // The step that derives the empty clause replaces the original step, so it keeps its id
+    let ProofNode::Step(root) = root.as_ref() else {
+        unreachable!()
+    };
+    Ok(Rc::new(ProofNode::Step(StepNode {
+        id: step.id.clone(),
+        ..root.clone()
+    })))
 }
 
-pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc<ProofNode>> {
+pub fn sat_refutation(
+    elaborator: &mut Elaborator,
+    step: &StepNode,
+) -> Result<Rc<ProofNode>, ElaborationError> {
     // Get commands out of step children. See proof_node_to_list
     let mut commands: Vec<ProofCommand> = Vec::new();
 
@@ -238,82 +250,79 @@ pub fn sat_refutation(elaborator: &mut Elaborator, step: &StepNode) -> Option<Rc
     );
     let tools = elaborator.config.sat_ref_tools.as_ref().unwrap();
 
-    if let Ok(core_lemmas) = get_core_lemmas(
+    let core_lemmas = get_core_lemmas(
         cnf_path.as_str(),
         &sat_clause_to_lemma,
         &tools.sat_solver,
         &tools.drat_checker,
-    ) {
-        log::info!(
-            "[sat_refutation elab] Get proofs for {} core lemmas",
-            core_lemmas.len()
-        );
-        let mut step_id_to_lemma_proof: HashMap<String, Option<Rc<ProofNode>>> = lemmas_to_step_ids
-            .values()
-            .map(|id| (id.clone(), None))
-            .collect();
+    )?;
+    log::info!(
+        "[sat_refutation elab] Get proofs for {} core lemmas",
+        core_lemmas.len()
+    );
+    let mut step_id_to_lemma_proof: HashMap<String, Option<Rc<ProofNode>>> = lemmas_to_step_ids
+        .values()
+        .map(|id| (id.clone(), None))
+        .collect();
 
-        // for each core lemma, we will run cvc5, parse the proof in, and check it
-        for (i, li) in core_lemmas.iter().enumerate() {
-            let asserts: Vec<_> = li
-                .iter()
-                .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
-                .collect();
-            let problem = get_problem_string(&elaborator.problem.prelude.clone(), &asserts);
-            log::debug!("\tGet proof for lemma {}", i);
-
-            let solver_proof_commands =
-                match get_solver_proof(elaborator.pool, problem.clone(), &tools.smt_solver) {
-                    Ok((c, _)) => c,
-                    Err(e) => {
-                        log::warn!("\t\tfailed to elaborate theory lemma {:?}: {}", li, e);
-                        return None;
-                    }
-                };
-            let lemma = elaborator
-                .pool
-                .add(Term::Op(Operator::RareList, li.clone()));
-            let step_id = &lemmas_to_step_ids[&lemma];
-            let proof_node =
-                insert_solver_proof(elaborator.pool, solver_proof_commands, li, step_id, 0);
-            step_id_to_lemma_proof.insert(step_id.clone(), Some(proof_node));
-        }
-        // map premise clauses to their proof nodes, already replacing the theory lemma hole by the found proof
-        let premise_to_proof: HashMap<Rc<Term>, Rc<ProofNode>> = step
-            .premises
+    // for each core lemma, we will run cvc5, parse the proof in, and check it
+    for (i, li) in core_lemmas.iter().enumerate() {
+        let asserts: Vec<_> = li
             .iter()
-            .filter_map(|premise| {
-                let id = premise.id();
-                if !step_id_to_lemma_proof.contains_key(id) {
-                    Some((
-                        elaborator
-                            .pool
-                            .add(Term::Op(Operator::RareList, premise.clause().to_vec())),
-                        premise.clone(),
-                    ))
-                } else if let Some(proof) = &step_id_to_lemma_proof[id] {
-                    Some((
-                        elaborator
-                            .pool
-                            .add(Term::Op(Operator::RareList, proof.clause().to_vec())),
-                        proof.clone(),
-                    ))
-                } else {
-                    None
-                }
-            })
+            .map(|l| build_term!(elaborator.pool, (not {l.clone()})))
             .collect();
-        log::info!("[sat_refutation elab] Elaborate propositional proof");
-        let pf = get_resolution_refutation(
-            elaborator.pool,
-            step,
-            &premise_to_proof,
-            cnf_path,
-            &term_to_var,
-        );
-        log::info!("[sat_refutation elab] Finished elaboration.");
-        Some(pf)
-    } else {
-        None
+        let problem = get_problem_string(&elaborator.problem.prelude.clone(), &asserts);
+        log::debug!("\tGet proof for lemma {}", i);
+
+        let solver_proof_commands =
+            match get_solver_proof(elaborator.pool, problem.clone(), &tools.smt_solver) {
+                Ok((c, _)) => c,
+                Err(e) => {
+                    log::warn!("\t\tfailed to elaborate theory lemma {:?}: {}", li, e);
+                    return Err(e.into());
+                }
+            };
+        let lemma = elaborator
+            .pool
+            .add(Term::Op(Operator::RareList, li.clone()));
+        let step_id = &lemmas_to_step_ids[&lemma];
+        let proof_node =
+            insert_solver_proof(elaborator.pool, solver_proof_commands, li, step_id, 0);
+        step_id_to_lemma_proof.insert(step_id.clone(), Some(proof_node));
     }
+    // map premise clauses to their proof nodes, already replacing the theory lemma hole by the found proof
+    let premise_to_proof: HashMap<Rc<Term>, Rc<ProofNode>> = step
+        .premises
+        .iter()
+        .filter_map(|premise| {
+            let id = premise.id();
+            if !step_id_to_lemma_proof.contains_key(id) {
+                Some((
+                    elaborator
+                        .pool
+                        .add(Term::Op(Operator::RareList, premise.clause().to_vec())),
+                    premise.clone(),
+                ))
+            } else if let Some(proof) = &step_id_to_lemma_proof[id] {
+                Some((
+                    elaborator
+                        .pool
+                        .add(Term::Op(Operator::RareList, proof.clause().to_vec())),
+                    proof.clone(),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+    log::info!("[sat_refutation elab] Elaborate propositional proof");
+    let pf = get_resolution_refutation(
+        elaborator.pool,
+        step,
+        &premise_to_proof,
+        cnf_path,
+        &term_to_var,
+    )?;
+    log::info!("[sat_refutation elab] Finished elaboration.");
+    Ok(pf)
 }
