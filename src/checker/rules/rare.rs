@@ -59,7 +59,7 @@ pub fn check_rare(
             let premise = get_premise_term(premise)?;
             let rare_premise = rare_premises.next().unwrap();
             let rare_premise = subst.apply(pool, rare_premise);
-            let rare_premise = rewrite_meta_terms(pool, rare_premise, &get_rules());
+            let rare_premise = rewrite_meta_terms(pool, rare_premise, get_rules());
 
             if *premise != rare_premise {
                 return Err(CheckerError::RarePremiseAreNotEqual(
@@ -72,7 +72,7 @@ pub fn check_rare(
         let got = subst.apply(pool, &rare_term.conclusion);
         for premise in premises {
             let premise = get_premise_term(premise)?;
-            let premise_rare = rewrite_meta_terms(pool, premise.clone(), &get_rules());
+            let premise_rare = rewrite_meta_terms(pool, premise.clone(), get_rules());
             if *premise != premise_rare {
                 return Err(CheckerError::RarePremiseAreNotEqual(
                     premise.clone(),
@@ -81,7 +81,7 @@ pub fn check_rare(
             }
         }
 
-        let rule_conclusion = rewrite_meta_terms(pool, got, &get_rules());
+        let rule_conclusion = rewrite_meta_terms(pool, got, get_rules());
         if rule_conclusion != conclusion[0] {
             return Err(CheckerError::RareConclusionAreNotEqual(
                 rule_conclusion,
