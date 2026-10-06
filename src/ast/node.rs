@@ -1,4 +1,5 @@
 use super::*;
+use rapidhash::{HashMapExt, HashSetExt, RapidHashMap, RapidHashSet};
 
 /// An alternative, graph-based representation for an Alethe proof.
 ///
@@ -361,16 +362,17 @@ fn proof_list_to_nodes(commands: Vec<ProofCommand>) -> ProofNodeForest {
     ProofNodeForest(new_root_proof)
 }
 
-/// Converts a `ProofNode` into a list of proof commands.
+/// Converts a `ProofNodeForest` into a list of proof commands.
 fn proof_nodes_to_list(proof: &ProofNodeForest) -> Vec<ProofCommand> {
-    use std::collections::{HashMap, HashSet};
-
     let mut stack: Vec<Vec<ProofCommand>> = vec![Vec::new()];
 
-    let mut seen: HashMap<&Rc<ProofNode>, (usize, usize)> = HashMap::new();
+    let mut seen: RapidHashMap<&Rc<ProofNode>, (usize, usize)> = RapidHashMap::new();
     let mut todo: Vec<(&Rc<ProofNode>, bool)> =
         proof.0.iter().rev().map(|node| (node, false)).collect();
-    let mut did_outbound: HashSet<&Rc<ProofNode>> = HashSet::new();
+    let mut did_outbound: RapidHashSet<&Rc<ProofNode>> = RapidHashSet::new();
+
+    // To avoid command id collision, we record which ids we've seen and rename commands when needed
+    let mut seen_ids: RapidHashSet<String> = RapidHashSet::new();
 
     loop {
         let Some((node, is_done)) = todo.pop() else {
@@ -381,7 +383,7 @@ fn proof_nodes_to_list(proof: &ProofNodeForest) -> Vec<ProofCommand> {
             continue;
         }
 
-        let command = match node.as_ref() {
+        let mut command = match node.as_ref() {
             ProofNode::Assume { id, term, .. } => {
                 ProofCommand::Assume { id: id.clone(), term: term.clone() }
             }
@@ -447,8 +449,35 @@ fn proof_nodes_to_list(proof: &ProofNodeForest) -> Vec<ProofCommand> {
         // vector in the stack frame
         let index = stack[d].len();
         seen.insert(node, (d, index));
+
+        // Possibly rename the command to avoid collision. We skip renaming subproof commands since
+        // we would already have renamed their last command.
+        if !command.is_subproof() {
+            rename_id_if_needed(&seen_ids, &mut command);
+            seen_ids.insert(command.id().to_owned());
+        }
+
         stack[d].push(command);
     }
+}
+
+/// Given a set of command ids and a new command, rename its id to one not in the set, if needed
+fn rename_id_if_needed(ids: &RapidHashSet<String>, command: &mut ProofCommand) {
+    // Early exit to avoid allocating in the most common case, where no collision happens
+    if !ids.contains(command.id()) {
+        return;
+    }
+
+    let mut current_id = format!("{}*", command.id());
+    while ids.contains(&current_id) {
+        current_id = format!("{}*", current_id);
+    }
+
+    match command {
+        ProofCommand::Assume { id, .. } => *id = current_id,
+        ProofCommand::Step(step) => step.id = current_id,
+        ProofCommand::Subproof(_) => unreachable!(),
+    };
 }
 
 #[cfg(test)]
