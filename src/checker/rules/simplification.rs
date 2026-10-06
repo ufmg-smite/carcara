@@ -4,6 +4,7 @@ use super::{
 };
 use crate::{
     ast::{Operator, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
+    checker::error::rassert,
     utils::{DedupIterator, MultiSet},
 };
 use indexmap::{IndexMap, IndexSet};

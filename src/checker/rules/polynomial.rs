@@ -2,7 +2,7 @@ use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq};
 use crate::{
     ast::{Operator, Rc, Sort, Term, match_term, match_term_err},
     checker::{
-        error::PolynomialError,
+        error::{PolynomialError, rassert},
         rules::{assert_num_premises, get_premise_term},
     },
 };

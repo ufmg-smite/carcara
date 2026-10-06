@@ -7,7 +7,7 @@ use crate::{
         Binder, Operator, Rc, Sort, SortedVar, Substitution, Term, build_term, match_term,
         match_term_err, pool::Pool,
     },
-    checker::error::QuantifierError,
+    checker::error::{QuantifierError, rassert},
     utils::DedupIterator,
 };
 use indexmap::{IndexMap, IndexSet};

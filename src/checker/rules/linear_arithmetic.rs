@@ -1,7 +1,7 @@
 use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_args};
 use crate::{
     ast::{pool::Pool, *},
-    checker::error::{CheckerError, LinearArithmeticError},
+    checker::error::{CheckerError, LinearArithmeticError, err, rassert},
 };
 use indexmap::{IndexMap, map::Entry};
 use rug::{Integer, Rational, ops::NegAssign};
@@ -282,16 +282,12 @@ fn process_disequality(
     let arg = match arg {
         Some(a) => a,
         None => {
-            rassert!(
-                disequality.0.len() == 1,
-                CheckerError::Explanation("disequality not unit".to_owned())
-            );
+            rassert!(disequality.0.len() == 1, "disequality not unit");
             let (var, coeff_1) = disequality.0.iter().next().unwrap();
             assert!(!coeff_1.is_zero()); // TODO
-            let coeff_2 = acc
-                .0
-                .get(var)
-                .ok_or(CheckerError::Explanation("coeff not found".to_owned()))?;
+            let Some(coeff_2) = acc.0.get(var) else {
+                return err!("coeff not found");
+            };
             let inferred = -coeff_2.clone() / coeff_1;
             if let Some(trace) = coeff_trace {
                 trace.push(inferred.clone());
