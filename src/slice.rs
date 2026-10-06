@@ -74,11 +74,14 @@ fn get_transitive_premises(
 
     queue.push_back((step_id, max_distance + 1)); // Different use of distance than in interface. Here it is the number of steps to include after this one
     while let Some((step_id, d)) = queue.pop_front() {
-        let last = d == 0;
-        // We should always default to needing premises if there's a conflict between what's already in the map and what would be added.
-        let keep_premises = !last || *id_to_keep_premises.get(&step_id).unwrap_or(&false);
+        // Since this is a BFS, each step is first reached with its largest remaining distance, so
+        // visiting it again can't change the result, so we can skip it
+        if id_to_keep_premises.contains_key(&step_id) {
+            continue;
+        }
+        let keep_premises = d > 0;
         id_to_keep_premises.insert(step_id.clone(), keep_premises);
-        if !last {
+        if keep_premises {
             for (premise, _) in step_to_premises.get(&step_id).unwrap_or(&Vec::new()) {
                 queue.push_back((premise.to_owned(), d - 1));
             }
