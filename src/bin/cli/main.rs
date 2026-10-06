@@ -66,7 +66,7 @@ fn main() {
         Command::GenerateLiaProblems(options) => {
             generate_lia_problems_command(options, !cli.no_print_with_sharing)
         }
-        Command::Translate(options) => translate_command(options),
+        Command::Translate(options) => translate_command(options, !cli.no_print_with_sharing),
         Command::Diff(options) => {
             diff_command(options).map(|d| print!("{}", d.display(stdout_colors)))
         }
@@ -290,15 +290,18 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 }
 
 // Translation-related commands.
-fn translate_command(options: TranslateCommandOptions) -> CliResult<()> {
+fn translate_command(options: TranslateCommandOptions, use_sharing: bool) -> CliResult<()> {
     let (alethe_problem, mut alethe_proof, _, _) =
         parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
 
     // NOTE: currently supporting only translation into Eunoia.
     match &options.target {
-        TranslationTarget::Eunoia => {
-            translate_2_eunoia_command(&alethe_problem, &mut alethe_proof, &options.eunoia_mech)
-        }
+        TranslationTarget::Eunoia => translate_2_eunoia_command(
+            &alethe_problem,
+            &mut alethe_proof,
+            &options.eunoia_mech,
+            use_sharing,
+        ),
     }
 }
 
@@ -306,14 +309,15 @@ fn translate_2_eunoia_command(
     alethe_problem: &ast::Problem,
     proof: &mut Proof,
     eunoia_mech: &Path,
+    use_sharing: bool,
 ) -> CliResult<()> {
     use translation::eunoia::DisplayEunoiaProof;
 
     let mut translator = translation::eunoia::alethe_2_eunoia::EunoiaTranslator::new(eunoia_mech);
     let eunoia_prelude = translator.translate_problem(alethe_problem);
     let eunoia_proof = translator.translate(proof);
-    println!("{}", DisplayEunoiaProof(&eunoia_prelude, true));
-    println!("{}", DisplayEunoiaProof(eunoia_proof, true));
+    println!("{}", DisplayEunoiaProof(&eunoia_prelude, use_sharing));
+    println!("{}", DisplayEunoiaProof(eunoia_proof, use_sharing));
 
     Ok(())
 }
