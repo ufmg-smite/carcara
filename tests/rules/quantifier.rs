@@ -168,7 +168,12 @@ fn qnt_rm_unused() {
 #[test]
 fn qnt_cnf() {
     test_cases! {
-        definitions = "",
+        definitions = "
+            (declare-sort U 0)
+            (declare-const y U)
+            (declare-fun P (U) Bool)
+            (declare-fun Q (U) Bool)
+        ",
         "Simple working examples" {
             "(step t1 (cl (or (not (forall ((p Bool)) p)) (forall ((p Bool)) p)))
                 :rule qnt_cnf)": true,
@@ -206,6 +211,23 @@ fn qnt_cnf() {
                 (not (forall ((p Bool)) (or p (and false (forall ((q Bool)) q)))))
                 (forall ((p Bool)) (or p false))
             )) :rule qnt_cnf)": true,
+        }
+        "Prenexing merges bindings with the same name" {
+            "(step t1 (cl (or
+                (not (forall ((z U)) (or (P z) (forall ((z U)) (Q z)))))
+                (forall ((z U)) (or (P z) (Q z)))
+            )) :rule qnt_cnf)": true,
+
+            "(step t1 (cl (or
+                (not (forall ((x U)) (or (forall ((z U)) (P z)) (forall ((z U)) (Q z)))))
+                (forall ((z U)) (or (P z) (Q z)))
+            )) :rule qnt_cnf)": true,
+        }
+        "Prenexing captures a free variable" {
+            "(step t1 (cl (or
+                (not (forall ((x U)) (or (P y) (forall ((y U)) (Q y)))))
+                (forall ((y U)) (or (P y) (Q y)))
+            )) :rule qnt_cnf)": false,
         }
     }
 }
