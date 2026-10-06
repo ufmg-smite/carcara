@@ -1,10 +1,11 @@
 use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_args};
 use crate::{
     ast::{pool::Pool, *},
-    checker::error::{CheckerError, LinearArithmeticError, err, rassert},
+    checker::error::{CheckerError, err, rassert},
 };
 use indexmap::{IndexMap, map::Entry};
 use rug::{Integer, Rational, ops::NegAssign};
+use std::fmt;
 
 pub fn la_rw_eq(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -44,12 +45,13 @@ fn negate_disequality(term: &Rc<Term>) -> Result<(Operator, LinearComb, LinearCo
         None
     }
 
-    let (op, args) =
-        inner(term).ok_or_else(|| LinearArithmeticError::InvalidDisequalityOp(term.clone()))?;
+    let Some((op, args)) = inner(term) else {
+        return err!("term '{term}' is not a valid disequality operation");
+    };
 
     match args {
         [a, b] => Ok((op, LinearComb::from_term(a), LinearComb::from_term(b))),
-        _ => Err(LinearArithmeticError::TooManyArgsInDisequality(term.clone()).into()),
+        _ => err!("too many arguments in disequality '{term}'"),
     }
 }
 
@@ -381,9 +383,9 @@ pub fn la_generic_partial(
     if left_side.is_empty() && !is_disequality_true {
         Ok(())
     } else {
-        Err(
-            LinearArithmeticError::DisequalityIsNotContradiction(op, Box::new(final_disequality))
-                .into(),
+        err!(
+            "final disequality is not contradictory: '{}'",
+            DisplayLinearComb(&op, &final_disequality),
         )
     }
 }
@@ -405,7 +407,7 @@ pub fn la_totality(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
 fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     rassert!(
         a.as_signed_number_err()? < b.as_signed_number_err()?,
-        LinearArithmeticError::ExpectedLessThan(a.clone(), b.clone())
+        "expected term '{a}' to be less than term '{b}'",
     );
     Ok(())
 }
@@ -413,7 +415,7 @@ fn assert_less_than(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
 fn assert_less_eq(a: &Rc<Term>, b: &Rc<Term>) -> RuleResult {
     rassert!(
         a.as_signed_number_err()? <= b.as_signed_number_err()?,
-        LinearArithmeticError::ExpectedLessEq(a.clone(), b.clone())
+        "expected term '{a}' to be less than or equal to term '{b}'",
     );
     Ok(())
 }
@@ -459,7 +461,7 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             assert_eq(s_1, s_2)?;
             assert_less_than(d_1, d_2)
         } else {
-            Err(LinearArithmeticError::NotValidTautologyCase(conclusion[0].clone()).into())
+            err!("term '{}' doesn't match any tautology case", conclusion[0])
         }
     } else {
         // If the conclusion is of the first form, we apply steps 1 through 3 from `la_generic`
@@ -485,8 +487,40 @@ pub fn la_tautology(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             && (disequality.1 > 0 || op == Operator::GreaterThan && disequality.1 == 0);
         rassert!(
             is_disequality_true,
-            LinearArithmeticError::DisequalityIsNotTautology(op, Box::new(disequality)),
+            "final disequality is not tautological: '{}'",
+            DisplayLinearComb(&op, &disequality),
         );
         Ok(())
+    }
+}
+
+/// A wrapper struct that implements `fmt::Display` for linear combinations.
+struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
+
+impl fmt::Display for DisplayLinearComb<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn write_var(f: &mut fmt::Formatter, (var, coeff): (&Rc<Term>, &Rational)) -> fmt::Result {
+            if *coeff == 1i32 {
+                write!(f, "{}", var)
+            } else {
+                write!(f, "(* {:?} {})", coeff.to_f64(), var)
+            }
+        }
+
+        let DisplayLinearComb(op, LinearComb(vars, constant)) = self;
+        write!(f, "({} ", op)?;
+        match vars.len() {
+            0 => write!(f, "0.0"),
+            1 => write_var(f, vars.iter().next().unwrap()),
+            _ => {
+                write!(f, "(+")?;
+                for var in vars {
+                    write!(f, " ")?;
+                    write_var(f, var)?;
+                }
+                write!(f, ")")
+            }
+        }?;
+        write!(f, " {:?})", constant.to_f64())
     }
 }

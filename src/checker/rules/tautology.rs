@@ -2,7 +2,10 @@ use super::{
     CheckerError, RuleArgs, RuleResult, assert_clause_len, assert_eq, assert_num_args,
     assert_num_premises, assert_polyeq, get_premise_term,
 };
-use crate::{ast::*, checker::rules::assert_operation_len};
+use crate::{
+    ast::*,
+    checker::{error::err, rules::assert_operation_len},
+};
 
 pub fn r#true(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
@@ -311,7 +314,7 @@ pub fn ite_intro(RuleArgs { conclusion, polyeq_time, .. }: RuleArgs) -> RuleResu
             || is_valid(b, a, d, c);
 
         if !is_valid {
-            return Err(CheckerError::IsNotValidIteIntro(u_i.clone()));
+            return err!("term '{u_i}' does not have the correct form for `ite_intro`");
         }
     }
     Ok(())
@@ -352,6 +355,6 @@ pub fn connective_def(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         assert_eq(first_inner, second_inner)?;
         assert_eq(first_bindings, second_bindings)
     } else {
-        Err(CheckerError::TermIsNotConnective(first.clone()))
+        err!("term '{first}' is not a connective")
     }
 }

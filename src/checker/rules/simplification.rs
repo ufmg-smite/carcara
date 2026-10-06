@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     ast::{Operator, Rc, Sort, Term, build_term, match_term, match_term_err, pool::Pool},
-    checker::error::rassert,
+    checker::error::{err, rassert},
     utils::{DedupIterator, MultiSet},
 };
 use indexmap::{IndexMap, IndexSet};
@@ -475,26 +475,26 @@ fn generic_sum_prod_simplify_rule(
             // We check if there are any constants in u (aside from the leading constant). If there
             // are any, we know this u term is invalid
             if args[1..].iter().any(|t| t.as_fraction().is_some()) {
-                None
-            } else {
-                match args[0].as_fraction() {
-                    // If the leading constant is the identity value, it should have been omitted
-                    Some(constant) if constant == identity_value => None,
-                    Some(constant) => Some((constant, &args[1..])),
-                    None => Some((identity_value.clone(), args.as_slice())),
+                return err!("result cannot have more than one constant: {u}");
+            }
+            match args[0].as_fraction() {
+                // If the leading constant is the identity value, it should have been omitted
+                Some(constant) if constant == identity_value => {
+                    return err!("result leading constant cannot be identity term: {u}");
                 }
+                Some(constant) => (constant, &args[1..]),
+                None => (identity_value.clone(), args.as_slice()),
             }
         }
 
         // If u is not an application of the operator, we consider it a product/sum of a single
         // term. That term might be a regular term or the leading constant, depending on if u
         // is a constant or not
-        _ => Some(match u.as_fraction() {
+        _ => match u.as_fraction() {
             Some(u) => (u, &[] as &[_]),
             None => (identity_value.clone(), std::slice::from_ref(u)),
-        }),
-    }
-    .ok_or_else(|| CheckerError::SumProdSimplifyInvalidConclusion(u.clone()))?;
+        },
+    };
 
     let ts = match rule_kind {
         Operator::Add => match_term_err!((+ ...) = ts),

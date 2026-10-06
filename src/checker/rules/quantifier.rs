@@ -7,7 +7,7 @@ use crate::{
         Binder, Operator, Rc, Sort, SortedVar, Substitution, Term, build_term, match_term,
         match_term_err, pool::Pool,
     },
-    checker::error::{QuantifierError, rassert},
+    checker::error::{QuantifierError, err, rassert},
     utils::DedupIterator,
 };
 use indexmap::{IndexMap, IndexSet};
@@ -59,11 +59,7 @@ pub fn qnt_join(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let combined = bindings_1.iter().chain(bindings_2).dedup();
     rassert!(
         bindings_3.iter().eq(combined),
-        QuantifierError::JoinFailed {
-            left_outer: bindings_1.clone(),
-            left_inner: bindings_2.clone(),
-            right: bindings_3.clone()
-        }
+        "union of bindings '{bindings_1}' and '{bindings_2}' does not equal '{bindings_3}'",
     );
     Ok(())
 }
@@ -305,10 +301,9 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         )));
     }
 
-    let selected_clause = clauses
-        .iter()
-        .find(|&clause| clause == phi_prime)
-        .ok_or_else(|| QuantifierError::ClauseDoesntAppearInCnf(phi_prime.clone()))?;
+    let Some(selected_clause) = clauses.iter().find(|&clause| clause == phi_prime) else {
+        return err!("result clause doesn't appear in CNF of original term: '{phi_prime}'");
+    };
 
     let free_vars = pool.free_vars(selected_clause).clone();
 

@@ -2,7 +2,6 @@
 use crate::{
     ast::*,
     automata::Trigger,
-    checker::rules::linear_arithmetic::LinearComb,
     external::ExternalError,
     utils::{Range, TypeName},
 };
@@ -57,6 +56,10 @@ pub enum CheckerError {
     #[error("could not match term to any of the original problem premises: {0}")]
     Assume(Rc<Term>),
 
+    /// A binding was not introduced in the context.
+    #[error("binding '{0}' was not introduced in context")]
+    BindingIsNotInContext(String),
+
     // Rule specific errors
     /// An error in the `resolution` and related rules.
     #[error(transparent)]
@@ -74,21 +77,9 @@ pub enum CheckerError {
     #[error(transparent)]
     Quant(#[from] QuantifierError),
 
-    /// An error in a linear arithmetic rule.
-    #[error(transparent)]
-    LinearArithmetic(#[from] LinearArithmeticError),
-
-    /// An error in a polynomial simplification rule.
-    #[error(transparent)]
-    Polynomial(#[from] PolynomialError),
-
     /// An error when using an external tool.
     #[error(transparent)]
     External(#[from] ExternalError),
-
-    /// An error in a subproof closing rule.
-    #[error(transparent)]
-    Subproof(#[from] SubproofError),
 
     #[error(transparent)]
     String(#[from] Box<StringError>),
@@ -114,19 +105,6 @@ pub enum CheckerError {
     #[error("encountered cycle when simplifying term: '{0}'")]
     CycleInSimplification(Rc<Term>),
 
-    /// A term in the conclusion of a `sum_simplify` or `prod_simplify` rule is not a valid
-    /// simplification result.
-    #[error("'{0}' is not a valid simplification result for this rule")]
-    SumProdSimplifyInvalidConclusion(Rc<Term>),
-
-    /// Expected this term to be a boolean connective (such as `xor`, `=>`, `ite`).
-    #[error("term '{0}' is not a connective")]
-    TermIsNotConnective(Rc<Term>),
-
-    /// A term does not have the correct form for the `ite_intro` rule.
-    #[error("term '{0}' does not have the correct form for `ite_intro`")]
-    IsNotValidIteIntro(Rc<Term>),
-
     /// The premises of a transitivity rule do not connect the two terms of the conclusion.
     #[error("broken transitivity chain: can't prove '(= {0} {1})'")]
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
@@ -151,14 +129,6 @@ pub enum CheckerError {
     #[error("No {0}-th child in term {1}")]
     NoIthChildInTerm(usize, Rc<Term>),
 
-    /// The `re_unfold_pos` rule cannot be applied to the given regular expression term.
-    #[error("cannot apply the re_unfold_pos rule to the regular expression term '{0}'")]
-    CannotApplyReUnfoldPos(Rc<Term>),
-
-    /// The `shuffle` rule cannot be applied because the operator is not commutative.
-    #[error("operator '{0}' is not commutative")]
-    OperatorNotCommutative(Operator),
-
     /// The argument multisets of a `shuffle` step are not equal.
     #[error("argument multisets are not equal")]
     ShuffleArgsNotEqual,
@@ -167,14 +137,6 @@ pub enum CheckerError {
     /// not.
     #[error("expected comparison operation, got: '{0}'")]
     ExpectedComparisonOp(Rc<Term>),
-
-    /// The monomial relation in the `la_mult_sign` rule does not match the expected relation.
-    #[error("monomial relation does not match expected, got: '{0}'")]
-    LaMultSignWrongRelation(Rc<Term>),
-
-    /// The `la_mult_sign` step is missing a comparison for a monomial variable.
-    #[error("missing comparison for monomial variable '{0}'")]
-    LaMultSignMissingComparison(Rc<Term>),
 
     /// The operator in a `la_mult_pos` or `la_mult_neg` step is not a comparison operator.
     #[error("'{0}' is not a comparison operator")]
@@ -216,10 +178,6 @@ pub enum CheckerError {
     /// A term was expected to be a string constant of length one.
     #[error("expected term '{0}' to be a string constant of length one")]
     ExpectedStringConstantOfLengthOne(Rc<Term>),
-
-    /// Two string terms were expected to have different constant prefixes.
-    #[error("expected terms '{0}' and '{1}' to have different constant prefixes")]
-    ExpectedDifferentConstantPrefixes(Rc<Term>, Rc<Term>),
 
     /// A term was expected to be a specific numeric constant.
     #[error("expected term '{}' to be numerical constant {:?}", .1, .0.to_f64())]
@@ -445,18 +403,6 @@ pub enum CongruenceError {
 /// Errors relevant to the rules dealing with quantifiers.
 #[derive(Debug, Error)]
 pub enum QuantifierError {
-    /// The union of the bindings on the left-hand side of a `qnt_join` rule does not equal the
-    /// bindings on the right-hand side.
-    #[error("union of bindings '{left_outer}' and '{left_inner}' does not equal '{right}'")]
-    JoinFailed {
-        /// The bindings of the outer quantifier on the left-hand side.
-        left_outer: BindingList,
-        /// The bindings of the inner quantifier on the left-hand side.
-        left_inner: BindingList,
-        /// The bindings on the right-hand side.
-        right: BindingList,
-    },
-
     /// A binding introduced on the right-hand side was not present on the left-hand side.
     #[error("unknown binding introduced in right-hand side: '{0}'")]
     NewBindingIntroduced(String),
@@ -465,133 +411,9 @@ pub enum QuantifierError {
     #[error("binding is missing in right-hand side: '{0}'")]
     BindingIsMissing(String),
 
-    /// A clause does not appear in the CNF of the original term.
-    #[error("result clause doesn't appear in CNF of original term: '{0}'")]
-    ClauseDoesntAppearInCnf(Rc<Term>),
-
     /// A bound variable appears as a free variable in the term.
     #[error("binding '{0}' appears as free variable in term '{1}'")]
     MiniscopeFreeVar(String, Rc<Term>),
-}
-
-/// Errors relevant to the linear arithmetic rules.
-#[derive(Debug, Error)]
-pub enum LinearArithmeticError {
-    /// A term does not match any tautology case.
-    #[error("term '{0}' doesn't match any tautology case")]
-    NotValidTautologyCase(Rc<Term>),
-
-    /// A term is not a valid disequality operation.
-    #[error("term '{0}' is not a valid disequality operation")]
-    InvalidDisequalityOp(Rc<Term>),
-
-    /// A disequality operation has too many arguments.
-    #[error("too many arguments in disequality '{0}'")]
-    TooManyArgsInDisequality(Rc<Term>),
-
-    /// The final disequality is not contradictory.
-    #[error("final disequality is not contradictory: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotContradiction(Operator, Box<LinearComb>),
-
-    /// The final disequality is not tautological.
-    #[error("final disequality is not tautological: '{}'", DisplayLinearComb(.0, .1))]
-    DisequalityIsNotTautology(Operator, Box<LinearComb>),
-
-    /// A term was expected to be less than another term.
-    #[error("expected term '{0}' to be less than term '{1}'")]
-    ExpectedLessThan(Rc<Term>, Rc<Term>),
-
-    /// A term was expected to be less than or equal to another term.
-    #[error("expected term '{0}' to be less than or equal to term '{1}'")]
-    ExpectedLessEq(Rc<Term>, Rc<Term>),
-}
-
-/// Errors relevant to the polynomial simplification rules.
-#[derive(Debug, Error)]
-pub enum PolynomialError {
-    /// Two terms are not equal after polynomial normalization.
-    #[error("terms are not equal after polynomial normalization: '{0}' and '{1}'")]
-    PolynomialsNotEqual(Rc<Term>, Rc<Term>),
-
-    /// A bitvector sort was expected, but a different sort was found.
-    #[error("expected bitvector sort, got '{0}'")]
-    ExpectedBvSort(Sort),
-
-    /// A `poly_simp_rel` coefficient cannot be zero.
-    #[error("coefficient can't be zero: '{0}'")]
-    CoeffIsZero(Rational),
-
-    /// The two coefficients should have the same signum, but did not.
-    #[error("coefficients should have the same signum: '{0}' and '{1}'")]
-    CoeffDifferentSignums(Rational, Rational),
-
-    /// A coefficient should be odd, but was not.
-    #[error("coefficient should be odd: '{0}'")]
-    CoeffEven(Integer),
-
-    /// The relation operators of the two terms are invalid.
-    #[error("invalid relation operators: '{0}' and '{1}'")]
-    InvalidOperators(Operator, Operator),
-}
-
-/// Errors relevant to all rules that end subproofs (not just the `subproof` rule).
-#[derive(Debug, Error)]
-pub enum SubproofError {
-    /// A discharge was not an `assume` command.
-    #[error("discharge must be 'assume' command: '{0}'")]
-    DischargeMustBeAssume(String),
-
-    /// A local assumption was not discharged by the end of the subproof.
-    #[error("local assumption '{0}' was not discharged")]
-    LocalAssumeNotDischarged(String),
-
-    /// Only the `subproof` rule may discharge local assumptions.
-    #[error("only the `subproof` rule may discharge local assumptions")]
-    DischargeInWrongRule,
-
-    /// A bound variable appears as a free variable in `phi`.
-    #[error("binding '{0}' appears as free variable in phi")]
-    BindBindingIsFreeVarInPhi(String),
-
-    /// An unexpected anchor argument was given to the `bind` rule.
-    #[error("unexpected anchor argument: '{0}'")]
-    BindUnexpectedVarArgument(String),
-
-    /// The right and left quantifiers of a `bind` rule have different numbers of bindings.
-    #[error("right and left quantifiers have different number of bindings: {0} and {1}")]
-    BindDifferentNumberOfBindings(usize, usize),
-
-    /// A binding was not introduced in the context.
-    #[error("binding '{0}' was not introduced in context")]
-    BindingIsNotInContext(String),
-
-    /// A `let` term had an unexpected number of bindings.
-    #[error("expected {0} bindings in 'let' term, got {1}")]
-    WrongNumberOfLetBindings(usize, usize),
-
-    /// The given premise does not justify a substitution in a `let` term.
-    #[error(
-        "premise '(= {} {})' doesn't justify substitution of '{}' for '{}'",
-        .premise.0, .premise.1, .substitution.0, .substitution.1
-    )]
-    PremiseDoesntJustifyLet {
-        /// The substitution that was expected to be justified.
-        substitution: (Rc<Term>, Rc<Term>),
-        /// The premise that was expected to justify it.
-        premise: (Rc<Term>, Rc<Term>),
-    },
-
-    /// A substitution does not appear as a point in `phi`.
-    #[error("substitution '(:= {0} {1})' doesn't appear as a point in phi")]
-    NoPointForSubstitution(String, Rc<Term>),
-
-    /// The binding list in the left-hand side of an `onepoint` rule is wrong.
-    #[error("expected binding list in left-hand side to be '{0}'")]
-    OnepointWrongLeftBindings(BindingList),
-
-    /// The binding list in the right-hand side of an `onepoint` rule is wrong.
-    #[error("expected binding list in right-hand side to be '{0}'")]
-    OnepointWrongRightBindings(BindingList),
 }
 
 /// Errors relevant to all String rules (CPC and RCP calculus).
@@ -628,36 +450,5 @@ pub enum StringError {
 impl From<StringError> for CheckerError {
     fn from(e: StringError) -> Self {
         CheckerError::String(Box::new(e))
-    }
-}
-
-/// A wrapper struct that implements `fmt::Display` for linear combinations.
-struct DisplayLinearComb<'a>(&'a Operator, &'a LinearComb);
-
-impl fmt::Display for DisplayLinearComb<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fn write_var(f: &mut fmt::Formatter, (var, coeff): (&Rc<Term>, &Rational)) -> fmt::Result {
-            if *coeff == 1i32 {
-                write!(f, "{}", var)
-            } else {
-                write!(f, "(* {:?} {})", coeff.to_f64(), var)
-            }
-        }
-
-        let DisplayLinearComb(op, LinearComb(vars, constant)) = self;
-        write!(f, "({} ", op)?;
-        match vars.len() {
-            0 => write!(f, "0.0"),
-            1 => write_var(f, vars.iter().next().unwrap()),
-            _ => {
-                write!(f, "(+")?;
-                for var in vars {
-                    write!(f, " ")?;
-                    write_var(f, var)?;
-                }
-                write!(f, ")")
-            }
-        }?;
-        write!(f, " {:?})", constant.to_f64())
     }
 }

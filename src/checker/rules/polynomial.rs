@@ -2,7 +2,7 @@ use super::{RuleArgs, RuleResult, assert_clause_len, assert_eq};
 use crate::{
     ast::{Operator, Rc, Sort, Term, match_term, match_term_err},
     checker::{
-        error::{PolynomialError, rassert},
+        error::{err, rassert},
         rules::{assert_num_premises, get_premise_term},
     },
 };
@@ -171,7 +171,7 @@ pub fn poly_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     }
 
     if !t_norm.sub(s_norm).is_zero() {
-        Err(PolynomialError::PolynomialsNotEqual(t.clone(), s.clone()).into())
+        err!("terms are not equal after polynomial normalization: '{t}' and '{s}'")
     } else {
         Ok(())
     }
@@ -195,7 +195,7 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
         };
         for c in [c1, c2] {
             let (c, _) = c.as_bitvector_err()?;
-            rassert!(c.is_odd(), PolynomialError::CoeffEven(c));
+            rassert!(c.is_odd(), "coefficient should be odd: '{c}'");
         }
 
         let (l1, l2, r1, r2) = match_term_err!((= (= x1 x2) (= y1 y2)) = &conclusion[0])?;
@@ -215,7 +215,7 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
 
     let (c1, c2) = (c1.as_fraction_err()?, c2.as_fraction_err()?);
     for c in [&c1, &c2] {
-        rassert!(!c.is_zero(), PolynomialError::CoeffIsZero(c.clone()));
+        rassert!(!c.is_zero(), "coefficient can't be zero: '{c}'");
     }
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
@@ -226,7 +226,7 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
         ) if op2 == op => {
             rassert!(
                 op == Equals || c1.is_positive() == c2.is_positive(),
-                PolynomialError::CoeffDifferentSignums(c1.clone(), c2.clone()),
+                "coefficients should have the same signum: '{c1}' and '{c2}'",
             );
 
             assert_eq(l1, x1)?;
@@ -235,6 +235,6 @@ pub fn poly_simp_rel(RuleArgs { conclusion, premises, pool, .. }: RuleArgs) -> R
             assert_eq(r2, y2)?;
             Ok(())
         }
-        ((op1, _), (op2, _)) => Err(PolynomialError::InvalidOperators(op1, op2).into()),
+        ((op1, _), (op2, _)) => err!("invalid relation operators: '{op1}' and '{op2}'"),
     }
 }
