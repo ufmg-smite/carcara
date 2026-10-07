@@ -167,20 +167,20 @@ impl<'c> Checker<'c> {
         stats: &mut S,
     ) -> CarcaraResult<(Status, CheckingStats)> {
         let start = Instant::now();
-        let status = self.check_commands(problem, &proof.filename, &proof.commands, 0, stats)?;
+        let result = self.check_commands(problem, &proof.filename, &proof.commands, 0, stats);
         self.run_stats.total = start.elapsed();
 
-        let result = if self.reached_empty_clause {
-            Ok(status)
-        } else {
-            Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() })
-        };
-
-        // Restore checker state to default
-        self.reached_empty_clause = false;
+        // Restore checker state to default before returning
+        let reached_empty_clause = std::mem::take(&mut self.reached_empty_clause);
         self.is_holey = false;
+        self.context = ContextStack::new();
+        let run_stats = std::mem::take(&mut self.run_stats);
 
-        Ok((result?, std::mem::take(&mut self.run_stats)))
+        let status = result?;
+        if !reached_empty_clause {
+            return Err(Error::DoesNotReachEmptyClause { file: proof.filename.clone() });
+        }
+        Ok((status, run_stats))
     }
 
     /// Checks a sequence of commands.
