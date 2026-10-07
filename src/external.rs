@@ -11,12 +11,14 @@ use crate::{
 use std::{
     borrow::ToOwned,
     collections::{HashMap, HashSet},
+    ffi::OsStr,
     fmt, fs,
     io::{self, BufRead, Write},
     path::Path,
     process::{Command, ExitStatus, Output, Stdio},
     str::FromStr,
 };
+use tempfile::{NamedTempFile, TempPath};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -58,16 +60,17 @@ impl FromStr for ExternalTool {
 
 impl ExternalTool {
     pub fn call(&self, stdin: &[u8]) -> Result<Output, ExternalError> {
-        self.call_with_extra_args([], stdin)
+        self.call_with_extra_args::<_, &OsStr>([], stdin)
     }
 
-    pub fn call_with_extra_args<'a>(
-        &'a self,
-        extra_args: impl IntoIterator<Item = &'a str>,
+    pub fn call_with_extra_args<I: IntoIterator<Item = S>, S: AsRef<OsStr>>(
+        &self,
+        extra_args: I,
         stdin: &[u8],
     ) -> Result<Output, ExternalError> {
         let mut process = Command::new(&self.command)
-            .args(self.args.iter().map(String::as_str).chain(extra_args))
+            .args(&self.args)
+            .args(extra_args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -91,6 +94,12 @@ impl ExternalTool {
 
 #[derive(Debug, Error)]
 pub enum ExternalError {
+    #[error("failed to create a temporary file")]
+    FailedCreateTempFile(io::Error),
+
+    #[error("failed to write to a temporary file")]
+    FailedWriteToTempFile(io::Error),
+
     #[error("failed to spawn external tool process")]
     FailedSpawn(io::Error),
 
@@ -215,7 +224,7 @@ pub fn gen_dimacs<'a>(
     sat_clause_to_lemma: &mut HashMap<Vec<i32>, Rc<Term>>,
     term_to_var: &mut HashMap<&'a Rc<Term>, i32>,
     mark_lemmas: bool,
-) -> String {
+) -> Result<TempPath, ExternalError> {
     use std::fmt::Write;
 
     let mut clauses: String = "".to_owned();
@@ -248,14 +257,16 @@ pub fn gen_dimacs<'a>(
         }
         writeln!(&mut clauses, "0").unwrap();
     }
-    let mut dimacs = String::new();
-    writeln!(&mut dimacs, "p cnf {} {}", max_var, premise_clauses.len()).unwrap();
-    write!(&mut dimacs, "{}", clauses).unwrap();
-    let cnf_path = "proof.cnf".to_owned();
-    log::info!("[sat_refutation check] Print CNF {}", cnf_path);
-    write!(fs::File::create(cnf_path.clone()).unwrap(), "{}", dimacs).unwrap();
 
-    cnf_path
+    let mut cnf_file =
+        NamedTempFile::with_suffix("-proof.cnf").map_err(ExternalError::FailedCreateTempFile)?;
+    writeln!(cnf_file, "p cnf {} {}", max_var, premise_clauses.len())
+        .map_err(ExternalError::FailedWriteToTempFile)?;
+    write!(cnf_file, "{}", clauses).map_err(ExternalError::FailedWriteToTempFile)?;
+
+    let path = cnf_file.into_temp_path();
+    log::info!("[sat_refutation check] Print CNF {}", path.display());
+    Ok(path)
 }
 
 pub fn collect_premise_clauses(
@@ -364,19 +375,31 @@ pub fn collect_premise_clauses(
     premise_clauses
 }
 
-pub fn get_core_lemmas(
-    cnf_path: &str,
-    sat_clause_to_lemma: &HashMap<Vec<i32>, Rc<Term>>,
+pub fn get_core_and_lrat_files(
+    cnf_path: &Path,
     cadical: &ExternalTool,
     drat_trim: &ExternalTool,
-) -> Result<Vec<Vec<Rc<Term>>>, ExternalError> {
+) -> Result<(TempPath, TempPath), ExternalError> {
     // not gonna pass input via stdin because in that case
     // CaDiCaL gets confused with receiving the name of the
     // proof file as an argument. If we could get the proof in
     // stdout then there would be no need to write a CNF file nor a DRAT file
-    let output = cadical.call_with_extra_args([cnf_path, "proof.drat", "--no-binary"], &[])?;
+    let drat_path = NamedTempFile::with_suffix("-proof.drat")
+        .map_err(ExternalError::FailedCreateTempFile)?
+        .into_temp_path();
+    let output = cadical.call_with_extra_args(
+        [
+            cnf_path.as_os_str(),
+            drat_path.as_os_str(),
+            OsStr::new("--no-binary"),
+        ],
+        &[],
+    )?;
 
-    log::info!("[get_core_lemmas] Checking CNF {} with CaDiCaL", cnf_path);
+    log::info!(
+        "[get_core_and_lrat_files] Checking CNF {} with CaDiCaL",
+        cnf_path.display()
+    );
 
     // CaDiCaL's exit code when successful is 10/20 (for
     // sat/unsat), so this will not lead to a successful
@@ -389,15 +412,22 @@ pub fn get_core_lemmas(
     } else {
         return Err(ExternalError::InvalidOutput);
     }
+
+    let core_path = NamedTempFile::with_suffix("-proof.core")
+        .map_err(ExternalError::FailedCreateTempFile)?
+        .into_temp_path();
+    let lrat_path = NamedTempFile::with_suffix("-proof.lrat")
+        .map_err(ExternalError::FailedCreateTempFile)?
+        .into_temp_path();
     // pass cnf + proof to drat-trim
     let drat_trim_output = drat_trim.call_with_extra_args(
         [
-            cnf_path,
-            "proof.drat",
-            "-c",
-            "proof.core",
-            "-L",
-            "proof.lrat",
+            cnf_path.as_os_str(),
+            drat_path.as_os_str(),
+            OsStr::new("-c"),
+            core_path.as_os_str(),
+            OsStr::new("-L"),
+            lrat_path.as_os_str(),
         ],
         &[],
     )?;
@@ -406,8 +436,15 @@ pub fn get_core_lemmas(
         return Err(ExternalError::OutputNotUnsat);
     }
 
+    Ok((core_path, lrat_path))
+}
+
+pub fn parse_core_lemmas(
+    core_path: &Path,
+    sat_clause_to_lemma: &HashMap<Vec<i32>, Rc<Term>>,
+) -> Result<Vec<Vec<Rc<Term>>>, ExternalError> {
     let mut core_lemmas: Vec<Vec<Rc<Term>>> = Vec::new();
-    fs::read_to_string("proof.core")
+    fs::read_to_string(core_path)
         .map_err(ExternalError::FailedReadOutput)?
         .lines() // split the string into an iterator of string slices
         .skip(1)
@@ -426,7 +463,7 @@ pub fn get_core_lemmas(
                 core_lemmas.push(lemma_lits.to_vec().clone());
             }
         });
-    log::info!("[get_core_lemmas] {} lemmas in core", core_lemmas.len());
+    log::info!("[parse_core_lemmas] {} lemmas in core", core_lemmas.len());
     Ok(core_lemmas)
 }
 

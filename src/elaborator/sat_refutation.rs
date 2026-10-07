@@ -8,6 +8,7 @@ use crate::{
 use std::{
     collections::{HashMap, HashSet},
     fs,
+    path::Path,
 };
 
 fn proof_node_to_command(node: &Rc<ProofNode>) -> ProofCommand {
@@ -71,7 +72,8 @@ fn get_resolution_refutation(
     pool: &mut Pool,
     step: &StepNode,
     premise_to_proof: &HashMap<Rc<Term>, Rc<ProofNode>>,
-    cnf_path: String,
+    cnf_path: &Path,
+    lrat_path: &Path,
     term_to_var: &HashMap<&Rc<Term>, i32>,
 ) -> Result<Rc<ProofNode>, ExternalError> {
     let var_to_term: HashMap<i32, &Rc<Term>> = term_to_var.iter().map(|(k, v)| (*v, *k)).collect();
@@ -144,7 +146,7 @@ fn get_resolution_refutation(
     // be useful, which should be guaranteed by the construction downstream of the proof for the
     // empty clause.
     let mut empty_clause_id = None;
-    let res_steps: HashMap<usize, (Vec<Rc<Term>>, Vec<usize>)> = fs::read_to_string("proof.lrat")
+    let res_steps: HashMap<usize, (Vec<Rc<Term>>, Vec<usize>)> = fs::read_to_string(lrat_path)
         .map_err(ExternalError::FailedReadOutput)?
         .lines()
         .rev()
@@ -247,15 +249,12 @@ pub fn sat_refutation(
         &mut sat_clause_to_lemma,
         &mut term_to_var,
         false,
-    );
+    )?;
     let tools = elaborator.config.sat_ref_tools.as_ref().unwrap();
 
-    let core_lemmas = get_core_lemmas(
-        cnf_path.as_str(),
-        &sat_clause_to_lemma,
-        &tools.sat_solver,
-        &tools.drat_checker,
-    )?;
+    let (core_path, lrat_path) =
+        get_core_and_lrat_files(&cnf_path, &tools.sat_solver, &tools.drat_checker)?;
+    let core_lemmas = parse_core_lemmas(&core_path, &sat_clause_to_lemma)?;
     log::info!(
         "[sat_refutation elab] Get proofs for {} core lemmas",
         core_lemmas.len()
@@ -320,7 +319,8 @@ pub fn sat_refutation(
         elaborator.pool,
         step,
         &premise_to_proof,
-        cnf_path,
+        &cnf_path,
+        &lrat_path,
         &term_to_var,
     )?;
     log::info!("[sat_refutation elab] Finished elaboration.");

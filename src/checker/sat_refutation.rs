@@ -8,19 +8,19 @@ use crate::{
         error::{CheckerError, err},
         rules::{RuleResult, assert_clause_len},
     },
-    external,
+    external::{self, ExternalError},
 };
 use rapidhash::{HashMapExt, RapidHashMap};
 use std::{
     collections::{HashMap, HashSet},
-    fs::File,
-    io::Write,
-    process,
+    io::{BufWriter, Write},
+    path::Path,
 };
+use tempfile::NamedTempFile;
 
 fn sat_refutation_external_check(
     pool: &mut Pool,
-    cnf_path: String,
+    cnf_path: &Path,
     prelude: &ProblemPrelude,
     checker: &external::ExternalTool,
     lemmas: &[Rc<Term>],
@@ -28,16 +28,23 @@ fn sat_refutation_external_check(
 ) -> Result<(), external::ExternalError> {
     use std::fmt::Write;
 
-    let prelude_path = format!("prelude_{}.smt2", process::id());
-    log::info!("[sat_refutation check] Print prelude file {}", prelude_path);
-    let mut prelude_file_str = String::new();
-    writeln!(&mut prelude_file_str, "{}", prelude).unwrap();
-    write!(
-        File::create(prelude_path.clone()).unwrap(),
-        "{}",
-        prelude_file_str
-    )
-    .unwrap();
+    let prelude_file = {
+        let mut f = NamedTempFile::with_suffix("-prelude.smt2")
+            .map_err(ExternalError::FailedCreateTempFile)?;
+        log::info!(
+            "[sat_refutation check] Print prelude file {}",
+            f.path().display()
+        );
+        // The prelude is written in many small pieces, so we use a buffer to avoid having one
+        // syscall per piece
+        let mut writer = BufWriter::new(&mut f);
+        writeln!(writer, "{}", prelude).map_err(ExternalError::FailedWriteToTempFile)?;
+        writer
+            .flush()
+            .map_err(ExternalError::FailedWriteToTempFile)?;
+        drop(writer);
+        f
+    };
 
     // transform each AND arg, if any, into a string and put each
     // lemma string in a different line in the file below.
@@ -70,12 +77,24 @@ fn sat_refutation_external_check(
         )
         .unwrap();
     });
-    let lemmas_path = format!("lemmas_{}.smt2", process::id());
-    log::info!("[sat_refutation check] Print lemmas file {}", lemmas_path);
-    write!(File::create(lemmas_path.clone()).unwrap(), "{}", lemmas_str).unwrap();
+    let mut lemmas_file =
+        NamedTempFile::with_suffix("-lemmas.smt2").map_err(ExternalError::FailedCreateTempFile)?;
+
+    log::info!(
+        "[sat_refutation check] Print lemmas file {}",
+        lemmas_file.path().display()
+    );
+    write!(lemmas_file, "{}", lemmas_str).map_err(ExternalError::FailedWriteToTempFile)?;
     log::info!("[sat_refutation check] Invoke oracle");
 
-    check_external(&[cnf_path, prelude_path, lemmas_path], checker)
+    check_external(
+        &[
+            cnf_path.display(),
+            prelude_file.path().display(),
+            lemmas_file.path().display(),
+        ],
+        checker,
+    )
 }
 
 pub fn sat_refutation(
@@ -248,7 +267,7 @@ pub fn sat_refutation(
                 &mut sat_clause_to_lemma,
                 &mut term_to_var,
                 true,
-            );
+            )?;
             // Note that I have to get these lemmas aligned with the
             // order in which they are printed in the CNF, which is
             // guaranteed if I follow the same order of
@@ -341,7 +360,7 @@ pub fn sat_refutation(
 
             sat_refutation_external_check(
                 pool,
-                cnf_path,
+                &cnf_path,
                 &prelude,
                 checker,
                 &lemmas,
@@ -360,71 +379,63 @@ pub fn sat_refutation(
                 &mut sat_clause_to_lemma,
                 &mut term_to_var,
                 false,
+            )?;
+
+            let (core_path, _) =
+                external::get_core_and_lrat_files(&cnf_path, sat_solver, drat_checker)?;
+            let core_lemmas = external::parse_core_lemmas(&core_path, &sat_clause_to_lemma)?;
+
+            log::info!(
+                "[sat_refutation check] Check {} core lemmas",
+                core_lemmas.len()
             );
 
-            match external::get_core_lemmas(
-                cnf_path.as_str(),
-                &sat_clause_to_lemma,
-                sat_solver,
-                drat_checker,
-            ) {
-                Ok(core_lemmas) => {
-                    log::info!(
-                        "[sat_refutation check] Check {} core lemmas",
-                        core_lemmas.len()
-                    );
-
-                    // for each core lemma, we will run cvc5, parse the proof in, and check it
-                    for lemma in &core_lemmas {
-                        let mut lemma_choices = Vec::new();
-                        let lemma = if handling_choice {
-                            &lemma
-                                .iter()
-                                .map(|l| {
-                                    pool.choice_subterms(l).iter().for_each(|epsilon| {
-                                        lemma_choices.push(epsilon.clone());
-                                    });
-                                    substitution.apply(pool, l)
-                                })
-                                .collect::<Vec<Rc<Term>>>()
-                        } else {
-                            lemma
-                        };
-                        // build assertions
-                        let mut assertions = Vec::new();
-                        lemma.iter().for_each(|l| {
-                            assertions.push(build_term!(pool, (not {l.clone()})));
-                        });
-                        lemma_choices.iter().for_each(|epsilon| {
-                            if !epsilon_to_assertion.contains_key(epsilon) {
-                                log::debug!(
-                                    "\t[sat_refutation check] choice not in map: {:?}\nmap: {:?}",
-                                    epsilon,
-                                    epsilon_to_assertion
-                                );
-                                unreachable!();
-                            }
-                            assertions.push(epsilon_to_assertion[epsilon].clone());
-                        });
-
-                        log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
-                        let problem = external::get_problem_string(&prelude, &assertions);
-
-                        if let Err(e) =
-                            external::get_solver_proof(pool, problem.clone(), smt_solver)
-                        {
-                            log::debug!(
-                                "\t[sat_refutation check] Failed to check with problem:\n{}",
-                                problem
-                            );
-                            return Err(CheckerError::External(e));
-                        }
+            // for each core lemma, we will run cvc5, parse the proof in, and check it
+            for lemma in &core_lemmas {
+                let mut lemma_choices = Vec::new();
+                let lemma = if handling_choice {
+                    &lemma
+                        .iter()
+                        .map(|l| {
+                            pool.choice_subterms(l).iter().for_each(|epsilon| {
+                                lemma_choices.push(epsilon.clone());
+                            });
+                            substitution.apply(pool, l)
+                        })
+                        .collect::<Vec<Rc<Term>>>()
+                } else {
+                    lemma
+                };
+                // build assertions
+                let mut assertions = Vec::new();
+                lemma.iter().for_each(|l| {
+                    assertions.push(build_term!(pool, (not {l.clone()})));
+                });
+                lemma_choices.iter().for_each(|epsilon| {
+                    if !epsilon_to_assertion.contains_key(epsilon) {
+                        log::debug!(
+                            "\t[sat_refutation check] choice not in map: {:?}\nmap: {:?}",
+                            epsilon,
+                            epsilon_to_assertion
+                        );
+                        unreachable!();
                     }
-                    log::info!("[sat_refutation check] All successfully checked");
-                    Ok(())
+                    assertions.push(epsilon_to_assertion[epsilon].clone());
+                });
+
+                log::debug!("\t[sat_refutation check] Check lemma: {:?}", lemma);
+                let problem = external::get_problem_string(&prelude, &assertions);
+
+                if let Err(e) = external::get_solver_proof(pool, problem.clone(), smt_solver) {
+                    log::debug!(
+                        "\t[sat_refutation check] Failed to check with problem:\n{}",
+                        problem
+                    );
+                    return Err(CheckerError::External(e));
                 }
-                Err(e) => Err(CheckerError::External(e)),
             }
+            log::info!("[sat_refutation check] All successfully checked");
+            Ok(())
         }
     }
 }
