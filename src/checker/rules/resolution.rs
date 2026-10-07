@@ -268,14 +268,14 @@ pub fn contraction(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResul
     for (&t, &count) in &premise_set.0 {
         let got = conclusion_set.get(&t);
         if got == 0 {
-            return Err(CheckerError::ContractionMissingTerm(t.clone()));
+            return Err(CheckerError::MissingTermInClause(t.clone()));
         } else if got > count {
-            return Err(CheckerError::ContractionExtraTerm(t.clone()));
+            return Err(CheckerError::ExtraTermInClause(t.clone()));
         }
     }
     for (t, count) in conclusion_set.0 {
         if premise_set.get(&t) < count {
-            return Err(CheckerError::ContractionExtraTerm(t.clone()));
+            return Err(CheckerError::ExtraTermInClause(t.clone()));
         }
     }
     Ok(())
