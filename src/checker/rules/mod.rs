@@ -127,13 +127,6 @@ fn assert_polyeq_expected(got: &Rc<Term>, expected: Rc<Term>, time: &mut Duratio
     Ok(())
 }
 
-fn assert_alpha_equiv(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> RuleResult {
-    if !alpha_equiv(a, b, time) {
-        return Err(EqualityError::ExpectedEqual(a.clone(), b.clone()).into());
-    }
-    Ok(())
-}
-
 fn assert_alpha_equiv_expected(
     got: &Rc<Term>,
     expected: Rc<Term>,

@@ -8,7 +8,7 @@ use crate::{
     ast::*,
     checker::{
         error::{err, rassert},
-        rules::{assert_alpha_equiv, assert_operation_len},
+        rules::assert_operation_len,
     },
     utils::{MultiSet, MultiSetDifference},
 };
@@ -428,7 +428,16 @@ pub fn beta_equiv(RuleArgs { conclusion, pool, polyeq_time, .. }: RuleArgs) -> R
         .collect();
 
     let reduced = Substitution::new(pool, substitution)?.apply(pool, left);
-    assert_alpha_equiv(&reduced, right, polyeq_time)
+
+    // The reduced term must be the same as the right-hand side, up to renaming of bound variables.
+    // Unlike `alpha_equiv`, we don't allow reordering of equalities
+    if !Polyeq::new()
+        .alpha_equiv(true)
+        .eq_with_time(&reduced, right, polyeq_time)
+    {
+        return Err(EqualityError::ExpectedEqual(reduced, right.clone()).into());
+    }
+    Ok(())
 }
 
 pub fn div_intro(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {

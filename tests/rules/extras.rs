@@ -551,6 +551,10 @@ fn beta_equiv() {
                 (lambda ((b Int) (c Int)) (+ 1 c b))
             )) :rule beta_equiv)": false,
         }
+        "Equalities are not reordered" {
+            "(step t1 (cl (= ((lambda ((a Int)) (= a 1)) 2) (= 2 1))) :rule beta_equiv)": true,
+            "(step t1 (cl (= ((lambda ((a Int)) (= a 1)) 2) (= 1 2))) :rule beta_equiv)": false,
+        }
         "Argument captured by a remaining binding" {
             "(step t1 (cl (=
                 ((lambda ((x Int) (y Int)) (+ x y)) y)
