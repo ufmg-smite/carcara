@@ -407,15 +407,10 @@ impl PolyeqComparable for Term {
             (Term::Let(binds_a, a), Term::Let(binds_b, b)) => {
                 comp.compare_binder(binds_a, binds_b, a, b)
             }
-            (Term::Const(Constant::Real(r)), Term::Op(Operator::RealDiv, args)) => {
-                // if a is a rational and b a division literal, check
-                // if they are the same
+            (Term::Const(Constant::Real(r)), Term::Op(Operator::RealDiv, args))
+            | (Term::Op(Operator::RealDiv, args), Term::Const(Constant::Real(r))) => {
+                // A division of two integer-valued constants is interpreted as a rational literal
                 as_div_literal(args).is_some_and(|value| value == *r)
-            }
-            (Term::Op(Operator::RealDiv, args), Term::Const(Constant::Real(r))) => {
-                // if a is a rational and b a division literal, check
-                // if they are the same
-                r.is_positive() && as_div_literal(args).is_some_and(|value| value == *r)
             }
             (Term::Const(Constant::Integer(i1)), Term::Op(Operator::Sub, args))
             | (Term::Op(Operator::Sub, args), Term::Const(Constant::Integer(i1)))

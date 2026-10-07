@@ -151,13 +151,21 @@ fn test_polyeq() {
     // Division literals
     run_tests(
         definitions,
-        &[("(/ 1.0 2.0)", "0.5"), ("0.5", "(/ 1.0 2.0)")],
+        &[
+            ("(/ 1.0 2.0)", "0.5"),
+            ("0.5", "(/ 1.0 2.0)"),
+            ("(/ 0.0 5.0)", "0.0"),
+            ("0.0", "(/ 0.0 5.0)"),
+        ],
         TestType::ModReordering,
         true,
     );
     run_tests(
         definitions,
         &[
+            // Different values
+            ("(/ 1.0 3.0)", "0.5"),
+            ("0.5", "(/ 1.0 3.0)"),
             // n-ary division
             ("(/ 1.0 2.0 5.0)", "0.5"),
             ("0.5", "(/ 1.0 2.0 5.0)"),
