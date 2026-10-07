@@ -24,8 +24,8 @@ pub fn reordering(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult
     let conclusion_set: MultiSet<_> = conclusion.iter().collect();
     match conclusion_set.symmetric_difference(&premise_set) {
         MultiSetDifference::None => Ok(()),
-        MultiSetDifference::Missing(t) => Err(CheckerError::ContractionMissingTerm((*t).clone())),
-        MultiSetDifference::Extra(t) => Err(CheckerError::ContractionExtraTerm((*t).clone())),
+        MultiSetDifference::Missing(t) => Err(CheckerError::MissingTermInClause((*t).clone())),
+        MultiSetDifference::Extra(t) => Err(CheckerError::ExtraTermInClause((*t).clone())),
     }
 }
 
@@ -44,7 +44,10 @@ pub fn shuffle(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
     let left_multiset: MultiSet<_> = left_args.iter().collect();
     let right_multiset: MultiSet<_> = right_args.iter().collect();
     if left_multiset != right_multiset {
-        return Err(CheckerError::ShuffleArgsNotEqual);
+        return Err(CheckerError::CommutativeArgsNotEqual(
+            left.clone(),
+            right.clone(),
+        ));
     }
     Ok(())
 }

@@ -851,7 +851,10 @@ pub fn aci_simp(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
             let args1_multiset: MultiSet<_> = args1.iter().collect();
             let args2_multiset: MultiSet<_> = args2.iter().collect();
             if args1_multiset != args2_multiset {
-                return Err(CheckerError::ShuffleArgsNotEqual);
+                return Err(CheckerError::CommutativeArgsNotEqual(
+                    t11.clone(),
+                    t22.clone(),
+                ));
             }
             Ok(())
         }

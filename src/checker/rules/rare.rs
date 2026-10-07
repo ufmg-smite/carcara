@@ -2,7 +2,10 @@ use rapidhash::{HashMapExt, RapidHashMap};
 
 use crate::{
     ast::{Constant, Substitution, Term},
-    checker::{error::CheckerError, rules::get_premise_term},
+    checker::{
+        error::CheckerError,
+        rules::{assert_num_args, assert_num_premises, get_premise_term},
+    },
     rare::{get_rules, rewrite_meta_terms},
 };
 
@@ -26,11 +29,9 @@ pub fn check_rare(
         let Some(rare_term) = rare_rules.rules.get(v) else {
             return Err(CheckerError::RareRuleNotFound(v.clone()));
         };
-        if rare_term.arguments.len() + 1 != args.len() {
-            return Err(CheckerError::RareNumberOfPremisesWrong(
-                rare_term.arguments.len(),
-            ));
-        }
+        // The first argument is the rule name
+        assert_num_args(args, rare_term.arguments.len() + 1)?;
+        assert_num_premises(premises, rare_term.premises.len())?;
 
         if conclusion.is_empty() || conclusion.len() > 1 {
             return Err(CheckerError::RareConclusionNumberInvalid);
@@ -44,12 +45,6 @@ pub fn check_rare(
             let value = arguments.next().unwrap().clone();
             let variable = pool.add(Term::Var(arg.clone(), arg_sort.sort.clone()));
             map.insert(variable, value);
-        }
-
-        if rare_term.premises.len() != premises.len() {
-            return Err(CheckerError::RareNumberOfPremisesWrong(
-                rare_term.premises.len(),
-            ));
         }
 
         let mut rare_premises = rare_term.premises.iter();

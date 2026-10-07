@@ -105,13 +105,13 @@ pub enum CheckerError {
     #[error("broken transitivity chain: can't prove '(= {0} {1})'")]
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
-    /// A term present in the premise of a `contraction` step is missing from the conclusion clause.
+    /// A term is missing from the conclusion clause of a step.
     #[error("term '{0}' is missing in conclusion clause")]
-    ContractionMissingTerm(Rc<Term>),
+    MissingTermInClause(Rc<Term>),
 
-    /// A term present in the conclusion of a `contraction` step is missing from the premise clause.
+    /// An extra term was present in the conclusion clause of a step.
     #[error("term '{0}' was not expected in conclusion clause")]
-    ContractionExtraTerm(Rc<Term>),
+    ExtraTermInClause(Rc<Term>),
 
     /// A term is not a valid n-ary operation.
     #[error("term '{0}' is not a valid n-ary operation")]
@@ -125,9 +125,9 @@ pub enum CheckerError {
     #[error("No {0}-th child in term {1}")]
     NoIthChildInTerm(usize, Rc<Term>),
 
-    /// The argument multisets of a `shuffle` step are not equal.
-    #[error("argument multisets are not equal")]
-    ShuffleArgsNotEqual,
+    /// Two commutative operations had different argument multisets.
+    #[error("commutative operations do not have the same arguments: '{0}' and '{1}'")]
+    CommutativeArgsNotEqual(Rc<Term>, Rc<Term>),
 
     /// A term was expected to be a comparison operation (such as `<`, `<=`, `>`, or `>=`), but was
     /// not.
@@ -276,10 +276,6 @@ pub enum CheckerError {
     /// A `rare` rule with the given name was not found.
     #[error("the rule {0} was not found")]
     RareRuleNotFound(String),
-
-    /// A `rare` rule received an unexpected number of premises.
-    #[error("expected {0} number of premises, maybe you applied more arguments than needed")]
-    RareNumberOfPremisesWrong(usize),
 
     /// A premise of a step is not equal to the corresponding premise of the `rare` rule.
     #[error("the premise {0} isn't equal to {1}")]
