@@ -67,7 +67,7 @@ fn edge_cases() {
             ->
             "(step t1 (cl (not true)) :rule hole)
             (step t2.t1 (cl true) :rule true)
-            (step t2.t2 (cl) :rule resolution :premises (t1 t2.t1) :args (true false))",
+            (step t2 (cl) :rule resolution :premises (t1 t2.t1) :args (true false))",
         }
         "Double negation in conclusion" {
             "(assume h1 (not p))
@@ -76,10 +76,10 @@ fn edge_cases() {
             ->
             "(assume h1 (not p))
             (step t2 (cl p q) :rule hole)
-            (step t3 (cl q) :rule resolution :premises (h1 t2) :args (p false))
-            (step t3.t1 (cl (not (not (not (not q)))) (not q)) :rule not_not)
-            (step t3.t2 (cl (not (not (not (not (not q))))) (not (not q))) :rule not_not)
-            (step t3.t3 (cl (not (not q))) :rule resolution :premises (t3 t3.t1 t3.t2)
+            (step t3.t1 (cl q) :rule resolution :premises (h1 t2) :args (p false))
+            (step t3.t2 (cl (not (not (not (not q)))) (not q)) :rule not_not)
+            (step t3.t3 (cl (not (not (not (not (not q))))) (not (not q))) :rule not_not)
+            (step t3 (cl (not (not q))) :rule resolution :premises (t3.t1 t3.t2 t3.t3)
                 :args (q true (not (not (not (not q)))) true))",
         }
     }
