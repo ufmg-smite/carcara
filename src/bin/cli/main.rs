@@ -60,7 +60,11 @@ fn main() {
             println!("{}", res);
             println!("{}", pf.display(display_options))
         }),
-        Command::Bench(options) => bench_command(options),
+        Command::Bench(options) => bench_command(options).map(|success| {
+            if !success {
+                std::process::exit(1);
+            }
+        }),
         Command::Slice(options) => slice_command(options, cli.no_print_with_sharing)
             .map(|(_, pf, _)| println!("{}", pf.display(display_options))),
         Command::GenerateLiaProblems(options) => {
@@ -167,11 +171,12 @@ fn elaborate_command_impl<S: CollectStats>(
     )?)
 }
 
-fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
+/// Runs the benchmark and prints its results. Returns `false` if any run failed.
+fn bench_command(options: BenchCommandOptions) -> CliResult<bool> {
     let instances = get_instances_from_paths(&options.files)?;
     if instances.is_empty() {
         log::warn!("no files passed");
-        return Ok(());
+        return Ok(true);
     }
 
     log::info!(
@@ -194,6 +199,7 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         );
         result.print_status();
         result.stats.write_csv("runs.csv", "steps.csv")?;
+        Ok(result.num_errors == 0)
     } else {
         let result = benchmarking::run_benchmark::<SummaryStats>(
             &instances,
@@ -209,8 +215,8 @@ fn bench_command(options: BenchCommandOptions) -> CliResult<()> {
         } else {
             result.stats.print(options.sort_by_total);
         }
+        Ok(result.num_errors == 0)
     }
-    Ok(())
 }
 
 fn slice_command(
