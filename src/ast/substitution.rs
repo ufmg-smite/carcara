@@ -267,10 +267,16 @@ impl Substitution {
                 }
             }
             Term::Let(binding_list, inner) => {
-                match self.apply_to_binder(pool, binding_list, inner, use_cache) {
-                    Some((new_binds, new_inner)) => pool.add(Term::Let(new_binds, new_inner)),
-                    None => term.clone(),
-                }
+                // The values in a `let` are not in the scope of its bindings, so we apply the
+                // substitution to them before entering the binder
+                let binding_list: Vec<_> = binding_list
+                    .iter()
+                    .map(|(var, value)| (var.clone(), self.apply_impl(pool, value, use_cache)))
+                    .collect();
+                let (new_binds, new_inner) = self
+                    .apply_to_binder(pool, &binding_list, inner, use_cache)
+                    .unwrap_or_else(|| (BindingList(binding_list), inner.clone()));
+                pool.add(Term::Let(new_binds, new_inner))
             }
             Term::Match(term, cases) => {
                 let new_term = self.apply_impl(pool, term, use_cache);
@@ -429,9 +435,7 @@ impl Substitution {
                     new_vars.insert(new_var.clone());
                 }
 
-                // We also need to apply the current substitution to each variable's value
-                let new_value = value.apply_subst(pool, &mut new_substitution);
-                (new_var, new_value)
+                (new_var, value.clone())
             })
             .collect();
         (BindingList(new_binding_list), new_substitution)
@@ -441,26 +445,16 @@ impl Substitution {
 /// A trait for objects that can be the value in a binding list, namely `Rc<Term>` or `Rc<Sort>`.
 trait BindingValue: Clone {
     fn get_sort(&self, pool: &mut Pool) -> Rc<Sort>;
-
-    fn apply_subst(&self, pool: &mut Pool, substitution: &mut Substitution) -> Self;
 }
 
 impl BindingValue for Rc<Term> {
     fn get_sort(&self, pool: &mut Pool) -> Rc<Sort> {
         pool.sort(self)
     }
-
-    fn apply_subst(&self, pool: &mut Pool, substitution: &mut Substitution) -> Self {
-        substitution.apply(pool, self)
-    }
 }
 
 impl BindingValue for Rc<Sort> {
     fn get_sort(&self, _: &mut Pool) -> Rc<Sort> {
-        self.clone()
-    }
-
-    fn apply_subst(&self, _: &mut Pool, _: &mut Substitution) -> Self {
         self.clone()
     }
 }
@@ -635,7 +629,31 @@ mod tests {
             "(forall ((y Bool)) (and y (> x 0)))" [x -> y] =>
                 "(forall ((y_renamed Bool)) (and y_renamed (> y 0)))",
 
-            // TODO: Add tests for `choice`, `let`, and `lambda` terms
+            // TODO: Add tests for `choice` and `lambda` terms
+        }
+    }
+
+    #[test]
+    fn test_let_substitutions() {
+        run_tests! {
+            definitions = "
+                (declare-fun x () Int)
+                (declare-fun y () Int)
+                (declare-fun p () Bool)
+                (declare-fun q () Bool)
+            ",
+            // The substitution is applied to both the values and the body
+            "(let ((q (= x 0))) (and q (> x 1)))" [x -> y] => "(let ((q (= y 0))) (and q (> y 1)))",
+
+            // The bindings shadow the substitution in the body, but not in the values
+            "(let ((x (+ x 1))) (> x 0))" [x -> y] => "(let ((x (+ y 1))) (> x 0))",
+
+            // Capture-avoidance renames the binding in the body, but not in the values, since a
+            // free variable there refers to the scope outside the `let`
+            "(let ((q (not q))) (and q p))" [p -> q] =>
+                "(let ((q_renamed (not q))) (and q_renamed q))",
+            "(let ((q (= x 0))) (and q p))" [p -> q] =>
+                "(let ((q_renamed (= x 0))) (and q_renamed q))",
         }
     }
 

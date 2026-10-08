@@ -8,6 +8,18 @@ fn forall_inst() {
             (declare-fun b () Real)
             (declare-fun x () Real)
         ",
+        "Instantiating inside a `let`" {
+            "(step t1 (cl (or
+                (not (forall ((x Real)) (let ((q (>= x 0.0))) (or q (< x 0.0)))))
+                (let ((q (>= a 0.0))) (or q (< a 0.0)))
+            )) :rule forall_inst :args (a))": true,
+
+            // The bound `x` must also be replaced in the `let` values
+            "(step t1 (cl (or
+                (not (forall ((x Real)) (let ((q (>= x 0.0))) (or q (< x 0.0)))))
+                (let ((q (>= x 0.0))) (or q (< a 0.0)))
+            )) :rule forall_inst :args (a))": false,
+        }
         "Simple working examples" {
             "(step t1 (cl (or (not (forall ((p Bool)) p)) q))
                 :rule forall_inst :args (q))": true,
