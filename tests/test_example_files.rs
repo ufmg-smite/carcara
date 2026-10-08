@@ -6,7 +6,7 @@ fn run_parallel_checker_test(
     proof_path: &Path,
     config: (parser::Config, checker::Config),
     num_threads: usize,
-) -> CarcaraResult<()> {
+) -> CarcaraResult<Status> {
     let (problem, proof, rare_rules, pool) = parser::parse(
         carcara::Input {
             problem: parser::Source::file(problem_path)?,
@@ -23,9 +23,7 @@ fn run_parallel_checker_test(
         &proof,
         num_threads.try_into().unwrap(),
         Some(128 * 1024 * 1024),
-    )?;
-
-    Ok(())
+    )
 }
 
 fn run_test(
@@ -43,7 +41,8 @@ fn run_test(
     )?;
 
     // First, we check the proof normally
-    checker::Checker::new(&mut pool, &rare_rules, config.1.clone()).check(&problem, &proof)?;
+    let status =
+        checker::Checker::new(&mut pool, &rare_rules, config.1.clone()).check(&problem, &proof)?;
 
     // Then we elaborate it
     let elab_config = elaborator::Config::new().uncrowd_rotation(true);
@@ -69,10 +68,16 @@ fn run_test(
         "elaboration was not idempotent!"
     );
 
-    // We also test the parallel checker, with different values for the number of threads
-    run_parallel_checker_test(problem_path, proof_path, config.clone(), 1)?;
-    run_parallel_checker_test(problem_path, proof_path, config.clone(), 4)?;
-    run_parallel_checker_test(problem_path, proof_path, config, 16)?;
+    // We also test the parallel checker, with different values for the number of threads, and make
+    // sure it agrees with the sequential checker
+    for num_threads in [1, 4, 16] {
+        let parallel_status =
+            run_parallel_checker_test(problem_path, proof_path, config.clone(), num_threads)?;
+        assert_eq!(
+            parallel_status, status,
+            "parallel checker with {num_threads} threads disagrees with the sequential checker"
+        );
+    }
 
     Ok(())
 }
