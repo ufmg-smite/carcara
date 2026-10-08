@@ -478,3 +478,189 @@ impl TypeName for Integer {
 impl TypeName for Operator {
     const NAME: &'static str = "operator";
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_symbol_character() {
+        for ch in "aZ09+-/*=%?!.$_~&^<>@".chars() {
+            assert!(is_symbol_character(ch));
+        }
+        for ch in "() \"|:;#',é".chars() {
+            assert!(!is_symbol_character(ch));
+        }
+    }
+
+    #[test]
+    fn test_dedup() {
+        let got: Vec<_> = [3, 1, 3, 2, 1, 3].into_iter().dedup().collect();
+        assert_eq!(got, [3, 1, 2]);
+
+        let got: Vec<i32> = std::iter::empty().dedup().collect();
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn test_hash_cache() {
+        fn hash_of<T: Hash>(value: &T) -> u64 {
+            let mut hasher = rapidhash::fast::RapidHasher::default_const();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        let a = HashCache::new("foo".to_owned());
+        let b = HashCache::new("foo".to_owned());
+        let c = HashCache::new("bar".to_owned());
+        assert!(a == b);
+        assert!(a != c);
+        assert_eq!(hash_of(&a), hash_of(&b));
+        assert_eq!(a.as_ref(), "foo");
+        assert_eq!(c.unwrap(), "bar");
+    }
+
+    #[test]
+    fn test_hash_map_stack() {
+        let mut stack = HashMapStack::new();
+        assert_eq!(stack.height(), 1);
+        assert!(stack.is_empty());
+
+        stack.insert("x", 1);
+        stack.insert("y", 2);
+        assert!(!stack.is_empty());
+
+        // Inner scopes shadow outer ones
+        stack.push_scope();
+        stack.insert("x", 10);
+        assert_eq!(stack.height(), 2);
+        assert_eq!(stack.get("x"), Some(&10));
+        assert_eq!(stack.get("y"), Some(&2));
+        assert_eq!(stack.get("z"), None);
+        assert_eq!(stack.get_with_depth("x"), Some((1, &10)));
+        assert_eq!(stack.get_with_depth("y"), Some((0, &2)));
+        assert_eq!(stack.get_top("x"), Some(&10));
+        assert_eq!(stack.get_top("y"), None);
+
+        // Popping a scope restores the outer bindings
+        stack.pop_scope();
+        assert_eq!(stack.height(), 1);
+        assert_eq!(stack.get("x"), Some(&1));
+
+        // `clear_top`, `retain_top` and `extend` only touch the top scope
+        stack.push_scope();
+        stack.extend([("a", 3), ("b", 4), ("c", 5)]);
+        stack.retain_top(|_, v| *v % 2 == 1);
+        assert_eq!(stack.get_top("a"), Some(&3));
+        assert_eq!(stack.get_top("b"), None);
+        assert_eq!(stack.get_top("c"), Some(&5));
+        stack.clear_top();
+        assert_eq!(stack.get_top("a"), None);
+        assert_eq!(stack.get("x"), Some(&1));
+        assert_eq!(stack.height(), 2);
+
+        // `clear` removes everything, including the extra scopes
+        stack.clear();
+        assert_eq!(stack.height(), 1);
+        assert!(stack.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "trying to pop last scope")]
+    fn test_hash_map_stack_pop_last_scope() {
+        let mut stack: HashMapStack<i32, i32> = HashMapStack::new();
+        stack.pop_scope();
+    }
+
+    #[test]
+    fn test_multiset() {
+        let mut set = MultiSet::new();
+        assert!(set.is_empty());
+
+        assert_eq!(set.insert('a'), 1);
+        assert_eq!(set.insert('a'), 2);
+        assert_eq!(set.insert_n('b', 3), 3);
+        assert_eq!(set.insert_n('c', 0), 0);
+        assert_eq!(set.len(), 2); // Inserting zero copies doesn't add an entry
+        assert_eq!(set.get(&'a'), 2);
+        assert_eq!(set.get(&'c'), 0);
+        assert!(set.contains(&'b'));
+        assert!(!set.contains(&'c'));
+
+        assert_eq!(set.remove(&'a'), 1);
+        assert_eq!(set.remove_n(&'b', 2), 1);
+        // Removing more copies than there are removes the entry entirely
+        assert_eq!(set.remove_n(&'b', 5), 0);
+        assert!(!set.contains(&'b'));
+        assert_eq!(set.len(), 1);
+        assert_eq!(set.remove(&'z'), 0);
+
+        *set.get_mut('d') += 2;
+        assert_eq!(set.get(&'d'), 2);
+    }
+
+    #[test]
+    fn test_multiset_iteration_and_equality() {
+        let set: MultiSet<_> = "abacab".chars().collect();
+        assert_eq!(set.get(&'a'), 3);
+        assert_eq!(set.get(&'b'), 2);
+        assert_eq!(set.get(&'c'), 1);
+
+        let mut items: Vec<_> = set.clone().into_iter().collect();
+        items.sort();
+        assert_eq!(items, ['a', 'a', 'a', 'b', 'b', 'c']);
+
+        // Equality doesn't depend on insertion order
+        let other: MultiSet<_> = "bcaaab".chars().collect();
+        assert!(set == other);
+        let different: MultiSet<_> = "abcab".chars().collect();
+        assert!(set != different);
+
+        let mut extended: MultiSet<_> = "ab".chars().collect();
+        extended.extend("aacb".chars());
+        assert!(extended == set);
+    }
+
+    #[test]
+    fn test_multiset_symmetric_difference() {
+        fn diff(a: &str, b: &str) -> Option<(bool, char)> {
+            let (a, b): (MultiSet<_>, MultiSet<_>) = (a.chars().collect(), b.chars().collect());
+            match a.symmetric_difference(&b) {
+                MultiSetDifference::None => None,
+                MultiSetDifference::Missing(c) => Some((false, *c)),
+                MultiSetDifference::Extra(c) => Some((true, *c)),
+            }
+        }
+
+        assert_eq!(diff("", ""), None);
+        assert_eq!(diff("aab", "aba"), None);
+        assert_eq!(diff("aab", "ab"), Some((true, 'a')));
+        assert_eq!(diff("ab", "aab"), Some((false, 'a')));
+        // Elements that only occur in the second multiset are found in the second loop
+        assert_eq!(diff("ab", "abc"), Some((false, 'c')));
+        assert_eq!(diff("abc", "ab"), Some((true, 'c')));
+    }
+
+    #[test]
+    fn test_range() {
+        let cases: [(Range, &[usize], &[usize], &str); 5] = [
+            (3.into(), &[3], &[2, 4], "3"),
+            ((2..5).into(), &[2, 3, 4], &[1, 5], "between 2 and 4"),
+            ((2..).into(), &[2, 3, 100], &[0, 1], "at least 2"),
+            ((..3).into(), &[0, 1, 2], &[3, 4], "up to 2"),
+            ((..).into(), &[0, 1, 100], &[], "any number of"),
+        ];
+        for (range, inside, outside, display) in cases {
+            for &n in inside {
+                assert!(range.contains(n));
+            }
+            for &n in outside {
+                assert!(!range.contains(n));
+            }
+            assert_eq!(range.to_string(), display);
+        }
+
+        // A single-element `a..a + 1` range is displayed like a single number
+        assert_eq!(Range::from(4..5).to_string(), "4");
+    }
+}
