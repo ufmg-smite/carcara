@@ -1,7 +1,7 @@
 use carcara::ast::{
     Binder, MatchCase, Operator, ParamOperator, QualifiedOperator, Rc, Sort, SortedVar, Term,
 };
-use owo_colors::{OwoColorize, Style};
+use owo_colors::OwoColorize;
 use rapidhash::{HashMapExt, RapidHashMap};
 use std::fmt;
 
@@ -42,11 +42,7 @@ fn addition<T>(f: &mut fmt::Formatter, t: T, level: usize, use_colors: bool) -> 
 where
     T: fmt::Display,
 {
-    let c = if use_colors {
-        Style::new().green().bold()
-    } else {
-        Style::new()
-    };
+    let c = crate::style_if(use_colors, |s| s.green().bold());
     indent_with_char(f, level, '+'.style(c))?;
     writeln!(f, "{}", t.style(c))
 }
@@ -55,11 +51,7 @@ fn removal<T>(f: &mut fmt::Formatter, t: T, level: usize, use_colors: bool) -> f
 where
     T: fmt::Display,
 {
-    let c = if use_colors {
-        Style::new().red().bold()
-    } else {
-        Style::new()
-    };
+    let c = crate::style_if(use_colors, |s| s.red().bold());
     indent_with_char(f, level, '-'.style(c))?;
     writeln!(f, "{}", t.style(c))
 }
