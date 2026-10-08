@@ -181,7 +181,7 @@ impl Pool {
         }
 
         let result = match term.as_ref() {
-            Term::Const(c) => self.sorts.add(match c {
+            Term::Const(c) => self.add_sort(match c {
                 Constant::Integer(_) => Sort::Int,
                 Constant::Real(_) => Sort::Real,
                 Constant::String(_) => Sort::String,
@@ -220,10 +220,10 @@ impl Pool {
                 | Operator::BvSGt
                 | Operator::BvSGe
                 | Operator::Cl
-                | Operator::Delete => self.sorts.add(Sort::Bool),
+                | Operator::Delete => self.add_sort(Sort::Bool),
 
                 Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
-                    self.sorts.add(Sort::Int)
+                    self.add_sort(Sort::Int)
                 }
 
                 Operator::BvAdd
@@ -252,12 +252,10 @@ impl Pool {
                             _ => unreachable!(),
                         }
                     }
-                    self.sorts.add(Sort::ParamBitVec)
+                    self.add_sort(Sort::ParamBitVec)
                 }
-                Operator::BvComp => self.sorts.add(Sort::BitVec(1)),
-                Operator::BvBbTerm | Operator::BvPBbTerm => {
-                    self.sorts.add(Sort::BitVec(args.len()))
-                }
+                Operator::BvComp => self.add_sort(Sort::BitVec(1)),
+                Operator::BvBbTerm | Operator::BvPBbTerm => self.add_sort(Sort::BitVec(args.len())),
                 Operator::BvConst => {
                     let s = match &*args[1] {
                         Term::Const(Constant::Integer(bvsize)) => {
@@ -265,7 +263,7 @@ impl Pool {
                         }
                         _ => Sort::ParamBitVec,
                     };
-                    self.sorts.add(s)
+                    self.add_sort(s)
                 }
                 Operator::BvConcat => {
                     let s = args.iter().map(|a| self.compute_sort(a).clone()).fold(
@@ -277,7 +275,7 @@ impl Pool {
                             _ => unreachable!(),
                         },
                     );
-                    self.sorts.add(s)
+                    self.add_sort(s)
                 }
                 Operator::BvIte => self.compute_sort(&args[1]).clone(),
                 Operator::Ite => self.compute_sort(&args[1]).clone(),
@@ -291,10 +289,10 @@ impl Pool {
                     } else {
                         Sort::Int
                     };
-                    self.sorts.add(s)
+                    self.add_sort(s)
                 }
-                Operator::RealDiv | Operator::ToReal => self.sorts.add(Sort::Real),
-                Operator::IntDiv | Operator::Mod | Operator::ToInt => self.sorts.add(Sort::Int),
+                Operator::RealDiv | Operator::ToReal => self.add_sort(Sort::Real),
+                Operator::IntDiv | Operator::Mod | Operator::ToInt => self.add_sort(Sort::Int),
                 Operator::Select => {
                     let Sort::Array(_, y) = self.compute_sort(&args[0]).as_ref() else {
                         unreachable!()
@@ -306,7 +304,7 @@ impl Pool {
                 | Operator::IndexOf
                 | Operator::IndexOfRe
                 | Operator::StrToCode
-                | Operator::StrToInt => self.sorts.add(Sort::Int),
+                | Operator::StrToInt => self.add_sort(Sort::Int),
                 Operator::StrConcat
                 | Operator::CharAt
                 | Operator::Substring
@@ -315,7 +313,7 @@ impl Pool {
                 | Operator::ReplaceRe
                 | Operator::ReplaceReAll
                 | Operator::StrFromCode
-                | Operator::StrFromInt => self.sorts.add(Sort::String),
+                | Operator::StrFromInt => self.add_sort(Sort::String),
                 Operator::StrToRe
                 | Operator::ReNone
                 | Operator::ReAll
@@ -329,15 +327,15 @@ impl Pool {
                 | Operator::ReKleeneCross
                 | Operator::ReOption
                 | Operator::ReRange
-                | Operator::ReFromAutomaton => self.sorts.add(Sort::RegLan),
+                | Operator::ReFromAutomaton => self.add_sort(Sort::RegLan),
                 Operator::RareList => match args.as_slice() {
                     // For empty lists, we can't know the element sort, so we use a placeholder
                     // variable sort `?`
-                    [] => self.sorts.add(Sort::Var("?".to_owned())),
+                    [] => self.add_sort(Sort::Var("?".to_owned())),
                     [arg, ..] => self.compute_sort(arg).clone(),
                 },
-                Operator::Pow2 | Operator::Log2 => self.sorts.add(Sort::Int),
-                Operator::IsPow2 => self.sorts.add(Sort::Bool),
+                Operator::Pow2 | Operator::Log2 => self.add_sort(Sort::Int),
+                Operator::IsPow2 => self.add_sort(Sort::Bool),
 
                 Operator::RealPi
                 | Operator::Sqrt
@@ -353,7 +351,7 @@ impl Pool {
                 | Operator::Arctan
                 | Operator::Arccsc
                 | Operator::Arcsec
-                | Operator::Arccot => self.sorts.add(Sort::Real),
+                | Operator::Arccot => self.add_sort(Sort::Real),
 
                 // Sets and relations
                 Operator::SetUnion
@@ -363,21 +361,21 @@ impl Pool {
                 Operator::SetMember
                 | Operator::SetSubset
                 | Operator::SetIsEmpty
-                | Operator::SetIsSingleton => self.sorts.add(Sort::Bool),
+                | Operator::SetIsSingleton => self.add_sort(Sort::Bool),
                 Operator::SetSingleton => {
                     let elem_sort = Sort::Set(self.compute_sort(&args[0]).clone());
-                    self.sorts.add(elem_sort)
+                    self.add_sort(elem_sort)
                 }
-                Operator::SetCard => self.sorts.add(Sort::Int),
+                Operator::SetCard => self.add_sort(Sort::Int),
                 Operator::SetInsert => self.compute_sort(args.last().unwrap()).clone(),
                 Operator::Tuple => {
                     let sorts = args
                         .iter()
                         .map(|elem| self.compute_sort(elem).clone())
                         .collect();
-                    self.sorts.add(Sort::Tuple(sorts))
+                    self.add_sort(Sort::Tuple(sorts))
                 }
-                Operator::TupleUnit => self.sorts.add(Sort::Tuple(Vec::new())),
+                Operator::TupleUnit => self.add_sort(Sort::Tuple(Vec::new())),
                 Operator::RelTranspose => {
                     let sort = self.compute_sort(&args[0]);
                     let Sort::Set(tuple) = sort.as_ref() else {
@@ -388,8 +386,8 @@ impl Pool {
                     };
                     let mut sorts = sorts.clone();
                     sorts.reverse();
-                    let tuple = self.sorts.add(Sort::Tuple(sorts));
-                    self.sorts.add(Sort::Set(tuple))
+                    let tuple = self.add_sort(Sort::Tuple(sorts));
+                    self.add_sort(Sort::Set(tuple))
                 }
                 Operator::RelTclosure => self.compute_sort(&args[0]).clone(),
                 Operator::RelJoin => {
@@ -405,8 +403,8 @@ impl Pool {
                     });
                     left.pop();
                     left.extend_from_slice(&right[1..]);
-                    let tuple = self.sorts.add(Sort::Tuple(left));
-                    self.sorts.add(Sort::Set(tuple))
+                    let tuple = self.add_sort(Sort::Tuple(left));
+                    self.add_sort(Sort::Set(tuple))
                 }
                 Operator::RelProduct => {
                     let [mut left, right] = [&args[0], &args[1]].map(|arg| {
@@ -420,10 +418,10 @@ impl Pool {
                         sorts.clone()
                     });
                     left.extend(right);
-                    let tuple = self.sorts.add(Sort::Tuple(left));
-                    self.sorts.add(Sort::Set(tuple))
+                    let tuple = self.add_sort(Sort::Tuple(left));
+                    self.add_sort(Sort::Set(tuple))
                 }
-                Operator::Custom(custom) => self.sorts.add(custom.def().return_sort.clone()),
+                Operator::Custom(custom) => self.add_sort(custom.def().return_sort.clone()),
             },
             Term::App(f, args) => {
                 let func_sort = self.compute_sort(f).clone();
@@ -445,7 +443,7 @@ impl Pool {
                     sorts.last().unwrap().clone()
                 } else {
                     let remaining_sorts = sorts[args.len()..].to_vec();
-                    self.sorts.add(Sort::Function(remaining_sorts))
+                    self.add_sort(Sort::Function(remaining_sorts))
                 };
 
                 // If parametric, match with sorts of args, apply the resulting substitution on
@@ -462,13 +460,13 @@ impl Pool {
                     applied
                 }
             }
-            Term::Binder(Binder::Forall | Binder::Exists, _, _) => self.sorts.add(Sort::Bool),
+            Term::Binder(Binder::Forall | Binder::Exists, _, _) => self.add_sort(Sort::Bool),
             Term::Binder(Binder::Choice, v, _) => v[0].1.clone(),
             Term::Binder(Binder::Lambda, bindings, body) => {
                 let mut result: Vec<_> =
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();
                 result.push(self.compute_sort(body).clone());
-                self.sorts.add(Sort::Function(result))
+                self.add_sort(Sort::Function(result))
             }
             Term::Let(_, inner) => self.compute_sort(inner).clone(),
             Term::Match(_, cases) => self.compute_sort(&cases.last().unwrap().body).clone(),
