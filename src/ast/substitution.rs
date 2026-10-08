@@ -629,7 +629,10 @@ mod tests {
             "(forall ((y Bool)) (and y (> x 0)))" [x -> y] =>
                 "(forall ((y_renamed Bool)) (and y_renamed (> y 0)))",
 
-            // TODO: Add tests for `choice` and `lambda` terms
+            // `choice` and `lambda` behave like quantifiers
+            "(choice ((z Int)) (> z x))" [x -> y] => "(choice ((z Int)) (> z y))",
+            "(lambda ((y Int)) (+ y x))" [x -> y] => "(lambda ((y_renamed Int)) (+ y_renamed y))",
+            "((lambda ((x Int)) (+ x 1)) x)" [x -> y] => "((lambda ((x Int)) (+ x 1)) y)",
         }
     }
 
