@@ -14,7 +14,9 @@ use carcara::{
     slice,
     translation::{self, Translator},
 };
+use clap::Parser;
 use error::{CliError, CliResult};
+use owo_colors::Style;
 use path_args::{get_instances_from_paths, infer_problem_path};
 use std::{
     fs::File,
@@ -23,7 +25,14 @@ use std::{
     sync::atomic,
 };
 
-use clap::Parser;
+/// Small helper to conditionally apply a style.
+fn style_if(b: bool, style_func: fn(Style) -> Style) -> Style {
+    if b {
+        style_func(Style::new())
+    } else {
+        Style::new()
+    }
+}
 
 fn main() {
     let cli = Cli::parse();
@@ -44,7 +53,7 @@ fn main() {
             match check_command(options) {
                 Ok(s) => println!("{}", s),
                 Err(e) => {
-                    log::error!("{}", e);
+                    log::error!("{}", e.display(stderr_colors));
                     if cli.print_diffs
                         && let Some(diff) = diff_from_error(&e)
                     {
@@ -76,7 +85,7 @@ fn main() {
         }
     };
     if let Err(e) = result {
-        log::error!("{}", e);
+        log::error!("{}", e.display(stderr_colors));
         if cli.print_diffs
             && let Some(diff) = diff_from_error(&e)
         {
