@@ -246,7 +246,7 @@ fn slice_command(
 
         // Write sliced problem and proof to output paths, if provided
         if let Some(files) = options.sliced_output {
-            let (proof_filename, problem_filename) = (&files[0], &files[1]);
+            let (problem_filename, proof_filename) = (&files[0], &files[1]);
             File::create(problem_filename)
                 .and_then(|mut f| {
                     f.write_all(format!("{}", problem.prelude).as_bytes())?;
