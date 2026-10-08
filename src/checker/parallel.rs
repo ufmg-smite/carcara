@@ -102,13 +102,18 @@ impl<'c> ParallelChecker<'c> {
             workers
                 .into_iter()
                 .map(|w| w.join().unwrap())
-                .reduce(|a, b| Ok(WorkerResult::combine(a?, b?)))
+                .reduce(|a, b| match (a, b) {
+                    (Ok(a), Ok(b)) => Ok(WorkerResult::combine(a, b)),
+                    // We prioritize reporting the earliest error
+                    (Err(a), Err(b)) => Err(if a.0 <= b.0 { a } else { b }),
+                    (Err(e), _) | (_, Err(e)) => Err(e),
+                })
                 .unwrap()
+                .map_err(|(_, e)| e)
         })?;
 
         *stats = S::combine(std::mem::take(stats), combined_result.global_stats);
 
-        // TODO
         // The workers only measure the time spent on polyeq and `assume` steps, so the total is the
         // wall-clock time of the whole parallel check
         let checking_stats = CheckingStats {
@@ -152,7 +157,7 @@ fn worker_thread<S: CollectStats + Default>(
     proof: &Proof,
     work_queue: &ArrayQueue<usize>,
     abort: &AtomicBool,
-) -> CarcaraResult<WorkerResult<S>> {
+) -> Result<WorkerResult<S>, (usize, Error)> {
     let mut stats = S::default();
     while let Some(index) = work_queue.pop() {
         if abort.load(Ordering::Relaxed) {
@@ -165,9 +170,9 @@ fn worker_thread<S: CollectStats + Default>(
             index,
             &mut stats,
         );
-        if result.is_err() {
+        if let Err(e) = result {
             abort.store(true, Ordering::Relaxed);
-            result?;
+            return Err((index, e));
         }
     }
 
