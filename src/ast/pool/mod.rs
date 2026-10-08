@@ -1,6 +1,8 @@
 //! This module implements [`Pool`], a structure that stores terms and implements hash consing.
 
 mod storage;
+#[cfg(test)]
+mod tests;
 
 use super::{
     Binder, Constant, Operator, ParamOperator, Rc, Sort, SortSubstitution, SortedVar, Term,
