@@ -80,10 +80,17 @@ pub fn bind(
     let (r_binder, r_bindings, right) = right.as_binder_err()?;
     assert_eq(&l_binder, &r_binder)?;
 
+    rassert!(
+        l_bindings.len() == r_bindings.len(),
+        "right and left quantifiers have different number of bindings: {} and {}",
+        l_bindings.len(),
+        r_bindings.len(),
+    );
+
     let [l_bindings, r_bindings] = [l_bindings, r_bindings].map(|b| {
         b.iter()
             .map(|var| pool.add(var.clone().into()))
-            .collect::<IndexSet<_>>()
+            .collect::<Vec<_>>()
     });
 
     // The terms in the quantifiers must be phi and phi'
@@ -100,48 +107,63 @@ pub fn bind(
         return err!("binding '{y}' appears as free variable in phi");
     }
 
-    // Since we are closing a subproof, we only care about the substitutions that were introduced
-    // in it
-    let context = context.last().unwrap();
+    let args = &context.last().unwrap().args;
+    check_renaming_anchor(pool, args, &l_bindings, &r_bindings)
+}
 
-    let (xs, ys): (IndexSet<_>, IndexSet<_>) = {
-        let (mut xs, mut ys) = (IndexSet::new(), IndexSet::new());
-        for arg in &context.args {
-            match arg {
-                AnchorArg::Variable((name, _)) if !xs.is_empty() => {
-                    return err!("unexpected anchor argument: '{name}'");
-                }
-                AnchorArg::Variable(var) => {
-                    ys.insert(pool.add(var.clone().into()));
-                }
-                AnchorArg::Assign(var, _) => {
-                    xs.insert(pool.add(var.clone().into()));
-                }
+/// Checks that the arguments of the anchor closed by a `bind` or `bind_let` step rename each
+/// variable in `xs` to the variable in the same position in `ys`.
+///
+/// The anchor must fix every `y_i`, and its substitution must map each `x_i` to `y_i`. It may also
+/// fix the `x_i` variables, but it can't fix or assign any other variable.
+pub(super) fn check_renaming_anchor(
+    pool: &mut Pool,
+    args: &[AnchorArg],
+    xs: &[Rc<Term>],
+    ys: &[Rc<Term>],
+) -> RuleResult {
+    let mut fixed = IndexSet::new();
+
+    // The context composes assignments in order, so a value that was renamed by an earlier
+    // assignment is renamed again. For example, `(:= x y) (:= y x)` maps both `x` and `y` to `y`
+    let mut substitution: IndexMap<Rc<Term>, Rc<Term>> = IndexMap::new();
+
+    for arg in args {
+        match arg {
+            AnchorArg::Variable((name, _)) if !substitution.is_empty() => {
+                return err!("unexpected anchor argument: '{name}'");
+            }
+            AnchorArg::Variable(var) => {
+                let var = pool.add(var.clone().into());
+                // TODO: maybe optimize these `contains` by converting into a hash set?
+                rassert!(
+                    xs.contains(&var) || ys.contains(&var),
+                    "anchor fixes variable '{var}', which is not a binding",
+                );
+                fixed.insert(var);
+            }
+            AnchorArg::Assign(var, value) => {
+                let var = pool.add(var.clone().into());
+                rassert!(
+                    xs.contains(&var),
+                    "anchor assigns variable '{var}', which is not a left-hand binding",
+                );
+                let value = substitution.get(value).unwrap_or(value).clone();
+                substitution.insert(var, value);
             }
         }
-        (xs, ys)
-    };
-
-    rassert!(
-        l_bindings.len() == r_bindings.len(),
-        "right and left quantifiers have different number of bindings: {} and {}",
-        l_bindings.len(),
-        r_bindings.len(),
-    );
-
-    let (l_bindings, r_bindings): (IndexSet<_>, IndexSet<_>) = (
-        l_bindings.difference(&r_bindings).cloned().collect(),
-        r_bindings.difference(&l_bindings).cloned().collect(),
-    );
-
-    // `l_bindings` should be a subset of `xs` and `r_bindings` should be a subset of `ys`
-    if let Some(x) = l_bindings.iter().find(|&x| !xs.contains(x)) {
-        let x = x.as_var().unwrap().to_owned();
-        return Err(CheckerError::BindingIsNotInContext(x));
     }
-    if let Some(y) = r_bindings.iter().find(|&y| !ys.contains(y)) {
-        let y = y.as_var().unwrap().to_owned();
-        return Err(CheckerError::BindingIsNotInContext(y));
+
+    for (x, y) in xs.iter().zip(ys) {
+        if !fixed.contains(y) {
+            let y = y.as_var().unwrap().to_owned();
+            return Err(CheckerError::BindingIsNotInContext(y));
+        }
+        let value = substitution.get(x).unwrap_or(x);
+        rassert!(
+            value == y,
+            "anchor maps '{x}' to '{value}' instead of '{y}'"
+        );
     }
     Ok(())
 }
