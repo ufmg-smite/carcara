@@ -8,7 +8,7 @@ use crate::{
     ast::*,
     checker::{
         error::{err, rassert},
-        rules::assert_operation_len,
+        rules::{assert_operation_len, subproof::check_renaming_anchor},
     },
     utils::{MultiSet, MultiSetDifference},
 };
@@ -130,6 +130,8 @@ pub fn bind_let(
     RuleArgs {
         conclusion,
         premises,
+        pool,
+        context,
         previous_command,
         ..
     }: RuleArgs,
@@ -169,7 +171,20 @@ pub fn bind_let(
     }
 
     assert_eq(left, phi)?;
-    assert_eq(right, phi_prime)
+    assert_eq(right, phi_prime)?;
+
+    // The anchor must fix the variables bound by the `let` terms, and can't change any other
+    // variable
+    let [xs, ys] = [l_bindings, r_bindings].map(|b| {
+        b.iter()
+            .map(|(name, value)| {
+                let sort = pool.sort(value);
+                pool.add(Term::new_var(name, sort))
+            })
+            .collect::<Vec<_>>()
+    });
+    let args = &context.last().unwrap().args;
+    check_renaming_anchor(pool, args, &xs, &ys)
 }
 
 pub fn la_mult_pos(args: RuleArgs) -> RuleResult {
