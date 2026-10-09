@@ -1,0 +1,4 @@
+(declare-rare-rule bad ((x Bool))
+  :args (z)
+  :conclusion (= x x)
+)

@@ -1,0 +1,6 @@
+(assume h1 (= (* 2 (div 3 2)) 2))
+(step t1 (cl (= (* 2 (div 3 2)) 3)) :rule poly_simp)
+(step t2 (cl (= 2 (* 2 (div 3 2)))) :rule symm :premises (h1))
+(step t3 (cl (not (= 2 (* 2 (div 3 2)))) (not (= (* 2 (div 3 2)) 3)) (= 2 3)) :rule eq_transitive)
+(step t4 (cl (not (= 2 3))) :rule la_generic :args (1))
+(step t5 (cl) :rule resolution :premises (t1 t2 t3 t4))

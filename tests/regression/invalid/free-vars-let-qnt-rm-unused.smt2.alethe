@@ -1,0 +1,5 @@
+(assume a0 (let ((y z)) (> y 0)))
+(assume a1 (not (forall ((z Int)) (let ((y z)) (> y 0)))))
+(step t1 (cl (= (forall ((z Int)) (let ((y z)) (> y 0))) (let ((y z)) (> y 0)))) :rule qnt_rm_unused)
+(step t2 (cl (not (= (forall ((z Int)) (let ((y z)) (> y 0))) (let ((y z)) (> y 0)))) (forall ((z Int)) (let ((y z)) (> y 0))) (not (let ((y z)) (> y 0)))) :rule equiv_pos1)
+(step t3 (cl) :rule resolution :premises (t1 t2 a0 a1))

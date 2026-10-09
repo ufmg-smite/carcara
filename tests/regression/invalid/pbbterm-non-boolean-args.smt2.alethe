@@ -1,0 +1,8 @@
+(step t1 (cl (= (= (@pbbterm 2) (@pbbterm 0)) (= (- 2 0) 0))) :rule pbblast_bveq)
+(step t2 (cl (= (= (@pbbterm 2) (@pbbterm 0)) true)) :rule evaluate)
+(step t3 (cl (= (= (- 2 0) 0) false)) :rule evaluate)
+(step t4 (cl (= true false)) :rule trans :premises (t2 t1 t3))
+(step t5 (cl (not (= true false)) (not true) false) :rule equiv_pos2)
+(step t6 (cl true) :rule true)
+(step t7 (cl (not false)) :rule false)
+(step t8 (cl) :rule resolution :premises (t4 t5 t6 t7))

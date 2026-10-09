@@ -1,0 +1,4 @@
+(assume a0 (< x -3))
+(assume a1 (> x (- 2.0)))
+(step t1 (cl (not (< x -3)) (not (> x (- 2.0)))) :rule la_generic :args (1 1))
+(step t2 (cl) :rule resolution :premises (t1 a0 a1))

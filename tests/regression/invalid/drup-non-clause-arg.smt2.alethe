@@ -1,0 +1,4 @@
+(assume a0 a)
+(assume a1 (not a))
+(step t1 (cl a) :rule drup :premises (a0) :args (a))
+(step t2 (cl) :rule resolution :premises (t1 a1))

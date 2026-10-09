@@ -1,0 +1,3 @@
+(assume h1 (not (=> (and (> 2 0) (or p q)) (or p q))))
+(step t1 (cl (=> (and (> 2 0) (or p q)) (or p q))) :rule la_mult_pos)
+(step t2 (cl) :rule resolution :premises (h1 t1))

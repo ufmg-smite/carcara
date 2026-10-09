@@ -1,0 +1,3 @@
+(assume h1 (= (str.++ x y z) (str.++ s2 "")))
+(assume h3 (not (= (str.len z) 0)))
+(step t1 (cl (= z (str.++ z z))) :rule concat_cprop_suffix :premises (h1 h3))

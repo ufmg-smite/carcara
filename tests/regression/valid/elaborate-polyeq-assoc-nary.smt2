@@ -1,0 +1,8 @@
+(set-logic QF_UF)
+(declare-const a Bool)
+(declare-const b Bool)
+(declare-const c Bool)
+(declare-const d Bool)
+(assert (or a b c d))
+(assert (and a))
+(assert (not a))

@@ -1,0 +1,4 @@
+(assume h1 (> a 0.0))
+(assume h2 (< a 1.0))
+(step t1 (cl (not (> a 0.0)) (not (< a 1.0))) :rule la_generic :args (1.0 1.0))
+(step t2 (cl) :rule resolution :premises (t1 h1 h2))

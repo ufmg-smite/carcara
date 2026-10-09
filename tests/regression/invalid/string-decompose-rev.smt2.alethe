@@ -1,0 +1,7 @@
+(assume h1 (>= (str.len "ab") 2))
+(step t1 (cl (and (= "ab" (str.++ (str.substr "ab" 0 2) (str.substr "ab" 2 (- (str.len "ab") 2)))) (= (str.len (str.substr "ab" 2 (- (str.len "ab") 2))) 2))) :rule string_decompose :premises (h1) :args (true))
+(step t2 (cl (= (str.len (str.substr "ab" 2 (- (str.len "ab") 2))) 2)) :rule and :premises (t1) :args (1))
+(step t3 (cl (= (= (str.len (str.substr "ab" 2 (- (str.len "ab") 2))) 2) false)) :rule evaluate)
+(step t4 (cl (not (= (= (str.len (str.substr "ab" 2 (- (str.len "ab") 2))) 2) false)) (not (= (str.len (str.substr "ab" 2 (- (str.len "ab") 2))) 2)) false) :rule equiv_pos2)
+(step t5 (cl (not false)) :rule false)
+(step t6 (cl) :rule resolution :premises (t2 t3 t4 t5))

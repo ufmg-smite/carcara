@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-const n Int)
+(declare-const x (_ BitVec n))
+(declare-const y (_ BitVec 4))
+(declare-const z (_ BitVec 8))
+(assert (= x y))
+(assert (= x z))

@@ -1,0 +1,6 @@
+(assume h1 (= (* (div 1 2) (- a b)) (* 1 (- c c))))
+(assume h2 (< a b))
+(step t1 (cl (= (< a b) (< c c))) :rule poly_simp_rel :premises (h1))
+(step t2 (cl (not (< c c))) :rule la_generic :args (1))
+(step t3 (cl (not (= (< a b) (< c c))) (not (< a b)) (< c c)) :rule equiv_pos2)
+(step t4 (cl) :rule resolution :premises (h2 t1 t2 t3))

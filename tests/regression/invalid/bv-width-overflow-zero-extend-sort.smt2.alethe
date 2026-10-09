@@ -1,0 +1,2 @@
+(assume a0 (= ((_ zero_extend 18446744073709551615) x) z))
+(step t1 (cl) :rule hole :premises (a0))

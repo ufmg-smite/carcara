@@ -1,0 +1,5 @@
+(assume h1 (forall ((x U)) (or (P y) (forall ((y U)) (Q y)))))
+(assume h2 (not (forall ((y U)) (or (P y) (Q y)))))
+(step t1 (cl (or (not (forall ((x U)) (or (P y) (forall ((y U)) (Q y))))) (forall ((y U)) (or (P y) (Q y))))) :rule qnt_cnf)
+(step t2 (cl (not (forall ((x U)) (or (P y) (forall ((y U)) (Q y))))) (forall ((y U)) (or (P y) (Q y)))) :rule or :premises (t1))
+(step t3 (cl) :rule resolution :premises (t2 h1 h2))

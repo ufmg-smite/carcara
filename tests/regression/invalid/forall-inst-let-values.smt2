@@ -1,0 +1,5 @@
+(set-logic LRA)
+(declare-fun a () Real)
+(declare-fun x () Real)
+(assert (forall ((x Real)) (let ((q (>= x 0.0))) (or q (< x 0.0)))))
+(assert (not (let ((q (>= x 0.0))) (or q (< a 0.0)))))

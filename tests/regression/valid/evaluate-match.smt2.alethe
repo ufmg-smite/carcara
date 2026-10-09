@@ -1,0 +1,3 @@
+(assume h1 (not (= (match c ((red true) (green false))) (match c ((red true) (green false))))))
+(step t1 (cl (= (match c ((red true) (green false))) (match c ((red true) (green false))))) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

@@ -1,0 +1,3 @@
+; carcara-option: rare-file rare-args-not-a-parameter.eo
+(assume h1 p)
+(step t1 (cl (= p p)) :rule rare_rewrite :args ("bad" p))

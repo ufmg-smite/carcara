@@ -1,5 +1,5 @@
 use carcara::*;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn run_parallel_checker_test(
     problem_path: &Path,
@@ -82,8 +82,8 @@ fn run_test(
     Ok(())
 }
 
-fn test_file(proof_path: &str) {
-    let config = if proof_path.ends_with(".cvc5.alethe") {
+fn test_file(proof_path: &Path) {
+    let config = if proof_path.to_str().unwrap().ends_with(".cvc5.alethe") {
         let parsing = parser::Config::new().expand_lets(true);
         let checking = checker::Config::new().allowed_rules(["all_simplify", "rare_rewrite"]);
         (parsing, checking)
@@ -91,15 +91,14 @@ fn test_file(proof_path: &str) {
         (parser::Config::new(), checker::Config::new())
     };
 
-    let proof_path = PathBuf::from(proof_path);
     let problem_path = {
-        let mut path = proof_path.clone();
+        let mut path = proof_path.to_path_buf();
         while path.extension().unwrap() != "smt_in" && path.extension().unwrap() != "smt2" {
             path.set_extension("");
         }
         path
     };
-    if let Err(e) = run_test(&problem_path, &proof_path, config) {
+    if let Err(e) = run_test(&problem_path, proof_path, config) {
         // Error messages are sometimes pretty big, so printing them fully can be very bad for
         // performance
         let short_message = match e {
@@ -113,7 +112,7 @@ fn test_file(proof_path: &str) {
         };
         panic!(
             "\"{}\" returned error: {}",
-            &proof_path.to_str().unwrap(),
+            proof_path.display(),
             short_message
         )
     }
@@ -121,12 +120,12 @@ fn test_file(proof_path: &str) {
 
 #[test_generator::from_dir(path = "benchmarks/small")]
 #[allow(dead_code)]
-fn small(proof_path: &str) {
+fn small(proof_path: &Path) {
     test_file(proof_path)
 }
 
 #[test_generator::from_dir(path = "benchmarks/full", ignore)]
 #[allow(dead_code)]
-fn full(proof_path: &str) {
+fn full(proof_path: &Path) {
     test_file(proof_path)
 }

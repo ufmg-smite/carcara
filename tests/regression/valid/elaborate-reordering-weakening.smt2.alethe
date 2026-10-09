@@ -1,0 +1,13 @@
+; carcara-command: elaborate
+; carcara-option: pipeline reordering
+(assume h1 (or a b))
+(assume h2 (or (not b) a c))
+(assume h3 (or (not c) a))
+(assume h4 (not a))
+(assume h5 (not d))
+(step t1 (cl a b) :rule or :premises (h1))
+(step t2 (cl (not b) a c) :rule or :premises (h2))
+(step t3 (cl (not c) a) :rule or :premises (h3))
+(step t4 (cl a) :rule resolution :premises (t1 t2 t3) :args (b true c true))
+(step t5 (cl a d) :rule weakening :premises (t4))
+(step t6 (cl) :rule resolution :premises (t5 h4 h5) :args (a true d true))

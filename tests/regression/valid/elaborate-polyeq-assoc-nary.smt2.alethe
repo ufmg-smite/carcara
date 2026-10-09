@@ -1,0 +1,4 @@
+; carcara-command: elaborate
+(assume h1 (or (or a b) c d))
+(assume h3 (not a))
+(step t1 (cl) :rule hole :premises (h1 h3))

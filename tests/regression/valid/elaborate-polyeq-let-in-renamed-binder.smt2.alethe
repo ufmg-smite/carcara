@@ -1,0 +1,6 @@
+; carcara-command: elaborate
+(assume h1 (forall ((x Int)) (let ((x 0)) (= x y))))
+(assume h2 (not (forall ((z Int)) (let ((x 0)) (= y x)))))
+(step t1 (cl (= (forall ((x Int)) (let ((x 0)) (= x y))) (forall ((z Int)) (let ((x 0)) (= y x))))) :rule refl)
+(step t2 (cl (not (= (forall ((x Int)) (let ((x 0)) (= x y))) (forall ((z Int)) (let ((x 0)) (= y x))))) (not (forall ((x Int)) (let ((x 0)) (= x y)))) (forall ((z Int)) (let ((x 0)) (= y x)))) :rule equiv_pos2)
+(step t3 (cl) :rule resolution :premises (t2 t1 h1 h2))

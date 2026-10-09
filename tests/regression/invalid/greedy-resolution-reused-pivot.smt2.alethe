@@ -1,0 +1,6 @@
+(assume h1 p)
+(assume h2 (or (not p) q))
+(assume h3 (or (not q) p))
+(step t4 (cl (not p) q) :rule or :premises (h2))
+(step t5 (cl (not q) p) :rule or :premises (h3))
+(step t6 (cl) :rule resolution :premises (h1 t4 t5))

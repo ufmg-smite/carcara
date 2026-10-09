@@ -1,0 +1,7 @@
+(assume h1 (= (str.++ "a" y t3) (str.++ "abc" s2)))
+(assume h2 (not (= (str.len "a") 0)))
+(step t1 (cl (= "a" (str.++ (str.substr "abc" 0 2) (str.substr "a" (str.len (str.substr "abc" 0 2)) (- (str.len "a") (str.len (str.substr "abc" 0 2))))))) :rule concat_cprop_prefix :premises (h1 h2))
+(step t2 (cl (= (= "a" (str.++ (str.substr "abc" 0 2) (str.substr "a" (str.len (str.substr "abc" 0 2)) (- (str.len "a") (str.len (str.substr "abc" 0 2)))))) false)) :rule evaluate)
+(step t3 (cl (not (= (= "a" (str.++ (str.substr "abc" 0 2) (str.substr "a" (str.len (str.substr "abc" 0 2)) (- (str.len "a") (str.len (str.substr "abc" 0 2)))))) false)) (not (= "a" (str.++ (str.substr "abc" 0 2) (str.substr "a" (str.len (str.substr "abc" 0 2)) (- (str.len "a") (str.len (str.substr "abc" 0 2))))))) false) :rule equiv_pos2)
+(step t4 (cl (not false)) :rule false)
+(step t5 (cl) :rule resolution :premises (t1 t2 t3 t4))

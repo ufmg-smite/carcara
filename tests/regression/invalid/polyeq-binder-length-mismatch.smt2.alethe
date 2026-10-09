@@ -1,0 +1,5 @@
+(assume h1 (exists ((x Int) (y Int)) (and (= x 0) (= y 1))))
+(assume h2 (not (exists ((x Int)) (and (= x 0) (= y 1)))))
+(step t1 (cl (= (exists ((x Int) (y Int)) (and (= x 0) (= y 1))) (exists ((x Int)) (and (= x 0) (= y 1))))) :rule refl)
+(step t2 (cl (not (= (exists ((x Int) (y Int)) (and (= x 0) (= y 1))) (exists ((x Int)) (and (= x 0) (= y 1))))) (not (exists ((x Int) (y Int)) (and (= x 0) (= y 1)))) (exists ((x Int)) (and (= x 0) (= y 1)))) :rule equiv_pos2)
+(step t3 (cl) :rule resolution :premises (t2 t1 h1 h2))

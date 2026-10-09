@@ -1,0 +1,9 @@
+; carcara-option: apply-function-defs
+(assume h1 (forall ((y_renamed Int)) (or (= y_renamed y) (< y_renamed y_renamed))))
+(step t1 (cl (or (not (forall ((y_renamed Int)) (or (= y_renamed y) (< y_renamed y_renamed)))) (or (= (+ y 1) y) (< (+ y 1) (+ y 1))))) :rule forall_inst :args ((+ y 1)))
+(step t2 (cl (not (forall ((y_renamed Int)) (or (= y_renamed y) (< y_renamed y_renamed)))) (or (= (+ y 1) y) (< (+ y 1) (+ y 1)))) :rule or :premises (t1))
+(step t3 (cl (or (= (+ y 1) y) (< (+ y 1) (+ y 1)))) :rule resolution :premises (t2 h1))
+(step t4 (cl (= (+ y 1) y) (< (+ y 1) (+ y 1))) :rule or :premises (t3))
+(step t5 (cl (not (= (+ y 1) y))) :rule la_generic :args (1))
+(step t6 (cl (not (< (+ y 1) (+ y 1)))) :rule la_generic :args (1))
+(step t7 (cl) :rule resolution :premises (t4 t5 t6))

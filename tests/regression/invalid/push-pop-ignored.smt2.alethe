@@ -1,0 +1,3 @@
+(assume h1 (not a))
+(assume h2 a)
+(step t1 (cl) :rule resolution :premises (h1 h2))

@@ -1,0 +1,3 @@
+(assume h1 (not a))
+(step t1 (cl a) :rule drat :args ((cl a)))
+(step t2 (cl) :rule resolution :premises (t1 h1))

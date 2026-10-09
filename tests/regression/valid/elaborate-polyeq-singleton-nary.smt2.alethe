@@ -1,0 +1,4 @@
+; carcara-command: elaborate
+(assume h2 a)
+(assume h3 (not a))
+(step t1 (cl) :rule resolution :premises (h2 h3))

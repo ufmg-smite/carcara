@@ -1,0 +1,6 @@
+(assume h1 (= (_ bv300 8) (_ bv44 8)))
+(step t1 (cl (= (= (_ bv300 8) (_ bv44 8)) false)) :rule evaluate)
+(step t2 (cl (not (= (_ bv300 8) (_ bv44 8))) false) :rule equiv1 :premises (t1))
+(step t3 (cl false) :rule resolution :premises (h1 t2))
+(step t4 (cl (not false)) :rule false)
+(step t5 (cl) :rule resolution :premises (t3 t4))

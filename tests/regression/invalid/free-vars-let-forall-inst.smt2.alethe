@@ -1,0 +1,5 @@
+(assume a0 (forall ((x Int)) (exists ((z Int)) (not (= x z)))))
+(assume a1 (not (exists ((z Int)) (not (= (let ((y z)) y) z)))))
+(step t1 (cl (or (not (forall ((x Int)) (exists ((z Int)) (not (= x z))))) (exists ((z Int)) (not (= (let ((y z)) y) z))))) :rule forall_inst :args ((let ((y z)) y)))
+(step t2 (cl (not (forall ((x Int)) (exists ((z Int)) (not (= x z))))) (exists ((z Int)) (not (= (let ((y z)) y) z)))) :rule or :premises (t1))
+(step t3 (cl) :rule resolution :premises (t2 a0 a1))

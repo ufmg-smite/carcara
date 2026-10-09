@@ -56,7 +56,7 @@ pub fn from_dir(args: TokenStream, input: TokenStream) -> TokenStream {
                     #[test]
                     #[allow(warnings)]
                     fn #new_ident() {
-                        #func_ident(#arg)
+                        #func_ident(::std::path::Path::new(#arg))
                     }
                 }
                 .into(),

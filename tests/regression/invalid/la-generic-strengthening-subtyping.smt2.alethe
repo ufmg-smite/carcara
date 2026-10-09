@@ -1,0 +1,6 @@
+; carcara-option: allow-int-real-subtyping
+(assume h1 (= x 1))
+(step t1 (cl (<= (* 0.5 x) 0.0) (>= (* 0.5 x) 1.0)) :rule la_generic :args (1.0 1.0))
+(step t2 (cl (not (<= (* 0.5 x) 0.0)) (not (= x 1))) :rule la_generic :args (1.0 0.5))
+(step t3 (cl (not (>= (* 0.5 x) 1.0)) (not (= x 1))) :rule la_generic :args (1.0 -0.5))
+(step t4 (cl) :rule resolution :premises (h1 t1 t2 t3))
