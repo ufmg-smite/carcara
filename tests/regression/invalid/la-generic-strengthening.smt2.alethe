@@ -1,0 +1,5 @@
+(assume h1 (= x 1))
+(step t1 (cl (< x 1) (> x 1)) :rule la_generic :args (0.5 0.5))
+(step t2 (cl (not (= x 1)) (not (< x 1))) :rule la_generic :args (1 1))
+(step t3 (cl (not (= x 1)) (not (> x 1))) :rule la_generic :args (-1 1))
+(step t4 (cl) :rule resolution :premises (h1 t1 t2 t3))

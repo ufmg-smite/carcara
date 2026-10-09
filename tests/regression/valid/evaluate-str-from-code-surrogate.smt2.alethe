@@ -1,0 +1,3 @@
+(assume h1 (not (= (str.from_code 55296) (str.from_code 55296))))
+(step t1 (cl (= (str.from_code 55296) (str.from_code 55296))) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

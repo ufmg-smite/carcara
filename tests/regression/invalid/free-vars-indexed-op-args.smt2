@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-fun n () Int)
+(declare-fun x () (_ BitVec 4))
+(assert (= (rotate_left n x) x))
+(assert (not (forall ((n Int)) (= (rotate_left n x) x))))
+(check-sat)

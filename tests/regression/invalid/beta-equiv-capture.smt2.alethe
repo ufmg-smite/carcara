@@ -1,0 +1,3 @@
+(assume h1 (not (= ((lambda ((x Int) (y Int)) (+ x y)) y) (lambda ((y Int)) (+ y y)))))
+(step t1 (cl (= ((lambda ((x Int) (y Int)) (+ x y)) y) (lambda ((y Int)) (+ y y)))) :rule beta_equiv)
+(step t2 (cl) :rule resolution :premises (h1 t1))

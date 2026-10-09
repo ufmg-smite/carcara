@@ -1,0 +1,4 @@
+(assume h1 (> x (/ 1.0 0.0)))
+(assume h2 (< x (/ 1.0 0.0)))
+(step t1 (cl (not (> x (/ 1.0 0.0))) (not (< x (/ 1.0 0.0)))) :rule la_generic :args (1.0 1.0))
+(step t2 (cl) :rule resolution :premises (t1 h1 h2))

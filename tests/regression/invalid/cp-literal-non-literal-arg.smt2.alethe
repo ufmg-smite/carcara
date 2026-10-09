@@ -1,0 +1,3 @@
+(step t1 (cl (>= (- 0 1) 0)) :rule cp_literal :args ((- 0 1)))
+(step t2 (cl (not (>= (- 0 1) 0))) :rule la_generic :args (1))
+(step t3 (cl) :rule resolution :premises (t1 t2))

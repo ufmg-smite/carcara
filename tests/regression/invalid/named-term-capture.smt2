@@ -1,0 +1,7 @@
+(set-logic UFLIA)
+(declare-fun f (Int) Int)
+(declare-fun x () Int)
+(assert (= (! (f x) :named n) 0))
+(assert (forall ((x Int)) (= n 0)))
+(assert (not (= (f 5) 0)))
+(check-sat)

@@ -1,0 +1,6 @@
+(assume h1 (= x 0))
+(step t1 (cl (= (>= (* 1 x) (- 1)) (>= (* 1 x) 1))) :rule cp_normalize)
+(step t2 (cl (>= (* 1 x) (- 1)) (not (= x 0))) :rule la_generic :args (1 1))
+(step t3 (cl (not (= (>= (* 1 x) (- 1)) (>= (* 1 x) 1))) (not (>= (* 1 x) (- 1))) (>= (* 1 x) 1)) :rule equiv_pos2)
+(step t4 (cl (not (>= (* 1 x) 1)) (not (= x 0))) :rule la_generic :args (1 (- 1)))
+(step t5 (cl) :rule resolution :premises (h1 t1 t2 t3 t4))

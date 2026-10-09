@@ -1,0 +1,3 @@
+(assume h1 (= x 0.5))
+(assume h2 (not (= x 0.5)))
+(step t1 (cl) :rule resolution :premises (h1 h2))

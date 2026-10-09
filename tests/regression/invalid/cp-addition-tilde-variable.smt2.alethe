@@ -1,0 +1,5 @@
+(assume c1 (>= (* 1 x1) 1))
+(assume c2 (>= (* 1 ~x1) 1))
+(step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))
+(step t2 (cl (not (>= 0 1))) :rule la_generic :args (1))
+(step t3 (cl) :rule resolution :premises (t1 t2))

@@ -1,0 +1,6 @@
+(set-logic QF_SLIA)
+(declare-const y String)
+(declare-const u String)
+(assert (= (str.++ y "y" "z") (str.++ u "xy" "z")))
+(assert (not (= (str.len "z") 0)))
+(check-sat)

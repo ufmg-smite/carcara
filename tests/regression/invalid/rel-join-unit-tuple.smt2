@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-fun a () (Relation Int))
+(declare-fun b () (Set UnitTuple))
+(assert (= (rel.join a b) (rel.join a b)))
+(check-sat)

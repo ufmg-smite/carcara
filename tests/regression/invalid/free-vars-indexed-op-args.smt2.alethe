@@ -1,0 +1,6 @@
+; carcara-option: allow-higher-order-indexed-ops
+(assume h1 (= (rotate_left n x) x))
+(assume h2 (not (forall ((n Int)) (= (rotate_left n x) x))))
+(step t1 (cl (= (forall ((n Int)) (= (rotate_left n x) x)) (= (rotate_left n x) x))) :rule qnt_rm_unused)
+(step t2 (cl (not (= (forall ((n Int)) (= (rotate_left n x) x)) (= (rotate_left n x) x))) (forall ((n Int)) (= (rotate_left n x) x)) (not (= (rotate_left n x) x))) :rule equiv_pos1)
+(step t3 (cl) :rule resolution :premises (t2 t1 h1 h2))

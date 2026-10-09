@@ -1,0 +1,3 @@
+(assume h1 (not (= (mod (- 7) 2) -1)))
+(step t1 (cl (= (mod (- 7) 2) -1)) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

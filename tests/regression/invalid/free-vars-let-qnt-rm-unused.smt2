@@ -1,0 +1,5 @@
+(set-logic UFLIA)
+(declare-fun z () Int)
+(assert (let ((y z)) (> y 0)))
+(assert (not (forall ((z Int)) (let ((y z)) (> y 0)))))
+(check-sat)

@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-fun y () Int)
+(assert (forall ((x Int)) (let ((x 0)) (= x y))))
+(assert (not (forall ((z Int)) (let ((x 0)) (= y x)))))
+(check-sat)

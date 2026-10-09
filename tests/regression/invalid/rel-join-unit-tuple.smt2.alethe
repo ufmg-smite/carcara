@@ -1,0 +1,1 @@
+(assume a0 (= (rel.join a b) (rel.join a b)))

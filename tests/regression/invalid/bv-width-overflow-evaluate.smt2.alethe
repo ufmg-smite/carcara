@@ -1,0 +1,5 @@
+(assume a0 (distinct ((_ zero_extend 18446744073709551615) #b1) ((_ zero_extend 18446744073709551615) #b0)))
+(step t1 (cl (= (distinct ((_ zero_extend 18446744073709551615) #b1) ((_ zero_extend 18446744073709551615) #b0)) false)) :rule evaluate)
+(step t2 (cl (not (= (distinct ((_ zero_extend 18446744073709551615) #b1) ((_ zero_extend 18446744073709551615) #b0)) false)) (not (distinct ((_ zero_extend 18446744073709551615) #b1) ((_ zero_extend 18446744073709551615) #b0))) false) :rule equiv_pos2)
+(step t3 (cl (not false)) :rule false)
+(step t4 (cl) :rule resolution :premises (a0 t1 t2 t3))

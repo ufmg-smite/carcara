@@ -1,0 +1,3 @@
+(assume h1 (let ((y (forall ((b Bool)) b))) y))
+(step t1 (cl (let ((y (and false true))) y)) :rule bfun_elim :premises (h1))
+(step t2 (cl) :rule hole :premises (t1))

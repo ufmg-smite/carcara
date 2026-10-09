@@ -1,0 +1,2 @@
+; carcara-option: allow-higher-order-indexed-ops
+(step t1 (cl) :rule hole)

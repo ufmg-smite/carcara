@@ -1,0 +1,6 @@
+(set-logic UFLIA)
+(declare-const t Int)
+(declare-fun P (Int) Bool)
+(declare-fun Q (Int) Bool)
+(assert (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x)))))
+(assert (not (forall ((x Int)) (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x)))))))

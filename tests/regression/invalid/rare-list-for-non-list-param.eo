@@ -1,0 +1,4 @@
+(declare-rare-rule eq-refl ((@T0 Type) (t1 @T0))
+  :args (t1)
+  :conclusion (= (= t1 t1) true)
+)

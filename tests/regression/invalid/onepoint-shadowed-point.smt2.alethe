@@ -1,0 +1,7 @@
+(assume h1 (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x)))))
+(assume h2 (not (forall ((x Int)) (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x)))))))
+(anchor :step t1 :args ((:= (x Int) t)))
+(step t1.t1 (cl (= (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x)))) (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x)))))) :rule refl)
+(step t1 (cl (= (forall ((x Int)) (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x))))) (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x)))))) :rule onepoint)
+(step t2 (cl (not (= (forall ((x Int)) (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x))))) (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x)))))) (forall ((x Int)) (or (P x) (forall ((x Int)) (or (not (= x t)) (Q x))))) (not (or (P t) (forall ((x Int)) (or (not (= x t)) (Q x)))))) :rule equiv_pos1)
+(step t3 (cl) :rule resolution :premises (t2 t1 h1 h2))

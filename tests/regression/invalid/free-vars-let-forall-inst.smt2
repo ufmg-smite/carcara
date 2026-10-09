@@ -1,0 +1,5 @@
+(set-logic UFLIA)
+(declare-fun z () Int)
+(assert (forall ((x Int)) (exists ((z Int)) (not (= x z)))))
+(assert (not (exists ((z Int)) (not (= (let ((y z)) y) z)))))
+(check-sat)

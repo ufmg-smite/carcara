@@ -1,0 +1,7 @@
+(set-logic QF_LIA)
+(declare-fun a () Int)
+(declare-fun b () Int)
+(declare-fun c () Int)
+(assert (= (* (div 1 2) (- a b)) (* 1 (- c c))))
+(assert (< a b))
+(check-sat)

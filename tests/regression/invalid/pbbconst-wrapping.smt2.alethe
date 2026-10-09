@@ -1,0 +1,8 @@
+(step t1 (cl (= #b1 (@pbbterm 4294967297))) :rule pbblast_pbbconst)
+(step t2 (cl (= #b1 (@pbbterm 1))) :rule pbblast_pbbconst)
+(step t3 (cl (= (@pbbterm 4294967297) #b1)) :rule symm :premises (t1))
+(step t4 (cl (not (= (@pbbterm 4294967297) #b1)) (not (= #b1 (@pbbterm 1))) (= (@pbbterm 4294967297) (@pbbterm 1))) :rule eq_transitive)
+(step t5 (cl (= (= (@pbbterm 4294967297) (@pbbterm 1)) (= (- 4294967297 1) 0))) :rule pbblast_bveq)
+(step t6 (cl (not (= (= (@pbbterm 4294967297) (@pbbterm 1)) (= (- 4294967297 1) 0))) (not (= (@pbbterm 4294967297) (@pbbterm 1))) (= (- 4294967297 1) 0)) :rule equiv_pos2)
+(step t7 (cl (not (= (- 4294967297 1) 0))) :rule la_generic :args (1))
+(step t8 (cl) :rule resolution :premises (t2 t3 t4 t5 t6 t7))

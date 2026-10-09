@@ -1,0 +1,6 @@
+(set-logic QF_LIA)
+(declare-fun x () Int)
+(declare-fun z () Int)
+(assert (let ((x 0) (y x)) (= y x)))
+(assert (not (let ((z 0) (y z)) (= y z))))
+(check-sat)

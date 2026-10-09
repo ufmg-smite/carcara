@@ -1,0 +1,5 @@
+(set-logic QF_SLIA)
+(declare-const z String)
+(assert (str.in_re z (re.++ (re.++ (str.to_re "a") (str.to_re "b")) (re.++ (str.to_re "c") (str.to_re "d")))))
+(assert (= z "abcd"))
+(check-sat)

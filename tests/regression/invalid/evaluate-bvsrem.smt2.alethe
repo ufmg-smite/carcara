@@ -1,0 +1,3 @@
+(assume h1 (not (= (bvsrem #b1001 #b0010) #b0001)))
+(step t1 (cl (= (bvsrem #b1001 #b0010) #b0001)) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

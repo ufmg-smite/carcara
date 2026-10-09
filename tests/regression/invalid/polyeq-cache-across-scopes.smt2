@@ -1,0 +1,7 @@
+(set-logic UFLIA)
+(declare-fun f (Int) Int)
+(declare-fun x () Int)
+(declare-fun y () Int)
+(assert (forall ((w Int)) (and (= y (f x)) (forall ((x Int)) (exists ((y Int)) (= y (f x)))))))
+(assert (not (forall ((w Int)) (and (= y (f x)) (forall ((y Int)) (exists ((x Int)) (= y (f x))))))))
+(check-sat)

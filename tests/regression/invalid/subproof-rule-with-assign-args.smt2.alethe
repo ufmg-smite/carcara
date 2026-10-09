@@ -1,0 +1,5 @@
+(assume h1 (not (= x 5)))
+(anchor :step t2 :args ((:= (x Int) 5)))
+(step t2.t1 (cl (= x 5)) :rule refl)
+(step t2 (cl (= x 5)) :rule subproof)
+(step t3 (cl) :rule resolution :premises (h1 t2))

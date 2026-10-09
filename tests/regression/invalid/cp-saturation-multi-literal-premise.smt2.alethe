@@ -1,0 +1,5 @@
+(assume h1 (or (>= (* 2 x1) 1) (>= (* 2 x2) 1)))
+(assume h2 (not (>= (* 1 x1) 1)))
+(step t1 (cl (>= (* 2 x1) 1) (>= (* 2 x2) 1)) :rule or :premises (h1))
+(step t2 (cl (>= (* 1 x1) 1)) :rule cp_saturation :premises (t1))
+(step t3 (cl) :rule resolution :premises (t2 h2))

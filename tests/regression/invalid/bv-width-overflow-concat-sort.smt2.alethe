@@ -1,0 +1,2 @@
+(assume a0 (= (concat x y) z))
+(step t1 (cl) :rule hole :premises (a0))
