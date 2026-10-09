@@ -255,37 +255,66 @@ fn and_intro() {
 #[test]
 fn bind_let() {
     test_cases! {
-        definitions = "",
+        definitions = "
+            (declare-fun x () Int)
+            (declare-fun y () Int)
+        ",
         "Simple working examples" {
-            "(anchor :step t1 :args ((x Int) (y Int)))
+            "(anchor :step t1 :args ((a Int)))
+            (step t1.t1 (cl (= x y)) :rule hole)
+            (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": true,
+
+            "(anchor :step t1 :args ((a Int) (:= (a Int) a)))
             (step t1.t1 (cl (= x y)) :rule hole)
             (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": true,
         }
         "Premise is of the wrong form" {
-            "(anchor :step t1 :args ((x Int) (y Int)))
+            "(anchor :step t1 :args ((a Int)))
             (step t1.t1 (cl (< (+ x y) 0)) :rule hole)
             (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
         }
         "Premise doesn't justify inner terms' equality" {
-            "(anchor :step t1 :args ((x Int) (y Int)))
+            "(anchor :step t1 :args ((a Int)))
             (step t1.t1 (cl (= x y)) :rule hole)
             (step t1 (cl (= (let ((a 0)) a) (let ((a 0)) 0))) :rule bind_let)": false,
 
-            "(anchor :step t1 :args ((x Int) (y Int)))
+            "(anchor :step t1 :args ((a Int)))
             (step t1.t1 (cl (= x y)) :rule hole)
             (step t1 (cl (= (let ((a 0)) y) (let ((a 0)) x))) :rule bind_let)": false,
         }
         "Bindings can't be renamed" {
-            "(anchor :step t1 :args ((x Int) (y Int)))
+            "(anchor :step t1 :args ((a Int) (b Int)))
             (step t1.t1 (cl (= x y)) :rule hole)
             (step t1 (cl (= (let ((a 0)) x) (let ((b 0)) y))) :rule bind_let)": false,
         }
         "Polyequality in variable values" {
             "(step t1 (cl (= (= 0 1) (= 1 0))) :rule hole)
-            (anchor :step t2 :args ((x Int) (y Int)))
+            (anchor :step t2 :args ((a Bool)))
             (step t2.t1 (cl (= x y)) :rule hole)
             (step t2 (cl (= (let ((a (= 0 1))) x) (let ((a (= 1 0))) y)))
                 :rule bind_let :premises (t1))": true,
+        }
+        "Bindings must be fixed in the anchor" {
+            "(anchor :step t1)
+            (step t1.t1 (cl (= x y)) :rule hole)
+            (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
+
+            "(anchor :step t1 :args ((:= (x Int) x)))
+            (step t1.t1 (cl (= y y)) :rule hole)
+            (step t1 (cl (= (let ((x 0)) y) (let ((x 0)) y))) :rule bind_let)": false,
+        }
+        "Anchor can't fix or assign other variables" {
+            "(anchor :step t1 :args ((a Int) (x Int)))
+            (step t1.t1 (cl (= x y)) :rule hole)
+            (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
+
+            "(anchor :step t1 :args ((a Int) (:= (x Int) y)))
+            (step t1.t1 (cl (= x y)) :rule hole)
+            (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
+
+            "(anchor :step t1 :args ((a Int) (:= (a Int) 0)))
+            (step t1.t1 (cl (= x y)) :rule hole)
+            (step t1 (cl (= (let ((a 0)) x) (let ((a 0)) y))) :rule bind_let)": false,
         }
     }
 }

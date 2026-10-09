@@ -136,6 +136,28 @@ fn bind() {
             (step t1.t1 (cl (= p q)) :rule hole)
             (step t1 (cl (= (forall ((x Real)) p) (forall ((w Real)) q))) :rule bind)": false,
         }
+        "Context may fix left-hand bindings, and assign a binding to itself" {
+            "(anchor :step t1 :args ((x Real) (y Real) (z Real) (:= (x Real) y) (:= (z Real) z)))
+            (step t1.t1 (cl (= p q)) :rule hole)
+            (step t1 (cl (= (forall ((x Real) (z Real)) p) (forall ((y Real) (z Real)) q)))
+                :rule bind)": true,
+        }
+        "Context must map each binding to the corresponding one" {
+            "(anchor :step t1 :args ((x Real) (:= (x Real) 0.0)))
+            (step t1.t1 (cl (= p q)) :rule hole)
+            (step t1 (cl (= (forall ((x Real)) p) (forall ((x Real)) q))) :rule bind)": false,
+
+            // Assignments are composed in order, so this maps both `x1` and `x2` to `x2`
+            "(anchor :step t1 :args ((x2 Real) (x1 Real) (:= (x1 Real) x2) (:= (x2 Real) x1)))
+            (step t1.t1 (cl (= (= x1 x2) (= x2 x2))) :rule hole)
+            (step t1 (cl (= (forall ((x1 Real) (x2 Real)) (= x1 x2))
+                (forall ((x2 Real) (x1 Real)) (= x2 x2)))) :rule bind)": false,
+        }
+        "Right-hand bindings must be fixed" {
+            "(anchor :step t1 :args ((:= (y Real) y)))
+            (step t1.t1 (cl (= p q)) :rule hole)
+            (step t1 (cl (= (forall ((y Real)) p) (forall ((y Real)) q))) :rule bind)": false,
+        }
     }
 }
 
