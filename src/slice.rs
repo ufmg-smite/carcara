@@ -404,7 +404,7 @@ mod tests {
         (anchor :step t5)
         (step t5.t1 (cl c) :rule hole)
         (step t5.t2 (cl (not c)) :rule hole)
-        (step t5 (cl c) :rule hole :premises (t5.t1))
+        (step t5 (cl c) :rule hole :premises (t4))
         (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
         (anchor :step t7)
         (assume t7.a0 b)
@@ -445,10 +445,10 @@ mod tests {
         ),
         // from t5.t2, testing previous bug where premises of subproof-ending step lead to a panic
         (
-            "(anchor :step t5)
-            (step t5.t1 (cl c) :rule hole :args (\"trust\"))
+            "(step t4 (cl a (or b b)) :rule hole :args (\"trust\"))
+            (anchor :step t5)
             (step t5.t2 (cl (not c)) :rule hole)
-            (step t5 (cl c) :rule hole :premises (t5.t1))
+            (step t5 (cl c) :rule hole :premises (t4))
             (step slice_end (cl) :rule hole :premises (t5) :args (\"trust\"))",
             ("t5.t2", 2),
         ),
@@ -460,9 +460,8 @@ mod tests {
             (step t3 (cl (not (not a)) (or b b)) :rule hole :args (\"trust\"))
             (step t4 (cl a (or b b)) :rule hole :premises (t3))
             (anchor :step t5)
-            (step t5.t1 (cl c) :rule hole :args (\"trust\"))
             (step t5.t2 (cl (not c)) :rule hole :args (\"trust\"))
-            (step t5 (cl c) :rule hole :premises (t5.t1))
+            (step t5 (cl c) :rule hole :premises (t4))
             (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
             (step slice_end (cl) :rule hole :premises (t6) :args (\"trust\"))",
             ("t6", 1),
@@ -477,9 +476,8 @@ mod tests {
             (step t3 (cl (not (not a)) (or b b)) :rule subproof :discharge (t3.a0))
             (step t4 (cl a (or b b)) :rule hole :premises (t3))
             (anchor :step t5)
-            (step t5.t1 (cl c) :rule hole)
             (step t5.t2 (cl (not c)) :rule hole)
-            (step t5 (cl c) :rule hole :premises (t5.t1))
+            (step t5 (cl c) :rule hole :premises (t4))
             (step t6 (cl) :rule hole :premises (t4 t5 a0 t2))
             (step slice_end (cl) :rule hole :premises (t6) :args (\"trust\"))",
             ("t6", 2),
