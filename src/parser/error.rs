@@ -105,6 +105,10 @@ pub enum ParserError {
     #[error("step id '{0}' is not defined")]
     UndefinedStepId(String),
 
+    /// The step that ends a subproof used a command inside that same subproof as a premise.
+    #[error("premise '{0}' is inside the subproof that this step ends")]
+    PremiseInsideClosedSubproof(String),
+
     /// The wrong number of arguments was given to a function, operator or sort.
     #[error("expected {0} arguments, got {1}")]
     WrongNumberOfArgs(Range, usize),

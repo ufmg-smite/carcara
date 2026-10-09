@@ -684,7 +684,7 @@ fn test_premises_in_subproofs() {
         (anchor :step t3)
         (step t3.t1 (cl) :rule rule-name :premises (h1 h2))
         (step t3.t2 (cl) :rule rule-name :premises (t3.t1 h1 h2))
-        (step t3 (cl) :rule rule-name :premises (h1 t3.t1 h2 t3.t2))
+        (step t3 (cl) :rule rule-name :premises (h2 h1))
     ";
     let proof = parse_proof(&mut p, input);
     assert_eq!(proof.commands.len(), 3);
@@ -721,11 +721,33 @@ fn test_premises_in_subproofs() {
             id: "t3".into(),
             clause: Vec::new(),
             rule: "rule-name".into(),
-            premises: vec![(0, 0), (1, 0), (0, 1), (1, 1)],
+            premises: vec![(0, 1), (0, 0)],
             args: Vec::new(),
             discharge: Vec::new(),
         })
     );
+
+    // The step that ends a subproof can't use the commands inside that same subproof as premises
+    let bad_inputs = [
+        "(anchor :step t1)
+        (step t1.t1 (cl) :rule rule-name)
+        (step t1 (cl) :rule rule-name :premises (t1.t1))",
+        "(anchor :step t1)
+        (assume t1.h1 true)
+        (step t1.t1 (cl) :rule rule-name)
+        (step t1 (cl) :rule rule-name :premises (t1.h1))",
+        "(anchor :step t1)
+        (anchor :step t1.t1)
+        (step t1.t1.t1 (cl) :rule rule-name)
+        (step t1.t1 (cl) :rule rule-name)
+        (step t1 (cl) :rule rule-name :premises (t1.t1))",
+    ];
+    for input in bad_inputs {
+        assert!(matches!(
+            parse_proof_err(&mut p, input),
+            Error::Parser(ParserError::PremiseInsideClosedSubproof(_), _, _)
+        ));
+    }
 }
 
 #[test]

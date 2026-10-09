@@ -281,11 +281,11 @@ fn bind_let() {
             (step t1 (cl (= (let ((a 0)) x) (let ((b 0)) y))) :rule bind_let)": false,
         }
         "Polyequality in variable values" {
-            "(anchor :step t1 :args ((x Int) (y Int)))
-            (step t1.t1 (cl (= (= 0 1) (= 1 0))) :rule hole)
-            (step t1.t2 (cl (= x y)) :rule hole)
-            (step t1 (cl (= (let ((a (= 0 1))) x) (let ((a (= 1 0))) y)))
-                :rule bind_let :premises (t1.t1))": true,
+            "(step t1 (cl (= (= 0 1) (= 1 0))) :rule hole)
+            (anchor :step t2 :args ((x Int) (y Int)))
+            (step t2.t1 (cl (= x y)) :rule hole)
+            (step t2 (cl (= (let ((a (= 0 1))) x) (let ((a (= 1 0))) y)))
+                :rule bind_let :premises (t1))": true,
         }
     }
 }
