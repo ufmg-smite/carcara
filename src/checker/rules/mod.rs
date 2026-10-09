@@ -145,6 +145,14 @@ fn assert_is_bool_constant(got: &Rc<Term>, expected: bool) -> RuleResult {
     Ok(())
 }
 
+/// Returns `true` if the rule may be used in the last step of a subproof.
+pub fn is_subproof_closing_rule(rule_name: &str) -> bool {
+    matches!(
+        rule_name,
+        "subproof" | "bind" | "let" | "onepoint" | "sko_ex" | "sko_forall" | "bind_let" | "hole"
+    )
+}
+
 pub fn get_rule(rule_name: &str, elaborated: bool, prefer_rup: bool) -> Option<Rule> {
     Some(match rule_name {
         "true" => tautology::r#true,

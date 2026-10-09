@@ -17,7 +17,7 @@ use crate::{
 use carcara_macros::GenerateSetters;
 use error::{CheckerError, err};
 use indexmap::{IndexMap, IndexSet};
-use rules::{Premise, RuleArgs, RuleResult, get_rule};
+use rules::{Premise, RuleArgs, RuleResult, get_rule, is_subproof_closing_rule};
 use std::{
     collections::HashSet,
     path::Path,
@@ -341,6 +341,11 @@ impl<'c> Checker<'c> {
         }
         if !step.discharge.is_empty() && step.rule != "subproof" {
             return err!("only the `subproof` rule may discharge local assumptions");
+        }
+
+        // The previous command is only given when the step ends a subproof
+        if previous_command.is_some() && !is_subproof_closing_rule(&step.rule) {
+            return Err(CheckerError::CannotCloseSubproof);
         }
 
         // Collect premises and discharge
