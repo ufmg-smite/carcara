@@ -1,0 +1,6 @@
+(assume h1 (> a 0))
+(assume h2 (exists ((p Bool)) (not (> a 0))))
+(step t1 (cl (= (exists ((p Bool)) (not (> a 0))) (not (> a 0)))) :rule qnt_rm_unused)
+(step t2 (cl (not (exists ((p Bool)) (not (> a 0)))) (not (> a 0))) :rule equiv1 :premises (t1))
+(step t3 (cl (not (> a 0))) :rule resolution :premises (h2 t2))
+(step t4 (cl) :rule resolution :premises (h1 t3))

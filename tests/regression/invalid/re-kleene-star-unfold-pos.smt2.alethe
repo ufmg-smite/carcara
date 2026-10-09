@@ -1,0 +1,4 @@
+(define-fun K () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= t (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+(assume h1 (str.in_re t (re.* (str.to_re "a"))))
+(step t1 (cl (or (= t "") (str.in_re t (str.to_re "a")) (and (and (= t (str.++ "a" K "a")) (str.in_re K (re.++ (re.* (str.to_re "a")) (str.to_re "a"))) true) (not (= "a" "")) (not (= "a" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))
+(step t2 (cl) :rule hole :premises (t1))

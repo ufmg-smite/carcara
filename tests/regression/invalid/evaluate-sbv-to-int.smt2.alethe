@@ -1,0 +1,3 @@
+(assume h1 (not (= (sbv_to_int #b1111) 1)))
+(step t1 (cl (= (sbv_to_int #b1111) 1)) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

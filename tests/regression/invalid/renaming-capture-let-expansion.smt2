@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const y Int)
+(declare-const y_renamed Int)
+(assert (let ((x y)) (forall ((y Int)) (or (= y_renamed x) (< y y)))))
+(check-sat)

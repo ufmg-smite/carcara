@@ -1,0 +1,5 @@
+(set-logic QF_UFLIA)
+(declare-const a Int)
+(declare-const b Int)
+(assert (not (= a b a b)))
+(check-sat)

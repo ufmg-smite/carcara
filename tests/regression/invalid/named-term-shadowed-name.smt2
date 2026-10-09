@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const a Int)
+(assert (! (> a 0) :named p))
+(assert (exists ((p Bool)) (not p)))
+(check-sat)

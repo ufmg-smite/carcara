@@ -1,0 +1,3 @@
+(assume h1 (not (= (str.< "a" "b") false)))
+(step t1 (cl (= (str.< "a" "b") false)) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

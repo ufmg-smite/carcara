@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-datatype IntList ((nil) (cons (head Int) (tail IntList))))
+(declare-const l IntList)
+(assert (forall ((x Int)) (and (exists ((z Int)) (= z z)) (match l (((cons x r) (> x 0)) (_ true))))))
+(assert (not (and (exists ((z Int)) (= z z)) (match l (((cons x r) (> (- 1) 0)) (_ true))))))

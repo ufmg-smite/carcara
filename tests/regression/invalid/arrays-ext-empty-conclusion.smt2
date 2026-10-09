@@ -1,0 +1,5 @@
+(set-logic QF_AX)
+(declare-sort E 0)
+(declare-fun A () (Array Int E))
+(declare-fun B () (Array Int E))
+(assert (not (= A B)))

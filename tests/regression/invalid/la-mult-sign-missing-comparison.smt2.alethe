@@ -1,0 +1,3 @@
+(assume h1 (not (=> (> a 0.0) (> (* a b) 0.0))))
+(step t1 (cl (=> (> a 0.0) (> (* a b) 0.0))) :rule la_mult_sign)
+(step t2 (cl) :rule resolution :premises (h1 t1))

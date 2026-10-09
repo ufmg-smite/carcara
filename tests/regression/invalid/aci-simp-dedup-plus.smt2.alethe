@@ -1,0 +1,3 @@
+(assume h1 (not (= (+ i i) i)))
+(step t1 (cl (= (+ i i) i)) :rule aci_simp)
+(step t2 (cl) :rule resolution :premises (h1 t1))

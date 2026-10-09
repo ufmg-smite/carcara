@@ -1,0 +1,4 @@
+(assume h1 (and p q r))
+(assume h2 (not r))
+(step t1 (cl (not (and p q r)) r) :rule and_pos :args (99999999999999999999999))
+(step t2 (cl) :rule resolution :premises (t1 h1 h2))

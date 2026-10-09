@@ -1,0 +1,6 @@
+; carcara-option: rare-file rare-list-for-non-list-param.eo
+(assume h1 (not (= a b a b)))
+(step t1 (cl (= (= a b a b) true)) :rule rare_rewrite :args ("eq-refl" (rare-list a b)))
+(step t2 (cl (not (= (= a b a b) true)) (= a b a b) (not true)) :rule equiv_pos1)
+(step t3 (cl true) :rule true)
+(step t4 (cl) :rule resolution :premises (t1 t2 h1 t3))

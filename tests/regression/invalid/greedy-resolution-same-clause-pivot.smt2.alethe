@@ -1,0 +1,3 @@
+(step t1 (cl (not (= p p)) p (not p)) :rule equiv_pos1)
+(step t2 (cl (= p p)) :rule eq_reflexive)
+(step t3 (cl) :rule resolution :premises (t1 t2))

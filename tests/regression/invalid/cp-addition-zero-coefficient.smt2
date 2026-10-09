@@ -1,0 +1,8 @@
+(set-logic QF_LIA)
+(declare-fun x1 () Int)
+(declare-fun x2 () Int)
+(assert (>= (* 1 x1) 1))
+(assert (>= (* 1 x2) 0))
+(assert (= x1 1))
+(assert (= x2 0))
+(check-sat)

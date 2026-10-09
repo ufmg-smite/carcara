@@ -1,0 +1,6 @@
+(define-fun r () Int (choice ((z Int)) (and (>= (+ 5 0) z) (>= (+ z 5) 0) (>= (+ z 0) 5) (>= 2 (+ z 5 0)))))
+(step t1 (cl (and (>= (+ 5 0) r) (>= (+ r 5) 0) (>= (+ r 0) 5) (>= 2 (+ r 5 0)))) :rule pbblast_bvxor_ith_bit :args (5 0))
+(step t2 (cl (>= (+ r 0) 5)) :rule and :premises (t1) :args (2))
+(step t3 (cl (>= 2 (+ r 5 0))) :rule and :premises (t1) :args (3))
+(step t4 (cl (not (>= (+ r 0) 5)) (not (>= 2 (+ r 5 0)))) :rule la_generic :args (1 1))
+(step t5 (cl) :rule resolution :premises (t2 t3 t4))

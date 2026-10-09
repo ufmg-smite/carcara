@@ -1,0 +1,3 @@
+(assume h1 (not (= (str.substr "abcde" 1 (- 1)) "bcde")))
+(step t1 (cl (= (str.substr "abcde" 1 (- 1)) "bcde")) :rule evaluate)
+(step t2 (cl) :rule resolution :premises (h1 t1))

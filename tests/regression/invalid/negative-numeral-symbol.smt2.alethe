@@ -1,0 +1,3 @@
+(assume h1 (= -5 3))
+(step t1 (cl (not (= -5 3))) :rule la_generic :args (1))
+(step t2 (cl) :rule resolution :premises (h1 t1))

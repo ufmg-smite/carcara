@@ -1,0 +1,6 @@
+(assume a1 (not a))
+(assume a3 (or a b))
+(assume a4 (not b))
+(step t0 (cl a b) :rule or :premises (a3))
+(step t1 (cl b) :rule drup :premises (a1 t0) :args ((@d (cl)) (cl b)))
+(step t2 (cl) :rule resolution :premises (t1 a4))

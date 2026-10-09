@@ -1,0 +1,2 @@
+(assume h1 (not (= A B)))
+(step t2 (cl) :rule arrays_ext :premises (h1))

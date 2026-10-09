@@ -1,0 +1,5 @@
+(assume h1 (forall ((x Real)) (let ((q (>= x 0.0))) (or q (< x 0.0)))))
+(assume h2 (not (let ((q (>= x 0.0))) (or q (< a 0.0)))))
+(step t1 (cl (or (not (forall ((x Real)) (let ((q (>= x 0.0))) (or q (< x 0.0))))) (let ((q (>= x 0.0))) (or q (< a 0.0))))) :rule forall_inst :args (a))
+(step t2 (cl (not (forall ((x Real)) (let ((q (>= x 0.0))) (or q (< x 0.0))))) (let ((q (>= x 0.0))) (or q (< a 0.0)))) :rule or :premises (t1))
+(step t3 (cl) :rule resolution :premises (t2 h1 h2))

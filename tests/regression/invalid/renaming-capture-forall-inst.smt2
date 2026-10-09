@@ -1,0 +1,7 @@
+(set-logic UFLIA)
+(declare-fun y () Int)
+(declare-fun y_renamed () Int)
+(declare-fun p (Int) Bool)
+(assert (forall ((x Int)) (forall ((y Int)) (or (not (= y y_renamed)) (p y_renamed)))))
+(assert (not (p 5)))
+(check-sat)

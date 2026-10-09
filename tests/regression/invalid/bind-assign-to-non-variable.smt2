@@ -1,0 +1,5 @@
+(set-logic UFLIA)
+(declare-fun p (Int) Bool)
+(assert (p 5))
+(assert (not (forall ((x Int)) (p x))))
+(check-sat)

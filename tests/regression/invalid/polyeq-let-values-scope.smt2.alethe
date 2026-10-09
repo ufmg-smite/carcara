@@ -1,0 +1,5 @@
+(assume a0 (let ((x 0) (y x)) (= y x)))
+(assume a1 (not (let ((z 0) (y z)) (= y z))))
+(step t1 (cl (= (let ((x 0) (y x)) (= y x)) (let ((z 0) (y z)) (= y z)))) :rule refl)
+(step t2 (cl (not (let ((x 0) (y x)) (= y x))) (let ((z 0) (y z)) (= y z))) :rule equiv1 :premises (t1))
+(step t3 (cl) :rule resolution :premises (t2 a0 a1))

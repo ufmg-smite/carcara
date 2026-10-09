@@ -1,0 +1,7 @@
+(assume h1 (= (str.++ y "y" "z") (str.++ u "xy" "z")))
+(assume h2 (not (= (str.len "z") 0)))
+(step t1 (cl (= "z" (str.++ (str.substr "z" 0 (- (str.len "z") (str.len (str.substr "xy" (- (str.len "xy") 1) 1)))) (str.substr "xy" (- (str.len "xy") 1) 1)))) :rule concat_cprop_suffix :premises (h1 h2))
+(step t2 (cl (= (= "z" (str.++ (str.substr "z" 0 (- (str.len "z") (str.len (str.substr "xy" (- (str.len "xy") 1) 1)))) (str.substr "xy" (- (str.len "xy") 1) 1))) false)) :rule evaluate)
+(step t3 (cl (not (= (= "z" (str.++ (str.substr "z" 0 (- (str.len "z") (str.len (str.substr "xy" (- (str.len "xy") 1) 1)))) (str.substr "xy" (- (str.len "xy") 1) 1))) false)) (not (= "z" (str.++ (str.substr "z" 0 (- (str.len "z") (str.len (str.substr "xy" (- (str.len "xy") 1) 1)))) (str.substr "xy" (- (str.len "xy") 1) 1)))) false) :rule equiv_pos2)
+(step t4 (cl (not false)) :rule false)
+(step t5 (cl) :rule resolution :premises (t1 t2 t3 t4))

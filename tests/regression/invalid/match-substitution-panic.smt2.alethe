@@ -1,0 +1,5 @@
+(assume h1 (forall ((x Int)) (match l (((cons x r) (> x 0)) (_ true)))))
+(assume h2 (not (match l (((cons x r) (> (- 1) 0)) (_ true)))))
+(step t1 (cl (or (not (forall ((x Int)) (match l (((cons x r) (> x 0)) (_ true))))) (match l (((cons x r) (> (- 1) 0)) (_ true))))) :rule forall_inst :args ((- 1)))
+(step t2 (cl (not (forall ((x Int)) (match l (((cons x r) (> x 0)) (_ true))))) (match l (((cons x r) (> (- 1) 0)) (_ true)))) :rule or :premises (t1))
+(step t3 (cl) :rule resolution :premises (t2 h1 h2))

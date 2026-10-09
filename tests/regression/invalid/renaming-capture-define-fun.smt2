@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-const y Int)
+(declare-const y_renamed Int)
+(define-fun g ((x Int)) Bool (forall ((y Int)) (or (= y_renamed x) (< y y))))
+(assert (g y))
+(check-sat)

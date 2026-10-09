@@ -1,0 +1,3 @@
+(assume h1 (not (= (bvult x2 y2) (>= (- (* 1 ((_ @int_of 0) y2)) (* 1 ((_ @int_of 0) x2))) 1))))
+(step t1 (cl (= (bvult x2 y2) (>= (- (* 1 ((_ @int_of 0) y2)) (* 1 ((_ @int_of 0) x2))) 1))) :rule pbblast_bvult)
+(step t2 (cl) :rule resolution :premises (h1 t1))
