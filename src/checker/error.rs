@@ -231,6 +231,10 @@ pub enum CheckerError {
     #[error("this rule can only be used in the last step of a subproof")]
     MustBeLastStepInSubproof,
 
+    /// A rule that can't close subproofs was used in the last step of a subproof.
+    #[error("this rule can't be used in the last step of a subproof")]
+    CannotCloseSubproof,
+
     /// A division or modulo operation was performed with a zero divisor.
     #[error("division or modulo by zero")]
     DivOrModByZero,

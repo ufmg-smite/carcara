@@ -14,6 +14,7 @@ pub fn subproof(
     RuleArgs {
         conclusion,
         pool,
+        context,
         previous_command,
         discharge,
         polyeq_time,
@@ -21,6 +22,13 @@ pub fn subproof(
     }: RuleArgs,
 ) -> RuleResult {
     let previous_command = previous_command.ok_or(CheckerError::MustBeLastStepInSubproof)?;
+
+    // This rule doesn't account for any variables or substitutions introduced by the anchor, so it
+    // can only close subproofs whose anchor has no arguments
+    rassert!(
+        context.last().unwrap().args.is_empty(),
+        "'subproof' rule can't close a subproof whose anchor has arguments"
+    );
 
     assert_clause_len(conclusion, discharge.len() + 1)?;
 
