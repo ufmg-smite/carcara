@@ -193,7 +193,7 @@ fn test_node() {
             (step t5.t2 (cl true) :rule blah :premises (t4))
             (step t5.t3 (cl true) :rule blah)
             (step t5.t4 (cl true) :rule blah)
-            (step t5 (cl true) :rule blah :premises (t5.t2) :discharge (t5.h1))
+            (step t5 (cl true) :rule blah :premises (t3) :discharge (t5.h1))
         (step t6 (cl) :rule blah :premises (t3 t5))
     ";
     let mut pool = Pool::new();

@@ -815,7 +815,8 @@ impl<'p, 's> Parser<'p, 's> {
                 }
                 Token::ReservedWord(Reserved::Step) => {
                     stack.last_mut().unwrap().2 = true;
-                    let step = self.parse_step_command()?;
+                    let end_step_id = stack.last().map(|(_, id, _)| id.as_str());
+                    let step = self.parse_step_command(end_step_id)?;
                     (step.id.clone(), ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
@@ -921,9 +922,11 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
-    /// already consumed.
-    fn parse_step_command(&mut self) -> CarcaraResult<ProofStep> {
+    /// already consumed. If the step is inside a subproof, `end_step_id` must be the id of the
+    /// step that ends that subproof.
+    fn parse_step_command(&mut self, end_step_id: Option<&str>) -> CarcaraResult<ProofStep> {
         let id = self.expect_symbol()?;
+        let is_end_step = end_step_id == Some(id.as_str());
         let clause = self.parse_clause()?;
         self.expect_token(Token::Keyword("rule".into()))?;
         let rule = match self.next_token()? {
@@ -937,7 +940,7 @@ impl<'p, 's> Parser<'p, 's> {
         let premises = if self.current_token == Token::Keyword("premises".into()) {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(Self::parse_step_premise, true)?
+            self.parse_sequence(|p| p.parse_step_premise(is_end_step), true)?
         } else {
             Vec::new()
         };
@@ -983,15 +986,22 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Parses a premise for a `step` command. This already converts it into the depth and command
-    /// index used to reference commands in the AST.
-    fn parse_step_premise(&mut self) -> CarcaraResult<(usize, usize)> {
+    /// index used to reference commands in the AST. `is_end_step` must be `true` if the step ends
+    /// a subproof.
+    fn parse_step_premise(&mut self, is_end_step: bool) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
         let id = HashCache::new(self.expect_symbol()?);
-        self.state
-            .step_ids
-            .get_with_depth(&id)
-            .map(|(d, &i)| (d, i))
-            .ok_or_else(|| self.err(ParserError::UndefinedStepId(id.unwrap()), position))
+        let Some((depth, &index)) = self.state.step_ids.get_with_depth(&id) else {
+            return Err(self.err(ParserError::UndefinedStepId(id.unwrap()), position));
+        };
+
+        // The step that ends a subproof is in the outer scope, so it can't use the commands inside
+        // the subproof as premises
+        if is_end_step && depth == self.state.step_ids.height() - 1 {
+            let error = ParserError::PremiseInsideClosedSubproof(id.unwrap());
+            return Err(self.err(error, position));
+        }
+        Ok((depth, index))
     }
 
     /// Parses an argument for the `:discharge` attribute.

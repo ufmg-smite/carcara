@@ -892,7 +892,7 @@ mod tests {
             (anchor :step t3 :args ((x Int) (:= (y Int) 5)))
             (assume t3.h1 (= x y))
             (step t3.t2 (cl (= x y)) :rule refl)
-            (step t3 (cl) :rule hole :premises (t3.t2) :discharge (t3.h1))
+            (step t3 (cl) :rule hole :premises (t1) :discharge (t3.h1))
             (step t4 (cl) :rule hole)
         ";
         let proof = parse_proof(&mut pool, input);
@@ -904,7 +904,7 @@ mod tests {
             (anchor :step t3 :args ((x Int) (:= (y Int) five)))\n\
             (assume t3.h1 (= x y))\n\
             (step t3.t2 (cl (= x y)) :rule refl)\n\
-            (step t3 (cl) :rule hole :premises (t3.t2) :discharge (t3.h1))\n\
+            (step t3 (cl) :rule hole :premises (t1) :discharge (t3.h1))\n\
             (step t4 (cl) :rule hole)\n\
         ";
         assert_eq!(
