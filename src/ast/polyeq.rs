@@ -184,30 +184,35 @@ impl Polyeq {
         a_inner: &Rc<Term>,
         b_inner: &Rc<Term>,
     ) -> bool {
-        if let Some(de_bruijn_map) = self.de_bruijn_map.as_mut() {
+        if self.de_bruijn_map.is_some() {
             if a_binds.len() != b_binds.len() {
                 return false;
             }
 
-            // First, we push new scopes into the De Bruijn map and the cache stack
+            // First, we check that the values (or sorts) in the binding lists are equivalent. These
+            // are in the outer scope, so we must compare them before any of the new variables are
+            // bound.
+            //
+            // Note that we only compare the values: (let ((p 0)) p) should be alpha-equivalent to
+            // (let ((q 0)) q), even if the variable names differ.
+            let values_eq = a_binds
+                .iter()
+                .zip(b_binds.iter())
+                .all(|(a_var, b_var)| self.eq(&a_var.1, &b_var.1));
+            if !values_eq {
+                return false;
+            }
+
+            // Then, we push new scopes into the De Bruijn map and the cache stack, and insert each
+            // variable in the binding lists
+            let de_bruijn_map = self.de_bruijn_map.as_mut().unwrap();
             de_bruijn_map.push();
+            for (a_var, b_var) in a_binds.iter().zip(b_binds.iter()) {
+                de_bruijn_map.insert(a_var.0.clone(), b_var.0.clone());
+            }
             self.cache.push_scope();
 
-            // Then, we check that the binding lists and the inner terms are equivalent
-            for (a_var, b_var) in a_binds.iter().zip(b_binds.iter()) {
-                if !self.eq(&a_var.1, &b_var.1) {
-                    // We must remember to pop the frames from the De Bruijn map and cache stack
-                    // here, so as not to leave them in a corrupted state
-                    self.de_bruijn_map.as_mut().unwrap().pop();
-                    self.cache.pop_scope();
-                    return false;
-                }
-                // We also insert each variable in the binding lists into the De Bruijn map
-                self.de_bruijn_map
-                    .as_mut()
-                    .unwrap()
-                    .insert(a_var.0.clone(), b_var.0.clone());
-            }
+            // After that, we check that the inner terms are equivalent
             let result = self.eq(a_inner, b_inner);
 
             // Finally, we pop the scopes we pushed
@@ -290,7 +295,12 @@ impl Polyeq {
                 return None;
             };
             let (term_op, args) = term.as_op()?;
-            if term_op == op { Some(args) } else { None }
+            // `(- a)` can't be flattened into `a`
+            if term_op == op && !(op == Operator::Sub && args.len() == 1) {
+                Some(args)
+            } else {
+                None
+            }
         }
 
         match (left.len(), right.len()) {
@@ -392,6 +402,7 @@ impl PolyeqComparable for Term {
                 if comp.is_mod_nary
                     && args.len() == 1
                     && op.nary_case() == Some(NaryCase::LeftAssoc)
+                    && *op != Operator::Sub // (- a) != a
                     // We have to check with `==` first because we are calling into `comp.eq` with
                     // `&Term`s directly (instead of `Rc<Term>`s), so the `==` check is skipped
                     && (args[0].as_ref() == other || comp.eq(args[0].as_ref(), other)) =>
@@ -419,7 +430,7 @@ impl PolyeqComparable for Term {
                 if let Term::Const(Constant::Integer(i2)) = args[0].as_ref() {
                     i1.clone().abs() == i2.clone()
                 } else if let Term::Const(Constant::Real(r2)) = args[0].as_ref() {
-                    i1.clone().abs() == r2.numer().clone()
+                    r2.is_integer() && i1.clone().abs() == r2.numer().clone()
                 } else {
                     false
                 }

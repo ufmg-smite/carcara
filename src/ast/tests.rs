@@ -1,4 +1,4 @@
-use super::{Polyeq, node::ProofNodeForest, pool::Pool};
+use super::{Polyeq, Term, node::ProofNodeForest, pool::Pool};
 use crate::parser::tests::parse_terms;
 use indexmap::IndexSet;
 
@@ -104,6 +104,8 @@ fn test_polyeq() {
                 "(let ((x 0)) (let ((y (+ x 2))) (let ((z (< x y))) (and z (= x y)))))",
                 "(let ((z 0)) (let ((x (+ z 2))) (let ((y (< z x))) (and y (= z x)))))",
             ),
+            // `let` values are in the outer scope
+            ("(let ((x 0) (y x)) (= y x))", "(let ((w 0) (v x)) (= v w))"),
         ],
         TestType::AlphaEquiv,
         true,
@@ -120,6 +122,8 @@ fn test_polyeq() {
                 "(forall ((x Int)) (= x y))",
                 "(forall ((x Int) (y Int)) (= x y))",
             ),
+            // `let` values are in the outer scope
+            ("(let ((x 0) (y x)) (= y x))", "(let ((y 0) (x y)) (= x y))"),
         ],
         TestType::AlphaEquiv,
         false,
@@ -143,9 +147,25 @@ fn test_polyeq() {
             ("(and (and (and p)))", "p"),
             ("(and p)", "(and (and (and p)))"),
             ("(and (and p q))", "(and p q)"),
+            // Unary minus inside a left-associative chain
+            ("(- (- (- x) y) y)", "(- (- x) y y)"),
+            ("(- (- x) y y)", "(- (- (- x) y) y)"),
         ],
         TestType::ModNary,
         true,
+    );
+    run_tests(
+        definitions,
+        &[
+            // Unary minus is not a singleton case
+            ("(- x)", "x"),
+            ("x", "(- x)"),
+            ("(- (- x))", "x"),
+            ("(- (- (- x) y) y)", "(- x y y)"),
+            ("(- x y y)", "(- (- (- x) y) y)"),
+        ],
+        TestType::ModNary,
+        false,
     );
 
     // Division literals
@@ -176,6 +196,17 @@ fn test_polyeq() {
         TestType::ModReordering,
         false,
     );
+
+    // Negative integer constants
+    let mut pool = Pool::new();
+    let minus_three = pool.add(Term::new_int(-3));
+    let [int, real, fraction] =
+        parse_terms(&mut pool, definitions, ["(- 3)", "(- 3.0)", "(- 1.5)"]);
+    let mut comp = Polyeq::new();
+    assert!(comp.eq(&minus_three, &int));
+    assert!(comp.eq(&minus_three, &real));
+    assert!(!comp.eq(&minus_three, &fraction));
+    assert!(!comp.eq(&fraction, &minus_three));
 }
 
 #[test]
