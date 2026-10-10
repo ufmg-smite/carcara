@@ -30,6 +30,11 @@ fn test_free_vars() {
             ("(forall ((a Int)) (forall ((b Int)) (= a b)))", &[]),
             ("(and (forall ((a Int)) (= a 0)) (= a 0))", &["a"]),
             ("(and (= a 0) (forall ((a Int)) (= a 0)))", &["a"]),
+            ("(let ((x a)) (= x b))", &["a", "b"]),
+            ("(let ((a a)) a)", &["a"]),
+            // `let` values are in the outer scope
+            ("(let ((a 0) (b a)) b)", &["a"]),
+            ("(let ((a b) (b 0)) a)", &["b"]),
         ],
     );
 }

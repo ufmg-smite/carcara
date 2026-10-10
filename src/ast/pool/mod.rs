@@ -566,11 +566,18 @@ impl Pool {
                 vars
             }
             Term::Let(bindings, inner) => {
+                // The order here is important. The free variables of a term `(let ((x y)) body)`
+                // are: free_vars(y) ∪ (free_vars(body) \ {x})
+                // We first compute `free_vars(body)`, then remove the bound variables, then add the
+                // free variables of the binding values
                 let mut vars = self.compute_free_vars(inner).clone();
                 for (var, value) in bindings {
                     let sort = self.sort(value);
                     let term = self.add((var.clone(), sort).into());
                     vars.swap_remove(&term);
+                }
+                for (_, value) in bindings {
+                    vars.extend(self.compute_free_vars(value).iter().cloned());
                 }
                 vars
             }
@@ -618,7 +625,14 @@ impl Pool {
                 set.extend(self.choice_subterms(inner).iter().cloned());
                 set
             }
-            Term::Binder(_, _, inner) | Term::Let(_, inner) => self.choice_subterms(inner).clone(),
+            Term::Binder(_, _, inner) => self.choice_subterms(inner).clone(),
+            Term::Let(bindings, inner) => {
+                let mut set = self.choice_subterms(inner).clone();
+                for (_, value) in bindings {
+                    set.extend(self.choice_subterms(value).iter().cloned());
+                }
+                set
+            }
             Term::Match(term, cases) => {
                 let mut set = self.choice_subterms(term).clone();
                 for case in cases {
