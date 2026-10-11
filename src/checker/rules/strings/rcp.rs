@@ -41,12 +41,12 @@ pub fn re_empty_intersection(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResul
     let a1 = a1.as_automaton_err()?;
     let a2 = a2.as_automaton_err()?;
 
-    if !has_reachable_accepting_state(&a1) || !has_reachable_accepting_state(&a2) {
+    if !has_reachable_accepting_state(a1) || !has_reachable_accepting_state(a2) {
         return Ok(());
     }
 
-    let a1 = Automaton::determinize(&a1);
-    let a2 = Automaton::determinize(&a2);
+    let a1 = Automaton::determinize(a1);
+    let a2 = Automaton::determinize(a2);
     let intersection = operations::intersection(a1.clone(), a2.clone())?;
 
     if has_reachable_accepting_state(&intersection) {
@@ -74,7 +74,7 @@ pub fn re_intersection(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleR
         assert_eq(w, w_conc)?;
 
         let a = a.as_automaton_err()?;
-        if !has_reachable_accepting_state(&a) {
+        if !has_reachable_accepting_state(a) {
             has_empty_premise = true;
         }
 
@@ -84,13 +84,13 @@ pub fn re_intersection(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleR
     }
 
     if has_empty_premise {
-        if !has_reachable_accepting_state(&conc_automaton) {
+        if !has_reachable_accepting_state(conc_automaton) {
             return Ok(());
         } else {
             let expected = Automaton::empty_automaton();
             return Err(StringError::ExpectedEquivalentAutomata(
                 expected,
-                Automaton::determinize(&conc_automaton),
+                Automaton::determinize(conc_automaton),
             )
             .into());
         }
@@ -105,13 +105,13 @@ pub fn re_intersection(RuleArgs { premises, conclusion, .. }: RuleArgs) -> RuleR
         }
     }
 
-    let conc_is_empty = !has_reachable_accepting_state(&conc_automaton);
+    let conc_is_empty = !has_reachable_accepting_state(conc_automaton);
     let expected_is_empty = !has_reachable_accepting_state(&expected);
     if conc_is_empty && expected_is_empty {
         return Ok(());
     }
 
-    let conc_automaton = Automaton::determinize(&conc_automaton);
+    let conc_automaton = Automaton::determinize(conc_automaton);
     if !operations::is_equivalent(&expected, &conc_automaton) {
         return Err(StringError::ExpectedEquivalentAutomata(expected, conc_automaton).into());
     }
@@ -220,7 +220,7 @@ pub fn concat_aut_bwd_propagation(RuleArgs { premises, conclusion, .. }: RuleArg
             assert_eq(&ws[idx], w)?;
 
             let aut = aut.as_automaton_err()?;
-            if !is_subautomaton(&aut, &a) {
+            if !is_subautomaton(aut, a) {
                 return Err(StringError::ExpectedSubautomaton(aut.clone(), a.clone()).into());
             }
         }
