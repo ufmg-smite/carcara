@@ -2,13 +2,17 @@
 
 use super::{
     Parser,
-    error::{ParserError, SortError, assert_num_args, check_relation_sort, check_set_sort},
+    error::{
+        BV_WIDTH_RANGE, ParserError, SortError, assert_indexed_op_args_value, assert_num_args,
+        check_bv_width, check_relation_sort, check_set_sort,
+    },
 };
 use crate::{
     ast::{Constant, Operator, Rc, Sort, Term},
     automata::parser::parse_automaton,
     utils::Range,
 };
+use rug::Integer;
 
 /// The sorts a single operator argument is allowed to have.
 enum ArgSort {
@@ -254,9 +258,7 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         }
         Operator::BvBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Bool)))),
         Operator::BvPBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Int)))),
-        Operator::BvConst => OpCheck::Rule(Rule::arity(2, Each(Exact(Sort::Int)))),
-        // Note: not all-equal here -- different bitvector widths are allowed in `concat`
-        Operator::BvConcat => OpCheck::Rule(Rule::arity(2.., Each(AnyBitVec))),
+        Operator::BvConst | Operator::BvConcat => OpCheck::Custom,
         Operator::Cl => OpCheck::Rule(Rule::arity(.., Unconstrained)),
         Operator::Delete => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Bool)))),
         Operator::BvAdd | Operator::BvMul | Operator::BvAnd | Operator::BvOr | Operator::BvXor => {
@@ -386,6 +388,30 @@ fn custom_check(
             } else {
                 Err(ParserError::ExpectedAnAutomatonDeclaration(args[0].clone()))
             }
+        }
+        Operator::BvConst => {
+            Rule::arity(2, ArgsCheck::Each(ArgSort::Exact(Sort::Int))).check(parser, sorts)?;
+            // If the width is a constant, it must be valid
+            assert_indexed_op_args_value(&args[1..], BV_WIDTH_RANGE)?;
+            Ok(None)
+        }
+        Operator::BvConcat => {
+            // Note: not all-equal here -- different bitvector widths are allowed in `concat`
+            Rule::arity(2.., ArgsCheck::Each(ArgSort::AnyBitVec)).check(parser, sorts)?;
+
+            // If the widths of all arguments are statically known, the width of the result must be
+            // valid
+            let width: Option<Integer> = sorts
+                .iter()
+                .map(|s| match s.as_ref() {
+                    Sort::BitVec(w) => Some(Integer::from(*w)),
+                    _ => None,
+                })
+                .sum();
+            if let Some(width) = width {
+                check_bv_width(width)?;
+            }
+            Ok(None)
         }
         Operator::SetMember => {
             assert_num_args(sorts, 2)?;

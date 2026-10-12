@@ -10,7 +10,7 @@ use rug::Integer;
 
 fn bitvector_size(pool: &mut Pool, term: &Rc<Term>) -> usize {
     if let Sort::BitVec(size) = pool.sort(term).as_ref() {
-        *size
+        *size as usize
     } else {
         panic!("trying to get size of non-bitvector term: {}", term)
     }
@@ -133,7 +133,7 @@ pub fn value(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
         let true_term = pool.bool_true();
         let false_term = pool.bool_false();
         // the number of arguments of bbterm must be the same as the width of v
-        if size == res_args.len() {
+        if size as usize == res_args.len() {
             // the computed value from res_args must be the same as m
             let mut computed_value = Integer::new();
             for (i, arg) in res_args.iter().enumerate() {
@@ -564,7 +564,7 @@ fn bitblast_shift_op(pool: &mut Pool, op: Operator, x: &Rc<Term>, y: &Rc<Term>) 
     let size = bitvector_size(pool, x);
 
     // First, we will need to bitblast a term that corresponds to `(bvult y size)`
-    let size_term = pool.add(Term::new_bv(size, size));
+    let size_term = pool.add(Term::new_bv(size, size.try_into().unwrap()));
     let y_ult_size = bitblast_ult(pool, y, &size_term);
 
     let x = get_term_bits(x, pool);

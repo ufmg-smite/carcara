@@ -14,7 +14,7 @@ fn get_bit_width(x: &Rc<Term>, pool: &mut Pool) -> Result<usize, CheckerError> {
     let Sort::BitVec(n) = pool.sort(x).as_ref().clone() else {
         return err!("Was not able to get the bitvector sort");
     };
-    Ok(n)
+    Ok(n as usize)
 }
 
 /// Helper to check that a summation has one summand for each bit of a bitvector of the given
@@ -371,7 +371,7 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
         return err!("Expected bitvector constant");
     };
 
-    if pbs.len() != w {
+    if pbs.len() != w as usize {
         return err!("Expected {} @pbbterms, got {}", w, pbs.len());
     }
 

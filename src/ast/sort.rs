@@ -42,8 +42,8 @@ pub enum Sort {
 
     /// A `BitVec` sort with a constant width parameter.
     ///
-    /// The associated `usize` is the bitvector width of this sort.
-    BitVec(usize),
+    /// The associated `u32` is the bitvector width of this sort.
+    BitVec(u32),
 
     /// A `BitVec`, parameterized by width parameter that is not statically known.
     ///

@@ -260,7 +260,7 @@ fn bv_nil_if_empty(
 /// Recover the bit width of an n-ary bitvector operator from its pre-flatten arguments. A rare
 /// list argument is looked through to its first element, since after flattening the operator has
 /// no arguments left to take the width from.
-fn bv_operand_width(pool: &mut Pool, original_args: &[Rc<Term>]) -> Option<usize> {
+fn bv_operand_width(pool: &mut Pool, original_args: &[Rc<Term>]) -> Option<u32> {
     for arg in original_args {
         let probe = match arg.as_ref() {
             Term::Op(Operator::RareList, elems) => elems.first()?,
@@ -459,7 +459,7 @@ mod tests {
         pool.add(Term::Const(Constant::Integer(Integer::from(value))))
     }
 
-    fn bv(pool: &mut Pool, value: i32, width: usize) -> Rc<Term> {
+    fn bv(pool: &mut Pool, value: i32, width: u32) -> Rc<Term> {
         pool.add(Term::new_bv(value, width))
     }
 

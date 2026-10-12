@@ -871,6 +871,69 @@ fn test_indexed_operators() {
 }
 
 #[test]
+fn test_bv_widths() {
+    let mut p = Pool::new();
+
+    // Widths up to `u32::MAX` are accepted
+    let term = parse_term(&mut p, "((_ zero_extend 4294967293) #b11)");
+    assert_eq!(*p.sort(&term), Sort::BitVec(u32::MAX));
+
+    // Width arguments must be between 1 and `u32::MAX`
+    for input in [
+        "(_ bv0 4294967296)",
+        "(@bv 0 0)",
+        "(@bv 0 4294967296)",
+        "((_ int_to_bv 0) 5)",
+        "((_ int_to_bv (- 1)) 5)",
+        "((_ int_to_bv 4294967296) 5)",
+        "((as const (Array Int (_ BitVec 0))) #b0)",
+        "((as const (Array Int (_ BitVec 4294967296))) #b0)",
+    ] {
+        assert!(
+            matches!(
+                parse_term_err(input),
+                Error::Parser(ParserError::WrongValueOfArgs(_, _), _, _),
+            ),
+            "{input}"
+        );
+    }
+
+    // So must the width of the result of an operator
+    for input in [
+        "((_ zero_extend 4294967294) #b11)",
+        "((_ zero_extend 18446744073709551615) #b11)",
+        "((_ sign_extend 4294967294) #b11)",
+        "((_ repeat 0) #b11)",
+        "((_ repeat 2147483648) #b11)",
+        "(concat ((_ zero_extend 4294967293) #b11) #b1)",
+    ] {
+        assert!(
+            matches!(
+                parse_term_err(input),
+                Error::Parser(ParserError::InvalidBvWidth(_), _, _),
+            ),
+            "{input}"
+        );
+    }
+
+    // In `extract`, i >= j must hold even if the width of the argument is not statically known
+    let definitions = "(declare-const n Int) (declare-const x (_ BitVec n))";
+    let [term] = parse_terms(&mut p, definitions, ["((_ extract 1 0) x)"]);
+    assert_eq!(*p.sort(&term), Sort::BitVec(2));
+    let err = Parser::new(&mut p, TEST_CONFIG, definitions.into())
+        .and_then(|mut parser| {
+            parser.parse_problem()?;
+            parser.reset("((_ extract 0 1) x)".into())?;
+            parser.parse_term()
+        })
+        .expect_err("expected error");
+    assert!(matches!(
+        err,
+        Error::Parser(ParserError::InvalidBvWidth(_), _, _)
+    ));
+}
+
+#[test]
 fn test_qualified_operators() {
     let mut p = Pool::new();
     let cases = [("((as const (Array Int Real)) 0.0)", {

@@ -37,7 +37,7 @@ pub enum Token {
     Decimal(Rational),
 
     /// A bitvector literal, represented by its integer value and width.
-    Bitvector(Integer, usize),
+    Bitvector(Integer, u32),
 
     /// A string literal.
     String(String),
@@ -356,9 +356,17 @@ impl<'s> Lexer<'s> {
             return Err(self.err(ParserError::EmptyBitvector));
         }
 
-        let width = s.len() * bits_per_char;
-        let value = Integer::from_str_radix(&s, base).unwrap();
-        Ok(Token::Bitvector(value, width))
+        if let Some(width) = s
+            .len()
+            .checked_mul(bits_per_char)
+            .and_then(|w| w.try_into().ok())
+        {
+            let value = Integer::from_str_radix(&s, base).unwrap();
+            Ok(Token::Bitvector(value, width))
+        } else {
+            let width = Integer::from(s.len()) * bits_per_char;
+            Err(self.err(ParserError::InvalidBvWidth(width)))
+        }
     }
 
     /// Reads an integer or decimal numerical literal.

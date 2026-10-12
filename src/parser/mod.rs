@@ -19,7 +19,9 @@ use crate::{
     utils::{HashCache, HashMapStack},
 };
 use carcara_macros::GenerateSetters;
-use error::{assert_indexed_op_args_value, assert_num_args, check_set_sort};
+use error::{
+    BV_WIDTH_RANGE, assert_indexed_op_args_value, assert_num_args, check_bv_width, check_set_sort,
+};
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use rug::{Integer, Rational};
@@ -1486,16 +1488,10 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(ParserError::ExpectedIntegerConstant(arg.clone()));
                 }
                 assert_indexed_op_args_value(&op_args[..1], 0..)?;
-                assert_indexed_op_args_value(&op_args[1..], 1..)?;
+                assert_indexed_op_args_value(&op_args[1..], BV_WIDTH_RANGE)?;
                 let mut value = op_args[0].as_integer().unwrap();
-                let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
-
-                // We must reduce the value mod 2^w. Note that if the width doesn't fit in a
-                // `u32`, w is greater than 4 billion, which is more bits than can be stored in an
-                // `Integer`. So the value will already be smaller 2^w.
-                if let Ok(w) = u32::try_from(width) {
-                    value.keep_bits_mut(w);
-                }
+                let width = op_args[1].as_integer().unwrap().to_u32().unwrap();
+                value.keep_bits_mut(width);
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             ParamOperator::BvExtract => {
@@ -1523,10 +1519,15 @@ impl<'p, 's> Parser<'p, 's> {
 
                 // j >= 0 is ensured by the parser. We need to ensure that m > i && i >= j, if they
                 // are all statically known
-                if let (Some(i), Some(j), Sort::BitVec(m)) = (i, j, sorts[0].as_ref())
-                    && !(*m > i && i >= j)
-                {
-                    return Err(ParserError::InvalidExtractArgs(i, j, *m));
+                if let (Some(i), Some(j)) = (i, j) {
+                    if let Sort::BitVec(m) = sorts[0].as_ref()
+                        && !(*m as usize > i && i >= j)
+                    {
+                        return Err(ParserError::InvalidExtractArgs(i, j, *m as usize));
+                    }
+
+                    // Even if m is not statically known, the width of the result must be valid
+                    check_bv_width(Integer::from(i) - j + 1)?;
                 }
             }
             ParamOperator::IntToBv => {
@@ -1534,6 +1535,7 @@ impl<'p, 's> Parser<'p, 's> {
                 assert_num_args(&args, 1)?;
                 self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
                 self.check_sort_eq(&Sort::Int, &sorts[0])?;
+                assert_indexed_op_args_value(&op_args, BV_WIDTH_RANGE)?;
             }
             ParamOperator::BvBitOf
             | ParamOperator::BvIntOf
@@ -1549,6 +1551,18 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
                 }
                 assert_indexed_op_args_value(&op_args, 0..)?;
+
+                // If the operator changes the width, and the new width is statically known, it
+                // must be valid
+                if let (Sort::BitVec(w), Some(i)) = (sorts[0].as_ref(), op_args[0].as_integer()) {
+                    match op {
+                        ParamOperator::ZeroExtend | ParamOperator::SignExtend => {
+                            check_bv_width(i + w)?;
+                        }
+                        ParamOperator::Repeat => check_bv_width(i * w)?,
+                        _ => (),
+                    };
+                }
             }
             ParamOperator::RePower => {
                 assert_num_args(&op_args, 1)?;
@@ -1886,8 +1900,8 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
                 }
                 let sort = if let Some(width) = args[0].as_integer() {
-                    assert_indexed_op_args_value(&args, 0..)?;
-                    Sort::BitVec(width.to_usize().unwrap())
+                    assert_indexed_op_args_value(&args, BV_WIDTH_RANGE)?;
+                    Sort::BitVec(width.to_u32().unwrap())
                 } else {
                     // TODO: used to be an error. maybe still should be an error outside rare files
                     Sort::ParamBitVec

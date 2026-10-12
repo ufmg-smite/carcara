@@ -14,6 +14,10 @@ pub(crate) use storage::Storage;
 
 type RapidIndexMap<K, V> = IndexMap<K, V, rapidhash::fast::RandomState>;
 
+/// The parser rejects terms whose bitvector width is out of range, so computing the width of a
+/// term's sort should never overflow.
+const BV_WIDTH_OVERFLOW: &str = "bitvector width overflow";
+
 /// A set of terms, as returned by [`Pool::free_vars`] and [`Pool::choice_subterms`].
 pub type TermSet = IndexSet<Rc<Term>, rapidhash::fast::RandomState>;
 
@@ -257,11 +261,14 @@ impl Pool {
                     self.add_sort(Sort::ParamBitVec)
                 }
                 Operator::BvComp => self.add_sort(Sort::BitVec(1)),
-                Operator::BvBbTerm | Operator::BvPBbTerm => self.add_sort(Sort::BitVec(args.len())),
+                Operator::BvBbTerm | Operator::BvPBbTerm => {
+                    let width = u32::try_from(args.len()).expect(BV_WIDTH_OVERFLOW);
+                    self.add_sort(Sort::BitVec(width))
+                }
                 Operator::BvConst => {
                     let s = match &*args[1] {
                         Term::Const(Constant::Integer(bvsize)) => {
-                            Sort::BitVec(bvsize.to_usize().unwrap())
+                            Sort::BitVec(bvsize.to_u32().expect(BV_WIDTH_OVERFLOW))
                         }
                         _ => Sort::ParamBitVec,
                     };
@@ -271,7 +278,9 @@ impl Pool {
                     let s = args.iter().map(|a| self.compute_sort(a).clone()).fold(
                         Sort::BitVec(0),
                         |acc, sort| match (acc, sort.as_ref()) {
-                            (Sort::BitVec(a), Sort::BitVec(b)) => Sort::BitVec(a + b),
+                            (Sort::BitVec(a), Sort::BitVec(b)) => {
+                                Sort::BitVec(a.checked_add(*b).expect(BV_WIDTH_OVERFLOW))
+                            }
                             (Sort::BitVec(_) | Sort::ParamBitVec, Sort::ParamBitVec)
                             | (Sort::ParamBitVec, Sort::BitVec(_)) => Sort::ParamBitVec,
                             _ => unreachable!(),
@@ -490,14 +499,16 @@ impl Pool {
     ) -> Option<Rc<Sort>> {
         let res = match op {
             ParamOperator::BvExtract => {
-                let i = op_args[0].as_integer()?.to_usize().unwrap();
-                let j = op_args[1].as_integer()?.to_usize().unwrap();
-                Sort::BitVec(i - j + 1)
+                let width = op_args[0].as_integer()? - op_args[1].as_integer()? + 1u32;
+                Sort::BitVec(width.to_u32().expect(BV_WIDTH_OVERFLOW))
             }
             ParamOperator::ZeroExtend | ParamOperator::SignExtend => {
-                let extension_width = op_args[0].as_integer()?.to_usize().unwrap();
+                let extension_width = op_args[0].as_integer()?;
                 match self.compute_sort(&args[0]).as_ref() {
-                    Sort::BitVec(bv_width) => Sort::BitVec(extension_width + bv_width),
+                    Sort::BitVec(bv_width) => {
+                        let width = extension_width + bv_width;
+                        Sort::BitVec(width.to_u32().expect(BV_WIDTH_OVERFLOW))
+                    }
                     Sort::ParamBitVec => return None,
                     _ => unreachable!(),
                 }
@@ -509,7 +520,8 @@ impl Pool {
                 let repetitions = op_args[0].as_integer()?;
                 match self.compute_sort(&args[0]).as_ref() {
                     Sort::BitVec(bv_width) => {
-                        Sort::BitVec((repetitions * bv_width).to_usize().unwrap())
+                        let width = repetitions * bv_width;
+                        Sort::BitVec(width.to_u32().expect(BV_WIDTH_OVERFLOW))
                     }
                     Sort::ParamBitVec => return None,
                     _ => unreachable!(),
@@ -519,7 +531,7 @@ impl Pool {
                 "bv const should be handled by the parser and transformed into a constant"
             ),
             ParamOperator::IntToBv => {
-                let bvsize = op_args[0].as_integer()?.to_usize().unwrap();
+                let bvsize = op_args[0].as_integer()?.to_u32().expect(BV_WIDTH_OVERFLOW);
                 Sort::BitVec(bvsize)
             }
             ParamOperator::BvBitOf | ParamOperator::Tester => Sort::Bool,

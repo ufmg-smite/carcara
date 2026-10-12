@@ -6,7 +6,7 @@ use crate::{
     utils::Range,
 };
 use rug::Integer;
-use std::fmt;
+use std::{fmt, ops};
 use thiserror::Error;
 
 /// The error type for the parser.
@@ -123,6 +123,10 @@ pub enum ParserError {
     )]
     InvalidExtractArgs(usize, usize, usize),
 
+    /// The width of a bitvector sort is out of range.
+    #[error("bitvector width must be between 1 and {max}, got {0}", max = u32::MAX)]
+    InvalidBvWidth(Integer),
+
     /// A step id was used in more than one step.
     #[error("step id '{0}' was repeated")]
     RepeatedStepId(String),
@@ -222,6 +226,17 @@ where
         }
     }
     Ok(())
+}
+
+/// The range of valid bitvector widths.
+pub const BV_WIDTH_RANGE: ops::RangeInclusive<usize> = 1..=u32::MAX as usize;
+
+/// Makes sure `width` is within `BV_WIDTH_RANGE`.
+pub fn check_bv_width(width: Integer) -> Result<(), ParserError> {
+    match width.to_u32() {
+        Some(w) if w >= 1 => Ok(()),
+        _ => Err(ParserError::InvalidBvWidth(width)),
+    }
 }
 
 /// Makes sure `got` is a valid `Set` sort.

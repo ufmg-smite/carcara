@@ -87,7 +87,7 @@ pub enum Constant {
     /// A bitvector literal term.
     ///
     /// The associated values are the bitvector's value and width respectively.
-    BitVec(Integer, usize),
+    BitVec(Integer, u32),
 }
 
 /// A binder, either a quantifier (`forall` or `exists`), `choice`, or `lambda`.
@@ -1105,7 +1105,7 @@ impl Term {
     }
 
     /// Constructs a new bv term.
-    pub fn new_bv(value: impl Into<Integer>, width: usize) -> Self {
+    pub fn new_bv(value: impl Into<Integer>, width: u32) -> Self {
         Term::Const(Constant::BitVec(value.into(), width))
     }
 
@@ -1193,7 +1193,7 @@ impl Term {
 
     /// Tries to extract a `BitVec` from a term. Returns `Some` if the
     /// term is a bitvector constant.
-    pub fn as_bitvector(&self) -> Option<(Integer, usize)> {
+    pub fn as_bitvector(&self) -> Option<(Integer, u32)> {
         match self {
             Term::Const(Constant::BitVec(v, w)) => Some((v.clone(), *w)),
             _ => None,
@@ -1364,7 +1364,7 @@ impl Rc<Term> {
     }
 
     /// Similar to `Term::as_bitvector`, but returns a `CheckerError` on failure.
-    pub fn as_bitvector_err(&self) -> Result<(Integer, usize), CheckerError> {
+    pub fn as_bitvector_err(&self) -> Result<(Integer, u32), CheckerError> {
         self.as_bitvector()
             .ok_or_else(|| CheckerError::ExpectedBitvector(self.clone()))
     }

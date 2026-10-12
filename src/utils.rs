@@ -437,6 +437,12 @@ impl From<ops::RangeFrom<usize>> for Range {
     }
 }
 
+impl From<ops::RangeInclusive<usize>> for Range {
+    fn from(r: ops::RangeInclusive<usize>) -> Self {
+        Self(Some(*r.start()), Some(*r.end()))
+    }
+}
+
 impl From<ops::RangeFull> for Range {
     fn from(_: ops::RangeFull) -> Self {
         Self(None, None)
