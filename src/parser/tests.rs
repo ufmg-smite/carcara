@@ -897,6 +897,17 @@ fn test_symbol_shadowing() {
     let definitions = "(declare-const k Int) (define-fun k () Int 5)";
     let [k] = parse_terms(&mut p, definitions, ["k"]);
     assert_eq!(*k, Term::new_int(5));
+
+    // Symbols declared in the problem are not in scope in Rare rules
+    let input = Input {
+        problem: "(declare-const abs Int)".into(),
+        proof: "".into(),
+        rare_rules: Some(
+            "(declare-rare-rule abs-abs ((x Int)) :args (x) :conclusion (= (abs (abs x)) (abs x)))"
+                .into(),
+        ),
+    };
+    let _ = parse_with_pool(input, TEST_CONFIG, &mut p).unwrap();
 }
 
 #[test]

@@ -205,9 +205,10 @@ pub fn parse_with_pool<'s>(
     parser.reset(input.proof)?;
     let proof = parser.parse_proof()?;
     if let Some(rules) = input.rare_rules {
-        parser.reset(rules)?;
-        parser.config.allow_higher_order_indexed_ops = true;
-        let rules = parser.parse_rare()?;
+        // The rules are parsed with a new parser, so that the symbols declared or defined in the
+        // problem and proof are not in scope
+        let config = config.allow_higher_order_indexed_ops(true);
+        let rules = Parser::new(pool, config, rules)?.parse_rare()?;
         return Ok((problem, proof, rules));
     }
     Ok((problem, proof, RareStatements { rules: IndexMap::new() }))
