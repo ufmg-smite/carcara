@@ -1487,8 +1487,15 @@ impl<'p, 's> Parser<'p, 's> {
                 }
                 assert_indexed_op_args_value(&op_args[..1], 0..)?;
                 assert_indexed_op_args_value(&op_args[1..], 1..)?;
-                let value = op_args[0].as_integer().unwrap();
+                let mut value = op_args[0].as_integer().unwrap();
                 let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
+
+                // We must reduce the value mod 2^w. Note that if the width doesn't fit in a
+                // `u32`, w is greater than 4 billion, which is more bits than can be stored in an
+                // `Integer`. So the value will already be smaller 2^w.
+                if let Ok(w) = u32::try_from(width) {
+                    value.keep_bits_mut(w);
+                }
                 return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
             }
             ParamOperator::BvExtract => {

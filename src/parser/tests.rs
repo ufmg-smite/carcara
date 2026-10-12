@@ -130,6 +130,9 @@ fn test_constant_terms() {
     assert_eq!(Term::new_real((3, 2)), *parse_term(&mut p, "1.5"));
     assert_eq!(Term::new_string("foo"), *parse_term(&mut p, "\"foo\""));
     assert_eq!(Term::new_bv(0, 4), *parse_term(&mut p, "(_ bv0 4)"));
+    assert_eq!(Term::new_bv(255, 8), *parse_term(&mut p, "(_ bv255 8)"));
+    assert_eq!(Term::new_bv(0, 8), *parse_term(&mut p, "(_ bv256 8)"));
+    assert_eq!(Term::new_bv(44, 8), *parse_term(&mut p, "(_ bv300 8)"));
 }
 
 #[test]
