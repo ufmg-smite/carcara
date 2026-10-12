@@ -35,10 +35,12 @@ impl<'a> PolyeqElaborator<'a> {
     /// proves their equality.
     pub fn elaborate(&mut self, pool: &mut Pool, a: Rc<Term>, b: Rc<Term>) -> Rc<ProofNode> {
         let key = (a, b);
-        if let Some(p) = self.cache.get(&key) {
+
+        // We cannot safely reuse a derived equality if it's from an outer subproof, so we must use
+        // `get_top` here
+        if let Some(p) = self.cache.get_top(&key) {
             return p.clone();
         }
-        // We have to do this to avoid moving `a` and `b` when calling `self.cache.get`
         let (a, b) = key.clone();
         let result = self.elaborate_impl(pool, a, b);
         self.cache.insert(key, result.clone());
@@ -136,7 +138,7 @@ impl<'a> PolyeqElaborator<'a> {
                 };
 
                 self.open_subproof();
-                let previous = self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
+                let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone());
 
                 if let Some(c) = &mut self.context {
                     c.pop();
@@ -177,7 +179,7 @@ impl<'a> PolyeqElaborator<'a> {
                     .collect();
 
                 self.open_subproof();
-                let previous = self.create_bind_subproof(pool, (a_inner.clone(), b_inner.clone()));
+                let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone());
                 let last_step = StepNode {
                     id: String::new(), // this will be overwritten later
                     depth: self.depth(),
@@ -348,35 +350,6 @@ impl<'a> PolyeqElaborator<'a> {
             outbound_premises,
             extra_steps: Vec::new(),
         }))
-    }
-
-    /// Creates the subproof for a `bind` or `bind_let` step, used to derive the equality of
-    /// quantifier or `let` terms. This assumes the subproof has already been opened.
-    fn create_bind_subproof(
-        &mut self,
-        pool: &mut Pool,
-        inner_equality: (Rc<Term>, Rc<Term>),
-    ) -> Rc<ProofNode> {
-        let (a, b) = inner_equality;
-
-        let inner_eq = self.elaborate(pool, a.clone(), b.clone());
-
-        // The inner equality step may be skipped if it was already derived before. In this case,
-        // the end step must have something to implicitly reference, so we must add a step that
-        // copies that clause to inside the subproof. We do that with a dummy `reordering` step.
-        if inner_eq.as_step().is_some_and(|s| s.depth == self.depth()) {
-            inner_eq
-        } else {
-            let clause = vec![build_term!(pool, (= {a} {b}))];
-            Rc::new(ProofNode::Step(StepNode {
-                id: self.ids.next_id(),
-                depth: self.depth(),
-                clause,
-                rule: "reordering".to_owned(),
-                premises: vec![inner_eq],
-                ..Default::default()
-            }))
-        }
     }
 
     fn elaborate_assoc(
