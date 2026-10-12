@@ -101,6 +101,10 @@ pub enum ParserError {
     #[error("sort '{0}' is not defined")]
     UndefinedSort(String),
 
+    /// A user-declared sort is shadowing a built-in sort.
+    #[error("'{0}' is a built-in sort, and can't be user-declared")]
+    RedeclaredBuiltinSort(String),
+
     /// The parser encountered a step id that was not defined.
     #[error("step id '{0}' is not defined")]
     UndefinedStepId(String),

@@ -1,0 +1,7 @@
+(set-logic QF_LIA)
+(define-sort Bool () Int)
+(declare-fun a () Bool)
+(declare-fun b () Bool)
+(declare-fun c () Bool)
+(assert (distinct a b c))
+(check-sat)

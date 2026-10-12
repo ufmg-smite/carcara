@@ -13,7 +13,7 @@ impl<'p, 's> Parser<'p, 's> {
     ///
     /// Inserts the datatype as a sort definition in the parser state.
     pub(super) fn parse_declare_datatype(&mut self) -> CarcaraResult<()> {
-        let name = self.expect_symbol()?;
+        let name = self.expect_new_sort_name()?;
 
         // To allow for recursive datatypes, we rely on `parse_datatype_declaration` to declare the
         // datatype, after having parsed the sort parameters
@@ -34,7 +34,7 @@ impl<'p, 's> Parser<'p, 's> {
         let declarations = self.parse_sequence(
             |p| {
                 p.expect_token(Token::OpenParen)?;
-                let name = p.expect_symbol()?;
+                let name = p.expect_new_sort_name()?;
                 let arity_pos = p.current_position;
                 let arity = p.expect_numeral()?;
                 let arity = arity

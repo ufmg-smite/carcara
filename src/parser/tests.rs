@@ -911,6 +911,26 @@ fn test_symbol_shadowing() {
 }
 
 #[test]
+fn test_builtin_sort_names() {
+    let mut p = Pool::new();
+    for input in [
+        "(declare-sort Bool 0)",
+        "(declare-sort BitVec 0)",
+        "(define-sort Int () Bool)",
+        "(declare-datatype Real ((A) (B)))",
+        "(declare-datatypes ((String 0)) (((A) (B))))",
+    ] {
+        let err = Parser::new(&mut p, TEST_CONFIG, input.into())
+            .and_then(|mut parser| parser.parse_problem())
+            .expect_err("expected error");
+        assert!(matches!(
+            err,
+            Error::Parser(ParserError::RedeclaredBuiltinSort(_), _, _)
+        ));
+    }
+}
+
+#[test]
 fn test_bv_widths() {
     let mut p = Pool::new();
 
