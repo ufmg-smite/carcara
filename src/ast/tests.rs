@@ -129,6 +129,11 @@ fn test_polyeq() {
             ),
             // `let` values are in the outer scope
             ("(let ((x 0) (y x)) (= y x))", "(let ((y 0) (x y)) (= x y))"),
+            // Cache entries from an outer scope must not be reused
+            (
+                "(forall ((w Int)) (and (< x y) (forall ((x Int)) (forall ((y Int)) (< x y)))))",
+                "(forall ((w Int)) (and (< x y) (forall ((y Int)) (forall ((x Int)) (< x y)))))",
+            ),
         ],
         TestType::AlphaEquiv,
         false,

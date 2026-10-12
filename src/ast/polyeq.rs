@@ -94,12 +94,14 @@ pub struct Polyeq {
     // that they are equal, and add the entry `((< x y), (< x y))` to the cache. However, when we
     // are comparing the second argument of each term, `(< x y)` will again be `(< $0 $1)` in `a`,
     // but it will be `(< $1 $0)` in `b`. If we just rely on the cache, we will incorrectly
-    // determine that `a` and `b` are alpha-equivalent.  To account for that, we use a more
-    // complicated caching system, based on a `HashMapStack`. We push a new scope every time we
-    // enter a binder term, and pop it as we exit. This unfortunately means that equalities derived
-    // inside a binder term can't be reused outside of it, degrading performance. If we are not
-    // checking for alpha-equivalence, we never push an additional scope to this `HashMapStack`,
-    // meaning it functions as a simple hash map.
+    // determine that `a` and `b` are alpha-equivalent.
+    //
+    // To account for that, we use a more complicated caching system, based on a `HashMapStack`. We
+    // push a new scope every time we enter a binder term, and pop it as we exit. This unfortunately
+    // means that derived equalities can't be reused in a different context, degrading performance.
+    //
+    // If we are not checking for alpha-equivalence, we never push an additional scope to this
+    // `HashMapStack`, meaning it functions as a simple hash map.
     cache: HashMapStack<(Rc<Term>, Rc<Term>), ()>,
     is_mod_reordering: bool,
     de_bruijn_map: Option<DeBruijnMap>,
@@ -342,7 +344,7 @@ impl PolyeqComparable for Rc<Term> {
         }
 
         // We first check the cache to see if these terms were already determined to be equal
-        if comp.cache.get(&(a.clone(), b.clone())).is_some() {
+        if comp.cache.get_top(&(a.clone(), b.clone())).is_some() {
             return true;
         }
 
