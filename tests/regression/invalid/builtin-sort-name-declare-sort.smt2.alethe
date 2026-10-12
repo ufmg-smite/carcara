@@ -1,0 +1,5 @@
+(assume a0 (distinct a b c))
+(step t1 (cl (= (distinct a b c) false)) :rule distinct_elim)
+(step t2 (cl (not (= (distinct a b c) false)) (not (distinct a b c)) false) :rule equiv_pos2)
+(step t3 (cl (not false)) :rule false)
+(step t4 (cl) :rule resolution :premises (a0 t1 t2 t3))

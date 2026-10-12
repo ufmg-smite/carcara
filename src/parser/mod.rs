@@ -526,6 +526,22 @@ impl<'p, 's> Parser<'p, 's> {
         }
     }
 
+    /// Like [`Parser::expect_symbol`], but also enforces that the symbol is not a built-in sort
+    /// name.
+    fn expect_new_sort_name(&mut self) -> CarcaraResult<&'s str> {
+        #[rustfmt::skip] // So the list is not broken into many lines
+        let builtin_sorts = [
+            "->", "Bool", "Int", "Real", "String", "RegLan", "Type", "Array", "rare-list",
+            "RareList", "Set", "Tuple", "UnitTuple", "Relation", "BitVec",
+        ];
+        let pos = self.current_position;
+        let name = self.expect_symbol()?;
+        if builtin_sorts.contains(&name) {
+            return Err(self.err(ParserError::RedeclaredBuiltinSort(name.to_owned()), pos));
+        }
+        Ok(name)
+    }
+
     /// Consumes the current token if it is a numeral, and returns the inner `Integer`. Returns an
     /// error otherwise.
     fn expect_numeral(&mut self) -> CarcaraResult<Integer> {
@@ -1103,7 +1119,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
     /// assumes that the `(` and `declare-sort` tokens were already consumed.
     fn parse_declare_sort(&mut self) -> CarcaraResult<(&'s str, usize)> {
-        let name = self.expect_symbol()?;
+        let name = self.expect_new_sort_name()?;
         let arity_pos = self.current_position;
         let arity = self.expect_numeral()?;
         self.expect_token(Token::CloseParen)?;
@@ -1233,7 +1249,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// Parses a `define-sort` proof command. Returns the sort name and its definition. This method
     /// assumes that the `(` and `define-sort` tokens were already consumed.
     fn parse_define_sort(&mut self) -> CarcaraResult<(&'s str, SortDef)> {
-        let name = self.expect_symbol()?;
+        let name = self.expect_new_sort_name()?;
         self.expect_token(Token::OpenParen)?;
 
         // In order to correctly parse the sort definition, we push a new scope to the symbol table
