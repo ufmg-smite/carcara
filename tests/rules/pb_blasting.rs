@@ -1629,8 +1629,6 @@ fn pbblast_bvslt_4() {
         definitions = "
             (declare-const x4 (_ BitVec 4))
             (declare-const y4 (_ BitVec 4))
-            (declare-const x0 (_ BitVec 0))
-            (declare-const y0 (_ BitVec 0))
         ",
         // Using explicit multiplication everywhere.
         "bvslt on 4 bits with explicit multiplication" {
@@ -1771,14 +1769,6 @@ fn pbblast_bvslt_4() {
                                            (* 4 ((_ @int_of 2) x4))
                                            (* 8 ((_ @int_of 3) x4)))
                                     )
-                                ) 1))) :rule pbblast_bvslt)"#: false,
-        }
-
-        "Zero-width bitvectors" {
-            r#"(step t1 (cl (= (bvslt x0 y0)
-                            (>= (+
-                                    (- (* 1 ((_ @int_of 0) y0)) (* 1 ((_ @int_of 0) y0)))
-                                    (- (* 1 ((_ @int_of 0) x0)) (* 1 ((_ @int_of 0) x0)))
                                 ) 1))) :rule pbblast_bvslt)"#: false,
         }
     }

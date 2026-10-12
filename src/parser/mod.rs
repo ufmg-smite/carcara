@@ -19,7 +19,7 @@ use crate::{
     utils::{HashCache, HashMapStack},
 };
 use carcara_macros::GenerateSetters;
-use error::{assert_indexed_op_args_value, assert_num_args};
+use error::{BV_WIDTH_RANGE, assert_indexed_op_args_value, assert_num_args};
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
 use rug::Integer;
@@ -1776,8 +1776,8 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
                 }
                 let sort = if let Some(width) = args[0].as_integer() {
-                    assert_indexed_op_args_value(&args, 0..)?;
-                    Sort::BitVec(width.to_usize().unwrap())
+                    assert_indexed_op_args_value(&args, BV_WIDTH_RANGE)?;
+                    Sort::BitVec(width.to_u32().unwrap())
                 } else {
                     // TODO: used to be an error. maybe still should be an error outside rare files
                     Sort::ParamBitVec
