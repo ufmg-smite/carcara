@@ -122,6 +122,9 @@ fn parse_header(proof_path: &Path) -> Result<Header, String> {
     if header.pipeline.is_some() && header.command != Command::Elaborate {
         return Err("option 'pipeline' is only allowed with the 'elaborate' command".into());
     }
+    if header.rare_file.is_some() && header.command == Command::Elaborate {
+        return Err("option 'rare-file' is not supported with the 'elaborate' command".into());
+    }
     Ok(header)
 }
 
@@ -165,15 +168,20 @@ fn run_test(proof_path: &Path, header: &Header) -> CarcaraResult<Status> {
                 .clone()
                 .unwrap_or_else(|| vec![Polyeq, Hole, Local, Uncrowd, Reordering]);
             let config = elaborator::Config::new();
-            check_and_elaborate(
+            let (status, problem, proof, mut pool) = check_and_elaborate(
                 input,
                 header.parser_config,
                 checker_config,
                 config,
                 pipeline,
                 &mut (),
-            )
-            .map(|(status, ..)| status)
+            )?;
+
+            // The elaborated proof must also be valid
+            let rules = ast::rare_rules::Rules { rules: Default::default() };
+            checker::Checker::new(&mut pool, &rules, checker::Config::new())
+                .check(&problem, &proof)?;
+            Ok(status)
         }
     }
 }
