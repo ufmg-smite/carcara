@@ -100,7 +100,9 @@ pub struct Config {
     /// (RUP). Normally, we use a greedy algorithm first, and use RUP as a fallback.
     rup_resolution: bool,
 
-    /// A set of rule names that the checker will allow, considering them holes in the proof.
+    /// A set of rule names that the checker will allow without checking.
+    ///
+    /// Steps that use these rules do not make the proof holey.
     #[skip_setter]
     allowed_rules: HashSet<String>,
 
@@ -118,7 +120,9 @@ impl Config {
         Self::default()
     }
 
-    /// A set of rule names that the checker will allow, considering them holes in the proof.
+    /// A set of rule names that the checker will allow without checking.
+    ///
+    /// Steps that use these rules do not make the proof holey.
     pub fn allowed_rules(mut self, values: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.allowed_rules = values.into_iter().map(Into::into).collect();
         self
@@ -328,7 +332,6 @@ impl<'c> Checker<'c> {
         prelude: &ProblemPrelude,
     ) -> RuleResult {
         if self.config.allowed_rules.contains(&step.rule) {
-            self.is_holey = true;
             return Ok(());
         }
         if !step.discharge.is_empty() && step.rule != "subproof" {

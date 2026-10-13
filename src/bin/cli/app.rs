@@ -173,7 +173,9 @@ pub struct CheckingOptions {
     #[clap(short, long)]
     pub ignore_unknown_rules: bool,
 
-    /// A set of extra rules to be allowed by the checker, and considered as holes.
+    /// A set of extra rules to be allowed by the checker.
+    ///
+    /// Steps that use these rules will not make the proof holey.
     #[clap(long, num_args = 1..)]
     pub allowed_rules: Option<Vec<String>>,
 

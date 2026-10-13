@@ -25,12 +25,12 @@ for example:
 ```
 carcara check example.smt2.alethe --allowed-rules foo bar
 ```
-With this option, Carcara will ignore steps that use any of the given rules, and will consider them
-holes in the proof.
+With this option, Carcara will skip steps that use any of the given rules. These steps are not
+considered holes, so a proof that uses allowed rules may still be reported as `valid`.
 
 By default, Carcara returns a checking error when encountering a rule it does not recognize.
 If instead you want to ignore all such rules, you can use the `--ignore-unknown-rules`/`-i` flag.
-If a proof uses a rule that is allowed by either `--ignore-unknown-rules` or `--allowed-rules`, it
+Unlike `--allowed-rules`, if a proof uses a rule that is ignored by `--ignore-unknown-rules`, it
 will be reported as `holey`.
 
 ## The `lia_generic` rule
