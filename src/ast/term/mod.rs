@@ -439,12 +439,12 @@ impl Term {
     /// `Some` if the term is:
     ///
     /// - A real or integer constant
-    /// - An application of the `/` or `div` operators on two real or integer constants
+    /// - An application of the `/` operator on two real or integer constants
     /// - An application of the unary `-` operator on one of the two previous cases
     pub fn as_fraction(&self) -> Option<Rational> {
         fn as_unsigned_fraction(term: &Term) -> Option<Rational> {
             match term {
-                Term::Op(Operator::IntDiv | Operator::RealDiv, args) if args.len() == 2 => {
+                Term::Op(Operator::RealDiv, args) if args.len() == 2 => {
                     let denom = args[1].as_signed_number()?;
                     if denom.is_zero() {
                         return None;
