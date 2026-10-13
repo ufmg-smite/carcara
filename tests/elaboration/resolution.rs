@@ -82,5 +82,17 @@ fn edge_cases() {
             (step t3 (cl (not (not q))) :rule resolution :premises (t3.t1 t3.t2 t3.t3)
                 :args (q true (not (not (not (not q)))) true))",
         }
+        "Empty clause from a premise that is already the empty clause" {
+            "(assume h1 p)
+            (assume h2 (not p))
+            (step t1 (cl) :rule hole)
+            (step t2 (cl) :rule resolution :premises (t1 h1 h2))
+            (step t3 (cl q) :rule weakening :premises (t2))"
+            ->
+            "(assume h1 p)
+            (assume h2 (not p))
+            (step t1 (cl) :rule hole)
+            (step t3 (cl q) :rule weakening :premises (t1))",
+        }
     }
 }

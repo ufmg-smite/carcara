@@ -179,8 +179,8 @@ fn run_test(proof_path: &Path, header: &Header) -> CarcaraResult<Status> {
 
             // The elaborated proof must also be valid
             let rules = ast::rare_rules::Rules { rules: Default::default() };
-            checker::Checker::new(&mut pool, &rules, checker::Config::new())
-                .check(&problem, &proof)?;
+            let config = checker::Config::new().elaborated(true);
+            checker::Checker::new(&mut pool, &rules, config).check(&problem, &proof)?;
             Ok(status)
         }
     }

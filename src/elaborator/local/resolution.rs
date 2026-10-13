@@ -43,16 +43,13 @@ pub fn resolution(
     }
 
     // In some cases, due to a bug in veriT, a resolution step will conclude the empty clause, and
-    // will have multiple premises, of which one has an empty clause as its conclusion. The checker
-    // can already deal with this case safely, but not the elaborator, so if we detect it we skip
-    // elaborating this step. Either way, since this step has a premise which concludes the empty
-    // clause, it is not actually necessary, and will be pruned during post-processing.
-    if step.clause.is_empty() {
-        for p in &step.premises {
-            if p.clause().is_empty() {
-                return Ok(Rc::new(ProofNode::Step(step.clone())));
-            }
-        }
+    // will have multiple premises, of which one has an empty clause as its conclusion. Since that
+    // premise already concludes the empty clause, this step is not actually necessary, so we
+    // replace it with the premise
+    if step.clause.is_empty()
+        && let Some(p) = step.premises.iter().find(|p| p.clause().is_empty())
+    {
+        return Ok(p.clone());
     }
 
     let mut premises: Vec<_> = step.premises.iter().dedup().cloned().collect();
