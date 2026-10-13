@@ -641,7 +641,8 @@ impl<'p, 's> Parser<'p, 's> {
 
         while self.current_token != Token::Eof {
             self.expect_token(Token::OpenParen)?;
-            match self.next_token()?.0 {
+            let (token, pos) = self.next_token()?;
+            match token {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
                     self.declare_symbol(name, sort.clone());
@@ -737,6 +738,10 @@ impl<'p, 's> Parser<'p, 's> {
                     self.is_real_only_logic =
                         (logic.contains("LRA") || logic.contains("NRA") || logic.contains("RDL"))
                             && !logic.contains('I');
+                }
+                // Some commands cannot be safely ignored, so we reject them explicitly
+                Token::Symbol(s) if matches!(s, "push" | "pop" | "reset" | "reset-assertions") => {
+                    return Err(self.err(ParserError::UnsupportedCommand(s.to_owned()), pos));
                 }
                 _ => {
                     // If the command is not one of the commands we care about, we just ignore it.

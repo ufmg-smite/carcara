@@ -56,6 +56,10 @@ pub enum ParserError {
     #[error("expected non-empty sequence")]
     EmptySequence,
 
+    /// The problem contains an SMT-LIB command that is not supported by Carcara.
+    #[error("the '{0}' command is not supported")]
+    UnsupportedCommand(String),
+
     /// An error in sort checking.
     #[error("sort error: {0}")]
     SortError(#[from] SortError),
