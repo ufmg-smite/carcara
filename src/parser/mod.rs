@@ -21,7 +21,7 @@ use crate::{
 use carcara_macros::GenerateSetters;
 use error::{BV_WIDTH_RANGE, assert_indexed_op_args_value, assert_num_args};
 use indexmap::{IndexMap, IndexSet};
-use rapidhash::{HashMapExt, RapidHashMap};
+use rapidhash::{HashMapExt, RapidHashMap, RapidHashSet};
 use rug::Integer;
 use std::{io::Read, iter::Iterator, path::Path, str::FromStr};
 
@@ -240,7 +240,12 @@ struct ParserState<'s> {
     sort_declarations: RapidHashMap<&'s str, (usize, Option<Rc<Sort>>)>,
     datatype_declarations: HashMapStack<&'s str, usize>,
     sort_defs: RapidHashMap<&'s str, SortDef>,
+
+    /// A scoped map from command ids to their position. This only includes ids from open subproofs.
     step_ids: HashMapStack<HashCache<&'s str>, usize>,
+
+    /// A global set of all command ids, to make sure they are not repeated.
+    all_ids: RapidHashSet<&'s str>,
 
     /// Maps each datatype constructor `<cons>` to the sort of its legacy tester `is-<cons>`. Only
     /// populated if `allow_legacy_tester_syntax` is enabled.
@@ -853,17 +858,13 @@ impl<'p, 's> Parser<'p, 's> {
                     return Err(self.err(ParserError::UnexpectedToken(token.to_string()), position));
                 }
             };
-            let id = HashCache::new(id);
-            if self.state.step_ids.get(&id).is_some() {
-                return Err(self.err(
-                    ParserError::RepeatedStepId(id.unwrap().to_owned()),
-                    position,
-                ));
+            if self.state.all_ids.contains(id) {
+                return Err(self.err(ParserError::RepeatedStepId(id.to_owned()), position));
             }
 
             let (top_subproof, top_end_step, _) = stack.last_mut().unwrap();
             top_subproof.commands.push(command);
-            if top_end_step == id.as_ref() {
+            if *top_end_step == id {
                 // If this is the last step in a subproof, we need to pop all the subproof data off
                 // of the stacks and build the subproof command with it
                 self.state.symbol_table.pop_scope();
@@ -873,15 +874,13 @@ impl<'p, 's> Parser<'p, 's> {
                 // The subproof must contain at least two commands: the end step and the previous
                 // command it implicitly references
                 if subproof.commands.len() < 2 {
-                    return Err(
-                        self.err(ParserError::EmptySubproof(id.unwrap().to_owned()), position)
-                    );
+                    return Err(self.err(ParserError::EmptySubproof(id.to_owned()), position));
                 }
 
                 // We also need to make sure that the last command is in fact a `step`
                 if !subproof.commands.last().unwrap().is_step() {
                     return Err(self.err(
-                        ParserError::LastSubproofStepIsNotStep(id.unwrap().to_owned()),
+                        ParserError::LastSubproofStepIsNotStep(id.to_owned()),
                         position,
                     ));
                 }
@@ -890,7 +889,8 @@ impl<'p, 's> Parser<'p, 's> {
                 outer.commands.push(ProofCommand::Subproof(subproof));
             }
             let index = stack.last().unwrap().0.commands.len() - 1;
-            self.state.step_ids.insert(id, index);
+            self.state.all_ids.insert(id);
+            self.state.step_ids.insert(HashCache::new(id), index);
         }
 
         if has_extra_surrounding_parens {

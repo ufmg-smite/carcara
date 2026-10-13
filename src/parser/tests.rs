@@ -755,6 +755,46 @@ fn test_premises_in_subproofs() {
 }
 
 #[test]
+fn test_repeated_step_ids() {
+    let mut p = Pool::new();
+    let cases = [
+        // In the same scope
+        "(assume h1 true) (step h1 (cl) :rule hole)",
+        // An id from an enclosing subproof
+        "(assume h1 true)
+        (anchor :step t2)
+        (step h1 (cl) :rule hole)
+        (step t2 (cl) :rule hole)",
+        // An id from a sibling subproof, which is not visible anymore
+        "(anchor :step t1)
+        (step s (cl) :rule hole)
+        (step t1 (cl) :rule hole)
+        (anchor :step t2)
+        (step s (cl) :rule hole)
+        (step t2 (cl) :rule hole)",
+        "(anchor :step t1)
+        (assume a0 true)
+        (step t1.t1 (cl) :rule hole)
+        (step t1 (cl) :rule hole)
+        (anchor :step t2)
+        (assume a0 true)
+        (step t2.t1 (cl) :rule hole)
+        (step t2 (cl) :rule hole)",
+        // An id from a subproof that was already closed
+        "(anchor :step t1)
+        (step s (cl) :rule hole)
+        (step t1 (cl) :rule hole)
+        (step s (cl) :rule hole)",
+    ];
+    for input in cases {
+        assert!(matches!(
+            parse_proof_err(&mut p, input),
+            Error::Parser(ParserError::RepeatedStepId(_), _, _),
+        ));
+    }
+}
+
+#[test]
 fn test_assumes_after_steps_in_subproofs() {
     let mut p = Pool::new();
     let bad_input = "
