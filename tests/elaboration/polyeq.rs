@@ -50,14 +50,14 @@ fn assume() {
         "Assume is polyequal to a premise" {
             "(assume h1 (= q p))
             (step t2 (cl (not (= q p)) r) :rule hole)
-            (step t3 (cl r) :rule resolution :premises (h1 t2))"
+            (step t3 (cl r) :rule resolution :premises (h1 t2) :args ((= q p) true))"
             ->
             "(assume h1 (= p q))
             (step h1.t1 (cl (= (= p q) (= q p))) :rule eq_symmetric)
             (step h1.t2 (cl (not (= p q)) (= q p)) :rule equiv1 :premises (h1.t1))
             (step h1.t3 (cl (= q p)) :rule resolution :premises (h1 h1.t2) :args ((= p q) true))
             (step t2 (cl (not (= q p)) r) :rule hole)
-            (step t3 (cl r) :rule resolution :premises (h1.t3 t2))",
+            (step t3 (cl r) :rule resolution :premises (h1.t3 t2) :args ((= q p) true))",
         }
     }
 }

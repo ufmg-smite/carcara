@@ -31,19 +31,19 @@ fn cong() {
             (step t3 (cl (= (= a c) (= b d))) :rule cong :premises (t3.t1 t3.t2))",
         }
         "Congruence between identical terms" {
-            "(step t2 (cl (= a b)) :rule hole)
+            "(step t2 (cl (= a a)) :rule hole)
             (step t1 (cl (= (f a) (f a))) :rule cong :premises (t2))"
             ->
-            "(step t2 (cl (= a b)) :rule hole)
+            "(step t2 (cl (= a a)) :rule hole)
             (step t1 (cl (= (f a) (f a))) :rule refl)",
         }
         "Congruence between symmetric equalities" {
             "(step t2 (cl (= a b)) :rule hole)
-            (step t3 (cl (= c d)) :rule hole)
+            (step t3 (cl (= b a)) :rule hole)
             (step t1 (cl (= (= a b) (= b a))) :rule cong :premises (t2 t3))"
             ->
             "(step t2 (cl (= a b)) :rule hole)
-            (step t3 (cl (= c d)) :rule hole)
+            (step t3 (cl (= b a)) :rule hole)
             (step t1 (cl (= (= a b) (= b a))) :rule eq_symmetric)",
         }
         "Equality may be flipped" {
