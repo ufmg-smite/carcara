@@ -12,12 +12,10 @@ pub fn ite_intro(
     let (root_term, right_side) = match_term_err!((= t u) = &step.clause[0])?;
 
     if polyeq.eq(root_term, right_side) {
-        return Ok(
-            PolyeqElaborator::new(&mut ids, step.depth, false).elaborate(
-                pool,
-                root_term.clone(),
-                right_side.clone(),
-            ),
+        return PolyeqElaborator::new(&mut ids, step.depth, false).elaborate(
+            pool,
+            root_term.clone(),
+            right_side.clone(),
         );
     }
 
@@ -72,7 +70,7 @@ pub fn ite_intro(
         pool,
         fixed_right_side.clone(),
         right_side.clone(),
-    );
+    )?;
     let trans_step = add_trans_step(pool, [new_ite_intro_step, polyeq_step], step.id.clone());
     Ok(trans_step)
 }

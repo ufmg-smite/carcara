@@ -23,7 +23,7 @@ pub fn subproof(
         pool,
         previous.clone(),
         last_term.clone(),
-    );
+    )?;
     let equiv1_step = Rc::new(ProofNode::Step(StepNode {
         id: ids.next_id(),
         depth: step.depth,

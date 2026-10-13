@@ -185,7 +185,8 @@ impl<'e> Elaborator<'e> {
             ProofNode::Assume { id, depth, term }
                 if context.is_empty() && !self.problem.premises.contains(term) =>
             {
-                Ok(self.elaborate_assume(id, *depth, term))
+                self.elaborate_assume(id, *depth, term)
+                    .map_err(|e| e.at_assume(id))
             }
             ProofNode::Step(s) => {
                 if let Some(func) = get_elaboration_function(&s.rule) {
@@ -253,7 +254,12 @@ impl<'e> Elaborator<'e> {
         })
     }
 
-    fn elaborate_assume(&mut self, id: &str, depth: usize, term: &Rc<Term>) -> Rc<ProofNode> {
+    fn elaborate_assume(
+        &mut self,
+        id: &str,
+        depth: usize,
+        term: &Rc<Term>,
+    ) -> Result<Rc<ProofNode>, ElaborationError> {
         let mut found = None;
         for p in &self.problem.premises {
             if Polyeq::new()
@@ -278,7 +284,7 @@ impl<'e> Elaborator<'e> {
             self.pool,
             premise.clone(),
             term.clone(),
-        );
+        )?;
 
         let equiv1_step = Rc::new(ProofNode::Step(StepNode {
             id: ids.next_id(),
@@ -292,7 +298,7 @@ impl<'e> Elaborator<'e> {
             ..Default::default()
         }));
 
-        Rc::new(ProofNode::Step(StepNode {
+        Ok(Rc::new(ProofNode::Step(StepNode {
             id: ids.next_id(),
             depth,
             clause: vec![term.clone()],
@@ -300,7 +306,7 @@ impl<'e> Elaborator<'e> {
             premises: vec![new_assume, equiv1_step],
             args: vec![premise, self.pool.bool_true()],
             ..Default::default()
-        }))
+        })))
     }
 }
 

@@ -32,25 +32,39 @@ impl<'a> PolyeqElaborator<'a> {
     }
 
     /// Takes two terms that are equal modulo reordering of equalities, and returns a premise that
-    /// proves their equality.
-    pub fn elaborate(&mut self, pool: &mut Pool, a: Rc<Term>, b: Rc<Term>) -> Rc<ProofNode> {
+    /// proves their equality. Returns an error if their polyequality can't be elaborated.
+    pub fn elaborate(
+        &mut self,
+        pool: &mut Pool,
+        a: Rc<Term>,
+        b: Rc<Term>,
+    ) -> Result<Rc<ProofNode>, ElaborationError> {
         let key = (a, b);
 
         // We cannot safely reuse a derived equality if it's from an outer subproof, so we must use
         // `get_top` here
         if let Some(p) = self.cache.get_top(&key) {
-            return p.clone();
+            return Ok(p.clone());
         }
         let (a, b) = key.clone();
-        let result = self.elaborate_impl(pool, a, b);
+        let result = self.elaborate_impl(pool, a, b)?;
         self.cache.insert(key, result.clone());
-        result
+        Ok(result)
     }
 
-    fn elaborate_impl(&mut self, pool: &mut Pool, a: Rc<Term>, b: Rc<Term>) -> Rc<ProofNode> {
+    fn elaborate_impl(
+        &mut self,
+        pool: &mut Pool,
+        a: Rc<Term>,
+        b: Rc<Term>,
+    ) -> Result<Rc<ProofNode>, ElaborationError> {
+        let unsupported = |a: &Rc<Term>, b: &Rc<Term>| {
+            Err(ElaborationError::UnsupportedPolyeq(a.clone(), b.clone()))
+        };
+
         if self.directly_eq(pool, &a, &b) {
             let id = self.ids.next_id();
-            return add_refl_step(pool, a, b, id, self.depth());
+            return Ok(add_refl_step(pool, a, b, id, self.depth()));
         }
 
         if let Some((a_left, a_right)) = match_term!((= x y) = a)
@@ -65,22 +79,22 @@ impl<'a> PolyeqElaborator<'a> {
 
         match (a.as_ref(), b.as_ref()) {
             (Term::App(a_func, a_args), Term::App(b_func, b_args)) => {
-                assert_eq!(a_func, b_func);
-                assert_eq!(a_args.len(), b_args.len());
+                if a_func != b_func || a_args.len() != b_args.len() {
+                    return unsupported(&a, &b);
+                }
                 self.build_cong(pool, (&a, &b), (a_args, b_args))
             }
             (Term::Op(a_op, a_args), Term::Op(b_op, b_args)) => {
                 if a_op != b_op {
-                    todo!("elaborate chainable nary")
+                    // TODO: elaborate the expansion of chainable operators
+                    unsupported(&a, &b)
                 } else if a_args.len() != b_args.len() {
-                    let (nary, binary) = if a_args.len() == 2 {
-                        assert!(b_args.len() > 2);
-                        (b_args, &a)
-                    } else if b_args.len() == 2 {
-                        assert!(a_args.len() > 2);
-                        (a_args, &b)
-                    } else {
-                        panic!("invalid associative nary case")
+                    // We only support the case where one of the terms is the n-ary application,
+                    // and the other is its expansion into binary applications
+                    let (nary, binary) = match (a_args.len(), b_args.len()) {
+                        (2, n) if n > 2 => (b_args, &a),
+                        (n, 2) if n > 2 => (a_args, &b),
+                        _ => return unsupported(&a, &b),
                     };
                     self.elaborate_assoc(pool, *a_op, nary, binary)
                 } else {
@@ -91,11 +105,8 @@ impl<'a> PolyeqElaborator<'a> {
             // Since `choice` and `lambda` terms are not in the SMT-LIB standard, they cannot appear
             // in the premises of a proof, so we would never need to elaborate polyequalities that
             // use these terms.
-            (Term::Binder(b @ (Binder::Choice | Binder::Lambda), _, _), _)
-            | (_, Term::Binder(b @ (Binder::Choice | Binder::Lambda), _, _)) => {
-                log::error!("Trying to elaborate polyequality between `{b}` terms");
-                panic!()
-            }
+            (Term::Binder(Binder::Choice | Binder::Lambda, _, _), _)
+            | (_, Term::Binder(Binder::Choice | Binder::Lambda, _, _)) => unsupported(&a, &b),
             (Term::Binder(a_q, a_bindings, a_inner), Term::Binder(b_q, b_bindings, b_inner)) => {
                 assert_eq!(a_q, b_q);
 
@@ -138,7 +149,7 @@ impl<'a> PolyeqElaborator<'a> {
                 };
 
                 self.open_subproof();
-                let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone());
+                let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone())?;
 
                 if let Some(c) = &mut self.context {
                     c.pop();
@@ -151,7 +162,7 @@ impl<'a> PolyeqElaborator<'a> {
                     previous_step: Some(previous),
                     ..Default::default()
                 };
-                self.close_subproof(args, last_step, Vec::new())
+                Ok(self.close_subproof(args, last_step, Vec::new()))
             }
 
             (Term::Let(a_bindings, a_inner), Term::Let(b_bindings, b_inner)) => {
@@ -176,10 +187,10 @@ impl<'a> PolyeqElaborator<'a> {
                             Some(self.elaborate(pool, a.1.clone(), b.1.clone()))
                         }
                     })
-                    .collect();
+                    .collect::<Result<_, _>>()?;
 
                 self.open_subproof();
-                let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone());
+                let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone())?;
                 let last_step = StepNode {
                     id: String::new(), // this will be overwritten later
                     depth: self.depth(),
@@ -192,16 +203,16 @@ impl<'a> PolyeqElaborator<'a> {
                 };
                 // The premises to the `bind_let` step are outbound, so we need to pass them to
                 // `close_subproof`
-                self.close_subproof(args, last_step, premises)
+                Ok(self.close_subproof(args, last_step, premises))
             }
             // If one of the terms is a constant, but they are still polyequal, we can't break it up
             // into smaller parts, so we just use a direct refl step. This is hack to deal with the
             // case where one of the terms was passed as a GMP-style constant.
             _ if (a.is_const() || b.is_const()) && self.polyeq(pool, &a, &b) => {
                 let id = self.ids.next_id();
-                add_refl_step(pool, a, b, id, self.depth())
+                Ok(add_refl_step(pool, a, b, id, self.depth()))
             }
-            _ => panic!("terms not equal!"),
+            _ => unsupported(&a, &b),
         }
     }
 
@@ -231,7 +242,7 @@ impl<'a> PolyeqElaborator<'a> {
         pool: &mut Pool,
         (a, b): (&Rc<Term>, &Rc<Term>),
         (a_args, b_args): (&[Rc<Term>], &[Rc<Term>]),
-    ) -> Rc<ProofNode> {
+    ) -> Result<Rc<ProofNode>, ElaborationError> {
         let clause = vec![build_term!(pool, (= {a.clone()} {b.clone()}))];
         let premises = a_args
             .iter()
@@ -243,16 +254,16 @@ impl<'a> PolyeqElaborator<'a> {
                     Some(self.elaborate(pool, a.clone(), b.clone()))
                 }
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
-        Rc::new(ProofNode::Step(StepNode {
+        Ok(Rc::new(ProofNode::Step(StepNode {
             id: self.ids.next_id(),
             depth: self.depth(),
             clause,
             rule: "cong".to_owned(),
             premises,
             ..Default::default()
-        }))
+        })))
     }
 
     fn flip_equality(
@@ -260,7 +271,7 @@ impl<'a> PolyeqElaborator<'a> {
         pool: &mut Pool,
         (a, a_left, a_right): (Rc<Term>, Rc<Term>, Rc<Term>),
         (b, b_left, b_right): (Rc<Term>, Rc<Term>, Rc<Term>),
-    ) -> Rc<ProofNode> {
+    ) -> Result<Rc<ProofNode>, ElaborationError> {
         // Let's define:
         //     a := (= x y)
         //     b := (= y' x')
@@ -297,13 +308,13 @@ impl<'a> PolyeqElaborator<'a> {
 
         // Simpler case
         if a_left == b_right && a_right == b_left {
-            return Rc::new(ProofNode::Step(StepNode {
+            return Ok(Rc::new(ProofNode::Step(StepNode {
                 id: self.ids.next_id(),
                 depth: self.depth(),
                 clause: vec![build_term!(pool, (= {a} {b}))],
                 rule: "eq_symmetric".to_owned(),
                 ..Default::default()
-            }));
+            })));
         }
 
         // To create the `cong` step that derives `(= (= x y) (= x' y'))`, we use the `build_cong`
@@ -314,7 +325,7 @@ impl<'a> PolyeqElaborator<'a> {
             pool,
             (&a, &flipped_b),
             (&[a_left, a_right], &[b_right, b_left]),
-        );
+        )?;
 
         let equiv_step = Rc::new(ProofNode::Step(StepNode {
             id: self.ids.next_id(),
@@ -324,7 +335,11 @@ impl<'a> PolyeqElaborator<'a> {
             ..Default::default()
         }));
 
-        add_trans_step(pool, [cong_step, equiv_step], self.ids.next_id())
+        Ok(add_trans_step(
+            pool,
+            [cong_step, equiv_step],
+            self.ids.next_id(),
+        ))
     }
 
     fn open_subproof(&mut self) {
@@ -358,23 +373,26 @@ impl<'a> PolyeqElaborator<'a> {
         op: Operator,
         nary: &[Rc<Term>],
         binary: &Rc<Term>,
-    ) -> Rc<ProofNode> {
-        assert!(matches!(
+    ) -> Result<Rc<ProofNode>, ElaborationError> {
+        if !matches!(
             op.nary_case(),
             Some(NaryCase::RightAssoc | NaryCase::LeftAssoc)
-        ));
+        ) {
+            let nary = pool.add(Term::Op(op, nary.to_vec()));
+            return Err(ElaborationError::UnsupportedPolyeq(nary, binary.clone()));
+        }
         let mut premises = Vec::new();
-        let mut normalized_args = self.get_assoc_premises(pool, &mut premises, op, nary, binary);
+        let mut normalized_args = self.get_assoc_premises(pool, &mut premises, op, nary, binary)?;
 
         if premises.is_empty() {
             let nary = pool.add(Term::Op(op, nary.to_vec()));
-            return Rc::new(ProofNode::Step(StepNode {
+            return Ok(Rc::new(ProofNode::Step(StepNode {
                 id: self.ids.next_id(),
                 depth: self.depth(),
                 clause: vec![build_term!(pool, (= {nary} {binary.clone()}))],
                 rule: "nary_elim".to_owned(),
                 ..Default::default()
-            }));
+            })));
         }
 
         if op.nary_case() == Some(NaryCase::RightAssoc) {
@@ -399,7 +417,11 @@ impl<'a> PolyeqElaborator<'a> {
             ..Default::default()
         }));
 
-        add_trans_step(pool, [cong_step, nary_elim_step], self.ids.next_id())
+        Ok(add_trans_step(
+            pool,
+            [cong_step, nary_elim_step],
+            self.ids.next_id(),
+        ))
     }
 
     fn get_assoc_premises(
@@ -409,15 +431,18 @@ impl<'a> PolyeqElaborator<'a> {
         op: Operator,
         nary: &[Rc<Term>],
         binary: &Rc<Term>,
-    ) -> Vec<Rc<Term>> {
+    ) -> Result<Vec<Rc<Term>>, ElaborationError> {
         let is_right = op.nary_case() == Some(NaryCase::RightAssoc);
         let (nary_head, nary_tail) = match nary {
-            [] => panic!("invalid associative nary case"),
+            [] => {
+                let nary = pool.add(Term::Op(op, Vec::new()));
+                return Err(ElaborationError::UnsupportedPolyeq(nary, binary.clone()));
+            }
             [single] => {
                 if single != binary {
-                    premises.push(self.elaborate(pool, single.clone(), binary.clone()));
+                    premises.push(self.elaborate(pool, single.clone(), binary.clone())?);
                 }
-                return vec![binary.clone()];
+                return Ok(vec![binary.clone()]);
             }
             [first, rest @ ..] if is_right => (first, rest),
             [rest @ .., last] => (last, rest),
@@ -431,15 +456,18 @@ impl<'a> PolyeqElaborator<'a> {
                     (r, l)
                 }
             }
-            _ => panic!("invalid associative nary case"),
+            _ => {
+                let nary = pool.add(Term::Op(op, nary.to_vec()));
+                return Err(ElaborationError::UnsupportedPolyeq(nary, binary.clone()));
+            }
         };
 
         if nary_head != binary_head {
-            premises.push(self.elaborate(pool, nary_head.clone(), binary_head.clone()));
+            premises.push(self.elaborate(pool, nary_head.clone(), binary_head.clone())?);
         }
 
-        let mut args = self.get_assoc_premises(pool, premises, op, nary_tail, binary_tail);
+        let mut args = self.get_assoc_premises(pool, premises, op, nary_tail, binary_tail)?;
         args.push(binary_head.clone());
-        args
+        Ok(args)
     }
 }

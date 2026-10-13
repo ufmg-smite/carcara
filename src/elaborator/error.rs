@@ -1,5 +1,9 @@
 //! Errors produced while elaborating a proof.
-use crate::{CheckerError, resolution::ResolutionError};
+use crate::{
+    CheckerError,
+    ast::{Rc, Term},
+    resolution::ResolutionError,
+};
 use std::path::Path;
 use thiserror::Error;
 
@@ -54,6 +58,10 @@ pub enum ElaborationError {
     /// arguments.
     #[error("cannot uncrowd resolution without pivots being provided")]
     UncrowdMissingPivots,
+
+    /// A polyequality between two terms could not be elaborated.
+    #[error("cannot elaborate the polyequality between '{0}' and '{1}'")]
+    UnsupportedPolyeq(Rc<Term>, Rc<Term>),
 }
 
 impl ElaborationError {
@@ -64,6 +72,16 @@ impl ElaborationError {
             inner: self,
             rule: step.rule.as_str().into(),
             step: step.id.as_str().into(),
+        }
+    }
+
+    /// Converts the [`ElaborationError`] into an [`ElaborationErrorAtStep`] by locating it to an
+    /// `assume` command with the given id.
+    pub(super) fn at_assume(self, id: &str) -> ElaborationErrorAtStep {
+        ElaborationErrorAtStep {
+            inner: self,
+            rule: "assume".into(),
+            step: id.into(),
         }
     }
 }

@@ -18,7 +18,7 @@ fn elaborate_equality(
     r: &Rc<Term>,
     ids: &mut IdHelper,
     depth: usize,
-) -> Rc<ProofNode> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     let is_alpha_equivalence = !polyeq(l, r);
     PolyeqElaborator::new(ids, depth, is_alpha_equivalence).elaborate(pool, l.clone(), r.clone())
 }
@@ -80,22 +80,22 @@ pub fn refl(
     // cases
     if alpha_equiv(left, right) {
         // First, the case where no context application is needed, only polyequality reasoning
-        Ok(elaborate_equality(pool, left, right, &mut ids, depth))
+        elaborate_equality(pool, left, right, &mut ids, depth)
     } else if alpha_equiv(&new_left, right) {
         // Next, the one where we only need to apply the context on the left
         let left_refl = add_refl_step(pool, left.clone(), new_left.clone(), ids.next_id(), depth);
-        let polyeq = elaborate_equality(pool, &new_left, right, &mut ids, depth);
+        let polyeq = elaborate_equality(pool, &new_left, right, &mut ids, depth)?;
         Ok(add_trans_step(pool, [left_refl, polyeq], step.id.clone()))
     } else if alpha_equiv(left, &new_right) {
         // Next, when we need to apply the context on the right
-        let polyeq = elaborate_equality(pool, left, &new_right, &mut ids, depth);
+        let polyeq = elaborate_equality(pool, left, &new_right, &mut ids, depth)?;
         let right_refl = add_refl_step(pool, right.clone(), new_right, ids.next_id(), depth);
         let right_symm = add_symm_step(pool, &right_refl, ids.next_id());
         Ok(add_trans_step(pool, [polyeq, right_symm], step.id.clone()))
     } else if alpha_equiv(&new_left, &new_right) {
         // And finally, the case where we need to apply it to both sides
         let left_refl = add_refl_step(pool, left.clone(), new_left.clone(), ids.next_id(), depth);
-        let polyeq = elaborate_equality(pool, &new_left, &new_right, &mut ids, depth);
+        let polyeq = elaborate_equality(pool, &new_left, &new_right, &mut ids, depth)?;
         let right_refl = add_refl_step(pool, right.clone(), new_right, ids.next_id(), depth);
         let right_symm = add_symm_step(pool, &right_refl, ids.next_id());
         Ok(add_trans_step(

@@ -58,7 +58,7 @@ pub fn forall_inst(
             pool,
             p.clone(),
             p_prime.clone(),
-        )
+        )?
     };
 
     let or_term = build_term!(pool, (or (not {quantified.clone()}) {p.clone()}));

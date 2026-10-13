@@ -73,7 +73,8 @@ pub fn distinct_elim(
         rule: "distinct_elim".to_owned(),
         ..StepNode::default()
     }));
-    let bridge = PolyeqElaborator::new(&mut ids, step.depth, false).elaborate(pool, expected, got);
+    let bridge =
+        PolyeqElaborator::new(&mut ids, step.depth, false).elaborate(pool, expected, got)?;
     Ok(Rc::new(ProofNode::Step(StepNode {
         id: step.id.clone(),
         depth: step.depth,
@@ -104,7 +105,7 @@ pub fn bfun_elim(
         pool,
         expected.clone(),
         got.clone(),
-    );
+    )?;
     let equiv1_step = Rc::new(ProofNode::Step(StepNode {
         id: ids.next_id(),
         depth: step.depth,
