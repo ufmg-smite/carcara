@@ -111,6 +111,15 @@ fn cp_addition() {
                (assume c2 (>= (* 1 ~x1) 1))
                (step t1 (cl (>= 0 1)) :rule cp_addition :premises (c1 c2))"#: false,
         }
+        "Zero coefficient in the conclusion" {
+            r#"(assume c1 (>= (* 1 x1) 1))
+               (assume c2 (>= (* 1 x2) 0))
+               (step t1 (cl (>= (+ (* 1 x1) (* 1 x2) (* 0 x3)) 1)) :rule cp_addition :premises (c1 c2))"#: true,
+
+            r#"(assume c1 (>= (* 1 x1) 1))
+               (assume c2 (>= (* 1 x2) 0))
+               (step t1 (cl (>= (+ (* 0 x1) (* 1 x2)) 1)) :rule cp_addition :premises (c1 c2))"#: false,
+        }
     }
 }
 
@@ -228,6 +237,17 @@ fn cp_division() {
                (step t1 (cl (>= (* 4 x1) 1)) :rule cp_division :premises (c1) :args (3) )"#: true,
             r#"(assume c1 (>= (* 10 x1) 3))
                (step t1 (cl (>= (* 3 x1) 1)) :rule cp_division :premises (c1) :args (3) )"#: false,
+       }
+       "Ceiling of negative numbers" {
+            r#"(assume c1 (>= (* 4 x1) -4))
+               (step t1 (cl (>= (* 2 x1) -2)) :rule cp_division :premises (c1) :args (2) )"#: true,
+            r#"(assume c1 (>= (* 4 x1) -4))
+               (step t1 (cl (>= (* 2 x1) -1)) :rule cp_division :premises (c1) :args (2) )"#: false,
+
+            r#"(assume c1 (>= (* -4 x1) 0))
+               (step t1 (cl (>= (* -2 x1) 0)) :rule cp_division :premises (c1) :args (2) )"#: true,
+            r#"(assume c1 (>= (* -4 x1) 0))
+               (step t1 (cl (>= (* -1 x1) 0)) :rule cp_division :premises (c1) :args (2) )"#: false,
        }
        "Missing terms" {
             r#"(assume c1 (>= (+ (* 2 x1) (* 1 x2)) 2))
@@ -402,6 +422,16 @@ fn cp_normalize() {
             r#"(step t1 (cl (= (>= a b) (>= (+ a (- 1 b)) 1))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (>= a (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 2))) :rule cp_normalize)"#: true,
             r#"(step t1 (cl (= (>= (+ a 2) (+ b c)) (>= (+ a (- 1 b) (- 1 c)) 0))) :rule cp_normalize)"#: true,
+        }
+        "Doubly negated literal" {
+            r#"(step t1 (cl (= (>= (* 1 (- 1 a)) 1) (>= (* 1 (- 1 (- 1 a))) 1))) :rule cp_normalize)"#: false,
+        }
+        "Unary minus" {
+            r#"(step t1 (cl (= (>= (- a) 0) (>= (- 1 a) 1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= a (- 1)) (>= a -1))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (- (+ a b)) 0) (>= (+ (- 1 a) (- 1 b)) 2))) :rule cp_normalize)"#: true,
+            r#"(step t1 (cl (= (>= (* 1 a) (- 1)) (>= (* 1 a) 1))) :rule cp_normalize)"#: false,
+            r#"(step t1 (cl (= (>= (- a) 0) (>= (* 1 a) 0))) :rule cp_normalize)"#: false,
         }
         "Invalid relations" {
             r#"(step t1 (cl (= (and true true) (>= a 0))) :rule cp_normalize)"#: false,

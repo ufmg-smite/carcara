@@ -4,7 +4,7 @@ use super::{
 use crate::ast::{Constant, Operator, build_term, match_term, match_term_err};
 use crate::checker::Rc;
 use crate::checker::error::{CheckerError, EqualityError, err, rassert};
-use rug::Integer;
+use rug::{Integer, ops::DivRounding};
 use std::collections::HashMap;
 
 /// A pseudo-boolean literal: either a variable `x`, or its negation `(- 1 x)`.
@@ -203,23 +203,13 @@ pub fn cp_addition(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // Verify premise and conclusion share same keys
     assert_pbsum_same_keys(&pbsum_lr_reduced, &pbsum_c)?;
 
-    // Verify pseudo-boolean sums match
+    // Verify pseudo-boolean sums match. Literals missing from the premises have coefficient zero
     for (literal, coeff_c) in &pbsum_c {
-        if *coeff_c == 0 {
-            continue;
-        }
-        match pbsum_lr_reduced.get(literal) {
-            Some(coeff_lr_reduced) => {
-                rassert!(
-                    coeff_lr_reduced == coeff_c,
-                    CheckerError::ExpectedInteger(coeff_lr_reduced.clone(), conclusion.clone())
-                );
-            }
-            // ¬∃ x, (x ∈ C) ∧ ¬(x ∈ L) ∧ ¬(x ∈ R)
-            _ => {
-                return err!("Literal of the conclusion not present in either premises: {literal}");
-            }
-        }
+        let coeff_lr_reduced = pbsum_lr_reduced.get(literal).cloned().unwrap_or_default();
+        rassert!(
+            coeff_lr_reduced == *coeff_c,
+            CheckerError::ExpectedInteger(coeff_lr_reduced, conclusion.clone())
+        );
     }
 
     Ok(())
@@ -301,10 +291,11 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // Unwrap the conclusion inequality
     let (pbsum_c, constant_c) = unwrap_pseudoboolean_inequality(conclusion)?;
 
-    // Verify constants match ceil(c/d) == (c+d-1)/d
+    // Verify constants match ceil(c/d)
+    let expected = constant_p.div_ceil(&divisor);
     rassert!(
-        (constant_p.clone() + divisor.clone() - 1) / divisor.clone() == constant_c,
-        CheckerError::ExpectedInteger(constant_p / divisor.clone(), conclusion.clone())
+        expected == constant_c,
+        CheckerError::ExpectedInteger(expected, conclusion.clone())
     );
 
     // Verify premise and conclusion share same keys
@@ -313,7 +304,7 @@ pub fn cp_division(RuleArgs { premises, args, conclusion, .. }: RuleArgs) -> Rul
     // Verify pseudo-boolean sums match
     for (literal, coeff_p) in pbsum_p {
         if let Some(coeff_c) = pbsum_c.get(&literal) {
-            let expected: Integer = (coeff_p + &divisor - 1) / &divisor;
+            let expected = coeff_p.div_ceil(&divisor);
             rassert!(
                 &expected == coeff_c,
                 CheckerError::ExpectedInteger(expected.clone(), conclusion.clone())
@@ -474,6 +465,11 @@ impl PartialEq for CoeffTimesVar<'_> {
             return self.negated == other.negated;
         }
 
+        // Different vars can only be equal if exactly one of them is negated
+        if self.negated == other.negated {
+            return false;
+        }
+
         // Different vars can only be equal if the `!negated` var
         // has shape `(- 1 l)`  and the negated has shape `l`
 
@@ -572,6 +568,11 @@ fn flatten_addition_tree(
 ) -> Result<(Vec<CoeffTimesVar<'_>>, Integer), CheckerError> {
     match term.as_ref() {
         Term::Op(Operator::Add, args) => accumulate_sum(args),
+        Term::Op(Operator::Sub, args) if args.len() == 1 => {
+            let (mut va, ca) = flatten_addition_tree(&args[0])?;
+            negate_sum(&mut va);
+            Ok((va, -ca))
+        }
         Term::Op(Operator::Sub, args) => {
             let (mut va, ca) = flatten_addition_tree(&args[0])?;
             let (mut vb, cb) = accumulate_sum(&args[1..])?;
