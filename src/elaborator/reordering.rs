@@ -1,7 +1,11 @@
 use rapidhash::{HashSetExt, RapidHashSet};
 
 use super::*;
-use crate::{checker::error::CheckerError, resolution::ResolutionError};
+use crate::{
+    checker::error::CheckerError,
+    resolution::ResolutionError,
+    utils::{MultiSet, MultiSetDifference},
+};
 
 pub fn remove_reorderings(
     proof: ProofNodeForest,
@@ -78,7 +82,21 @@ fn recompute_resolution(step: &StepNode) -> Result<Vec<Rc<Term>>, ElaborationErr
             (pivot, polarity)
         })
         .collect();
-    Ok(apply_naive_resolution(&premise_clauses, &pivots)?)
+    let result = apply_naive_resolution(&premise_clauses, &pivots)?;
+
+    // If the step relies on implicit contraction, the naive result will have more terms than the
+    // original conclusion. Since `resolution` doesn't care about the order of the terms in the
+    // conclusion, we can just keep the original conclusion in that case. This ensures that the
+    // recomputed conclusion is always a permutation of the original one.
+    //
+    // This is only relevant if the uncrowding pass was not applied before this one, which is not
+    // the case for the default elaboration pipeline
+    let [result_set, conclusion_set] =
+        [&result, &step.clause].map(|c| c.iter().collect::<MultiSet<_>>());
+    match result_set.symmetric_difference(&conclusion_set) {
+        MultiSetDifference::None => Ok(result),
+        _ => Ok(step.clause.clone()),
+    }
 }
 
 fn apply_naive_resolution(

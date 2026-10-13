@@ -447,12 +447,16 @@ where
                     .chain(s.previous_step.iter())
                     .any(|p| *p != cache[p]);
 
-                let new_node = Rc::new(ProofNode::Step(StepNode {
-                    premises,
-                    discharge,
-                    previous_step,
-                    ..s.clone()
-                }));
+                let new_node = if changed {
+                    Rc::new(ProofNode::Step(StepNode {
+                        premises,
+                        discharge,
+                        previous_step,
+                        ..s.clone()
+                    }))
+                } else {
+                    node.clone()
+                };
                 mutate_func(&mut context, &new_node, changed)?
             }
             ProofNode::Subproof(s) if !is_done => {
@@ -479,17 +483,25 @@ where
                 context.pop();
                 let outbound_premises =
                     outbound_premises_stack.pop().unwrap().into_iter().collect();
-                let extra_steps = s
+                let last_step = cache[&s.last_step].clone();
+                let extra_steps: Vec<_> = s
                     .extra_steps
                     .iter()
                     .map(|node| cache[node].clone())
                     .collect();
-                Rc::new(ProofNode::Subproof(SubproofNode {
-                    last_step: cache[&s.last_step].clone(),
-                    args: s.args.clone(),
-                    outbound_premises,
-                    extra_steps,
-                }))
+
+                // If the subproof is unchanged, we keep the original node, so the steps that use it
+                // as a premise are not considered changed
+                if last_step == s.last_step && extra_steps == s.extra_steps {
+                    node.clone()
+                } else {
+                    Rc::new(ProofNode::Subproof(SubproofNode {
+                        last_step,
+                        args: s.args.clone(),
+                        outbound_premises,
+                        extra_steps,
+                    }))
+                }
             }
         };
         outbound_premises_stack

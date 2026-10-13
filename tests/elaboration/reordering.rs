@@ -50,5 +50,28 @@ fn remove_reorderings() {
             (step t3 (cl (not c) d) :rule hole)
             (step t4 (cl a b d) :rule resolution :premises (t1 t3) :args (c true))",
         }
+        "Steps whose premises are unchanged are not recomputed" {
+            "(step t1 (cl a b) :rule hole)
+            (step t2 (cl (not b) a) :rule hole)
+            (step t3 (cl a) :rule resolution :premises (t1 t2) :args (b true))
+            (step t4 (cl a c) :rule weakening :premises (t3))"
+            ->
+            "(step t1 (cl a b) :rule hole)
+            (step t2 (cl (not b) a) :rule hole)
+            (step t3 (cl a) :rule resolution :premises (t1 t2) :args (b true))
+            (step t4 (cl a c) :rule weakening :premises (t3))",
+        }
+        "Resolution conclusion is kept if it relies on implicit contraction" {
+            "(step t1 (cl a b) :rule hole)
+            (step t2 (cl (not b) a) :rule hole)
+            (step t3 (cl a (not b)) :rule reordering :premises (t2))
+            (step t4 (cl a) :rule resolution :premises (t1 t3) :args (b true))
+            (step t5 (cl a c) :rule weakening :premises (t4))"
+            ->
+            "(step t1 (cl a b) :rule hole)
+            (step t2 (cl (not b) a) :rule hole)
+            (step t4 (cl a) :rule resolution :premises (t1 t2) :args (b true))
+            (step t5 (cl a c) :rule weakening :premises (t4))",
+        }
     }
 }
