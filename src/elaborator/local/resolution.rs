@@ -1,7 +1,7 @@
 use crate::{
     ast::{ContextStack, ProofNode, Rc, StepNode, build_term, match_term, pool::Pool},
     elaborator::{ElaborationError, IdHelper},
-    resolution::{ResolutionTrace, greedy_resolution},
+    resolution::greedy_resolution,
     utils::DedupIterator,
 };
 
@@ -55,20 +55,34 @@ pub fn resolution(
     let mut premises: Vec<_> = step.premises.iter().dedup().cloned().collect();
     let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
 
-    let ResolutionTrace { not_not_added, pivot_trace } =
-        greedy_resolution(&step.clause, &premise_clauses, pool, true)
-            .or_else(|first_error| {
-                premises.reverse();
-                let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
-                greedy_resolution(&step.clause, &premise_clauses, pool, true)
-                    .map_err(|_| first_error) // we prefer returning the first error
-            })
-            .map_err(ElaborationError::CouldNotInferPivots)?;
+    let trace = greedy_resolution(&step.clause, &premise_clauses, pool, true)
+        .or_else(|first_error| {
+            premises.reverse();
+            let premise_clauses: Vec<_> = premises.iter().map(|p| p.clause()).collect();
+            // we prefer returning the first error
+            greedy_resolution(&step.clause, &premise_clauses, pool, true).map_err(|_| first_error)
+        })
+        .map_err(ElaborationError::CouldNotInferPivots)?;
 
-    let pivots = pivot_trace
+    let mut pivots: Vec<_> = trace
+        .pivot_trace
         .into_iter()
         .flat_map(|(pivot, polarity)| [pivot, pool.bool_constant(polarity)])
         .collect();
+
+    // If the result of the resolution was just `false`, and it was implicitly eliminated, we make
+    // that explicit by resolving it with a `(cl (not false))` step
+    if trace.false_eliminated {
+        let false_step = Rc::new(ProofNode::Step(StepNode {
+            id: ids.next_id(),
+            depth: step.depth,
+            clause: vec![build_term!(pool, (not {pool.bool_false()}))],
+            rule: "false".to_owned(),
+            ..Default::default()
+        }));
+        premises.push(false_step);
+        pivots.extend([pool.bool_false(), pool.bool_true()]);
+    }
 
     let mut resolution_step = StepNode {
         id: step.id.clone(),
@@ -80,7 +94,7 @@ pub fn resolution(
         ..Default::default()
     };
 
-    if not_not_added {
+    if trace.not_not_added {
         // In this case, where the solver added a double negation implicitly to the concluded term,
         // we remove it from the resolution conclusion, and then add a series of steps to
         // reconstruct it again. More precisely, if the conclusion of the resolution step should

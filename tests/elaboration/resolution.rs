@@ -39,7 +39,9 @@ fn infer_pivots() {
             "(step t1 (cl p q false) :rule hole)
             (step t2 (cl (not p)) :rule hole)
             (step t3 (cl (not q)) :rule hole)
-            (step t4 (cl) :rule resolution :premises (t1 t2 t3) :args (p true q true))",
+            (step t4.t1 (cl (not false)) :rule false)
+            (step t4 (cl) :rule resolution :premises (t1 t2 t3 t4.t1)
+                :args (p true q true false true))",
         }
         "Removal of duplicate premises" {
             "(step t1 (cl (not r)) :rule hole)
