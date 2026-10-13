@@ -200,11 +200,11 @@ explicit applications of the <code>hole</code> rule, or steps that use an unknow
 for example:</p>
 <pre><code>carcara check example.smt2.alethe --allowed-rules foo bar
 </code></pre>
-<p>With this option, Carcara will ignore steps that use any of the given rules, and will consider them
-holes in the proof.</p>
+<p>With this option, Carcara will skip steps that use any of the given rules. These steps are not
+considered holes, so a proof that uses allowed rules may still be reported as <code>valid</code>.</p>
 <p>By default, Carcara returns a checking error when encountering a rule it does not recognize.
 If instead you want to ignore all such rules, you can use the <code>--ignore-unknown-rules</code>/<code>-i</code> flag.
-If a proof uses a rule that is allowed by either <code>--ignore-unknown-rules</code> or <code>--allowed-rules</code>, it
+Unlike <code>--allowed-rules</code>, if a proof uses a rule that is ignored by <code>--ignore-unknown-rules</code>, it
 will be reported as <code>holey</code>.</p>
 <h2 id="the-lia_generic-rule"><a class="header" href="#the-lia_generic-rule">The <code>lia_generic</code> rule</a></h2>
 <p>Carcara does not check steps that use the <code>lia_generic</code> rule. This is an extremely coarse-grained
