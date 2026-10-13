@@ -1,0 +1,9 @@
+; carcara-command: elaborate
+(assume h1 (= u v))
+(assume h2 (= v w))
+(assume h3 (not (= u v)))
+(step t1 (cl (not (= u v)) (not (= v w)) (= u u)) :rule eq_transitive)
+(step t2 (cl (= v u)) :rule symm :premises (h1))
+(step t3 (cl (= u u)) :rule trans :premises (h1 t2))
+(step t4 (cl (not (= u v)) (not (= v w)) (= u v)) :rule eq_transitive)
+(step t5 (cl) :rule resolution :premises (t4 h1 h2 h3) :args ((= u v) false (= v w) false (= u v) true))

@@ -30,6 +30,15 @@ fn trans() {
             (step t3.t1 (cl (= a b)) :rule symm :premises (h1))
             (step t3 (cl (= a c)) :rule trans :premises (t3.t1 h2))",
         }
+        "Reflexive conclusion" {
+            "(assume h1 (= a b))
+            (assume h2 (= b a))
+            (step t3 (cl (= a a)) :rule trans :premises (h1 h2))"
+            ->
+            "(assume h1 (= a b))
+            (assume h2 (= b a))
+            (step t3 (cl (= a a)) :rule eq_reflexive)",
+        }
         "Remove unused premises" {
             "(assume h1 (= a b))
             (assume h2 (= c d))
@@ -82,6 +91,20 @@ fn eq_transitive() {
                 :rule weakening :premises (t1.t1))
             (step t1 (cl (not (= a b)) (not (= b c)) (not (= c d)) (not (= x y)) (= a d))
                 :rule reordering :premises (t1.t2))",
+        }
+        "Reflexive conclusion" {
+            "(step t1 (cl (not (= a b)) (not (= b c)) (= a a)) :rule eq_transitive)"
+            ->
+            "(step t1.t1 (cl (= a a)) :rule eq_reflexive)
+            (step t1.t2 (cl (= a a) (not (= a b)) (not (= b c))) :rule weakening :premises (t1.t1))
+            (step t1 (cl (not (= a b)) (not (= b c)) (= a a)) :rule reordering :premises (t1.t2))",
+        }
+        "Chain with a single link" {
+            "(step t1 (cl (not (= a b)) (not (= b c)) (= a b)) :rule eq_transitive)"
+            ->
+            "(step t1.t1 (cl (not (= a b)) (= a b)) :rule eq_transitive)
+            (step t1.t2 (cl (not (= a b)) (= a b) (not (= b c))) :rule weakening :premises (t1.t1))
+            (step t1 (cl (not (= a b)) (not (= b c)) (= a b)) :rule reordering :premises (t1.t2))",
         }
     }
 }

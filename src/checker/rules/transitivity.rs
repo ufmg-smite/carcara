@@ -43,7 +43,7 @@ fn find_chain(
 }
 
 pub fn eq_transitive(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
-    assert_clause_len(conclusion, 3..)?;
+    assert_clause_len(conclusion, 2..)?;
 
     // The last term in the conclusion clause should be an equality, and it will be the conclusion
     // of the transitive chain

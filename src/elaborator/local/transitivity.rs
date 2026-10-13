@@ -77,6 +77,16 @@ pub fn trans(
         &mut new_premises,
     )?;
 
+    // If the conclusion is reflexive, no premises are needed, so we replace the step with an
+    // `eq_reflexive` step
+    if num_needed == 0 {
+        return Ok(Rc::new(ProofNode::Step(StepNode {
+            rule: "eq_reflexive".to_owned(),
+            premises: Vec::new(),
+            ..step.clone()
+        })));
+    }
+
     // If there are any premises in the step which are not needed to complete the transitivity
     // chain, we simply remove them in the elaborated step.
     new_premises.truncate(num_needed);
@@ -100,7 +110,7 @@ pub fn eq_transitive(
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
     let n = step.clause.len();
-    assert!(n > 2);
+    assert!(n >= 2);
 
     // The last term in the conclusion clause should be an equality, and it will be the conclusion
     // of the transitive chain
@@ -143,11 +153,18 @@ pub fn eq_transitive(
 
     let mut ids = IdHelper::new(&step.id);
 
+    // If the conclusion is reflexive, none of the inequalities are needed, and the clause is just
+    // `(= t t)`, which `eq_transitive` doesn't allow
+    let rule = if num_needed == 0 {
+        "eq_reflexive"
+    } else {
+        "eq_transitive"
+    };
     let new_eq_transitive_step = Rc::new(ProofNode::Step(StepNode {
         id: ids.next_id(),
         depth: step.depth,
         clause: new_clause,
-        rule: "eq_transitive".to_owned(),
+        rule: rule.to_owned(),
         premises: Vec::new(),
         args: Vec::new(),
         discharge: Vec::new(),

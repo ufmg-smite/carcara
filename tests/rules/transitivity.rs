@@ -33,8 +33,12 @@ fn eq_transitive() {
             "(step t1 (cl (not (= a b)) (not (= b c)) (not (= a c)))
                 :rule eq_transitive)": false,
         }
+        "Chain with a single link" {
+            "(step t1 (cl (not (= a b)) (= a b)) :rule eq_transitive)": true,
+            "(step t1 (cl (not (= b a)) (= a b)) :rule eq_transitive)": true,
+        }
         "Clause is too small" {
-            "(step t1 (cl (not (= a b)) (= a b)) :rule eq_transitive)": false,
+            "(step t1 (cl (= a a)) :rule eq_transitive)": false,
         }
         "Clause terms in different orders" {
             "(step t1 (cl (not (= a b)) (not (= c d)) (not (= b c)) (= a d))
