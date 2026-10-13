@@ -382,11 +382,9 @@ pub fn pbblast_pbbconst(RuleArgs { conclusion, .. }: RuleArgs) -> RuleResult {
             let Some(pb) = term.as_integer() else {
                 return err!("Non-integer term at position {i}");
             };
-            let pb = pb.to_i32_wrapping();
-
-            match pb {
-                0 => Ok(acc),
-                1 => {
+            match pb.to_u8() {
+                Some(0) => Ok(acc),
+                Some(1) => {
                     let exponent = i.try_into().unwrap();
                     let increment = Integer::i_pow_u(2, exponent);
                     Ok(&acc + Integer::from(increment))

@@ -3196,6 +3196,11 @@ fn pbblast_pbbconst_1() {
             r#"(step t1 (cl (= #b1 (@pbbterm 0))) :rule pbblast_pbbconst)"#: false,
             r#"(step t1 (cl (= #b0 (@pbbterm 1))) :rule pbblast_pbbconst)"#: false,
         }
+        "Values that are not bits" {
+            r#"(step t1 (cl (= #b0 (@pbbterm 2))) :rule pbblast_pbbconst)"#: false,
+            r#"(step t1 (cl (= #b0 (@pbbterm 4294967296))) :rule pbblast_pbbconst)"#: false,
+            r#"(step t1 (cl (= #b1 (@pbbterm 4294967297))) :rule pbblast_pbbconst)"#: false,
+        }
     }
 }
 
