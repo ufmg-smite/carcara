@@ -413,7 +413,7 @@ impl Pool {
                         sorts.clone()
                     });
                     left.pop();
-                    left.extend_from_slice(&right[1..]);
+                    left.extend(right.into_iter().skip(1));
                     let tuple = self.add_sort(Sort::Tuple(left));
                     self.add_sort(Sort::Set(tuple))
                 }
