@@ -889,31 +889,36 @@ impl Automaton {
 
         current.iter().any(|&s| self.all_states[s].accept)
     }
-}
 
-impl fmt::Display for Automaton {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "automaton {} {{", self.name)?;
-        writeln!(f, "  init {};", self.all_states[self.initial_state].id)?;
+    /// Prints the complete automaton to stdout for debugging purposes.
+    pub fn display_complete(&self) {
+        println!("automaton {} {{", self.name);
+        println!("  init {};", self.all_states[self.initial_state].id);
         for state in &self.all_states {
             for transition in &state.transitions {
                 let target = &self.all_states[transition.to];
                 match &transition.trigger {
                     Trigger::Epsilon => {
-                        writeln!(f, "  {} -> {} [ε];", state.id, target.id)?;
+                        println!("  {} -> {} [ε];", state.id, target.id);
                     }
                     Trigger::Range((l, r)) => {
-                        writeln!(f, "  {} -> {} [{}, {}];", state.id, target.id, l, r)?;
+                        println!("  {} -> {} [{}, {}];", state.id, target.id, l, r);
                     }
                 }
             }
         }
         for state in &self.all_states {
             if state.accept {
-                writeln!(f, "  accepting {};", state.id)?;
+                println!("  accepting {};", state.id);
             }
         }
-        write!(f, "}}")
+        println!("}}");
+    }
+}
+
+impl fmt::Display for Automaton {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
