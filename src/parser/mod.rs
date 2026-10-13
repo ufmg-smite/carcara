@@ -344,7 +344,7 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Searches the symbol table for a symbol, and, if found, returns its sort.
-    fn get_symbol(&mut self, symbol: &str) -> Option<&Rc<Sort>> {
+    fn get_symbol(&self, symbol: &str) -> Option<&Rc<Sort>> {
         let cached = HashCache::new(symbol.to_owned());
         self.state.symbol_table.get(&cached)
     }
@@ -1265,7 +1265,10 @@ impl<'p, 's> Parser<'p, 's> {
                 return if let Some(func) = self.state.function_defs.get(&s) {
                     func.apply(self.pool, Vec::new())
                         .map_err(|err| self.err(err, pos))
-                } else if let Some(op) = lookup_operator(&s) {
+                } else if let Some(op) = lookup_operator(&s)
+                    // Declared symbols shadow built-in operators
+                    && self.get_symbol(&s).is_none()
+                {
                     let args = Vec::new();
 
                     self.make_op(op, args).map_err(|err| self.err(err, pos))
@@ -1656,6 +1659,22 @@ impl<'p, 's> Parser<'p, 's> {
                     )),
                 }
             }
+            Token::Symbol(s) if self.state.function_defs.contains_key(s) => {
+                let head_pos = self.current_position;
+                let func_name = self.expect_symbol()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                let func = &self.state.function_defs[&func_name];
+
+                func.apply(self.pool, args)
+                    .map_err(|err| self.err(err, head_pos))
+            }
+            // Declared symbols shadow built-in operators
+            Token::Symbol(s) if self.get_symbol(s).is_some() => {
+                let func = self.parse_term()?;
+                let args = self.parse_sequence(Self::parse_term, true)?;
+                self.make_app(func, args)
+                    .map_err(|err| self.err(err, head_pos))
+            }
             // Here, I would like to use an `if let` guard, like:
             //
             //     Token::Symbol(s) if let Ok(operator) = Operator::from_str(s) => { ... }
@@ -1689,15 +1708,6 @@ impl<'p, 's> Parser<'p, 's> {
 
                 // `eo::define` is basically an alias to `let`, but always expands
                 self.parse_let_term(true)
-            }
-            Token::Symbol(s) if self.state.function_defs.contains_key(s) => {
-                let head_pos = self.current_position;
-                let func_name = self.expect_symbol()?;
-                let args = self.parse_sequence(Self::parse_term, true)?;
-                let func = &self.state.function_defs[&func_name];
-
-                func.apply(self.pool, args)
-                    .map_err(|err| self.err(err, head_pos))
             }
             Token::OpenParen => {
                 self.next_token()?;
@@ -1773,6 +1783,10 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     fn make_sort(&mut self, name: String, args: Vec<Rc<Sort>>) -> Result<Rc<Sort>, ParserError> {
+        // Declared sorts shadow built-in sorts from the sets and relations extension
+        let is_declared = self.state.sort_declarations.contains_key(&name)
+            || self.state.datatype_declarations.get(&name).is_some()
+            || self.state.sort_defs.contains_key(&name);
         let sort = match name.as_str() {
             "->" => Sort::Function(args),
             "Bool" | "Int" | "Real" | "String" | "RegLan" | "Type" if !args.is_empty() => {
@@ -1795,19 +1809,19 @@ impl<'p, 's> Parser<'p, 's> {
             },
 
             // From sets and relations extension
-            "Set" => {
+            "Set" if !is_declared => {
                 assert_num_args(&args, 1)?;
                 Sort::Set(args[0].clone())
             }
-            "Tuple" => {
+            "Tuple" if !is_declared => {
                 assert_num_args(&args, 1..)?;
                 Sort::Tuple(args)
             }
-            "UnitTuple" => {
+            "UnitTuple" if !is_declared => {
                 assert_num_args(&args, 0)?;
                 Sort::Tuple(Vec::new())
             }
-            "Relation" => {
+            "Relation" if !is_declared => {
                 assert_num_args(&args, 1..)?;
                 Sort::Set(self.pool.add_sort(Sort::Tuple(args)))
             }

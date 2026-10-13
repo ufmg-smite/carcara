@@ -846,6 +846,35 @@ fn test_indexed_operators() {
 }
 
 #[test]
+fn test_symbol_shadowing() {
+    let mut p = Pool::new();
+
+    // Declared symbols shadow built-in operators
+    let definitions = "
+        (declare-const abs Int)
+        (declare-const int.pow2 Int)
+        (declare-const tuple Int)
+        (declare-const and Int)
+        (declare-const re.none Int)
+    ";
+    let terms = ["abs", "int.pow2", "tuple", "and", "re.none"];
+    let parsed = parse_terms(&mut p, definitions, terms);
+    for (term, name) in parsed.iter().zip(["abs", "int.pow2", "tuple", "and"]) {
+        assert_eq!(term.as_var(), Some(name));
+    }
+
+    // So do bound variables
+    let [term] = parse_terms(&mut p, "", ["(forall ((abs Bool)) abs)"]);
+    let (_, _, inner) = term.as_binder().unwrap();
+    assert_eq!(inner.as_var(), Some("abs"));
+
+    // Function definitions shadow declarations
+    let definitions = "(declare-const k Int) (define-fun k () Int 5)";
+    let [k] = parse_terms(&mut p, definitions, ["k"]);
+    assert_eq!(*k, Term::new_int(5));
+}
+
+#[test]
 fn test_qualified_operators() {
     let mut p = Pool::new();
     let cases = [("((as const (Array Int Real)) 0.0)", {
