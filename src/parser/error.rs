@@ -130,6 +130,10 @@ pub enum ParserError {
     )]
     InvalidExtractArgs(usize, usize, usize),
 
+    /// The width of a bitvector term is not a constant. This is only allowed in Rare rules.
+    #[error("the width of bitvector term '{0}' is not a constant")]
+    NonConstantBvWidth(Rc<Term>),
+
     /// The width of a bitvector sort is out of range.
     #[error("bitvector width must be between 1 and {max}, got {0}", max = u32::MAX)]
     InvalidBvWidth(Integer),

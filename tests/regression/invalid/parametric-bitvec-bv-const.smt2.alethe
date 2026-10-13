@@ -1,0 +1,1 @@
+(step t1 (cl (= (bvmul (@bv 5 k) (@bv 5 k)) (@bv 5 k))) :rule bitblast_mult)

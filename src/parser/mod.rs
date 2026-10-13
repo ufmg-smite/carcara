@@ -119,6 +119,11 @@ pub struct Config {
     /// If `true`, allow old (SMT-LIB versions < 2.6) syntax for datatype testers, namely `is-cons`
     /// instead of `(_ is cons)`.
     allow_legacy_tester_syntax: bool,
+
+    /// If `true`, allow bitvector sorts and terms whose width is not statically known, like
+    /// `(_ BitVec n)`. These are only needed when parsing Rare rules, and are represented with the
+    /// `ParamBitVec` sort.
+    allow_parametric_bitvec_widths: bool,
 }
 
 impl Config {
@@ -134,6 +139,7 @@ impl Config {
             allow_higher_order_indexed_ops: false,
             implicit_at_sort_alias: false,
             allow_legacy_tester_syntax: false,
+            allow_parametric_bitvec_widths: false,
         }
     }
 }
@@ -169,7 +175,9 @@ pub fn parse_with_pool<'s>(
     if let Some(rules) = input.rare_rules {
         // The rules are parsed with a new parser, so that the symbols declared or defined in the
         // problem and proof are not in scope
-        let config = config.allow_higher_order_indexed_ops(true);
+        let config = config
+            .allow_higher_order_indexed_ops(true)
+            .allow_parametric_bitvec_widths(true);
         let rules = Parser::new(pool, config, rules)?.parse_rare()?;
         return Ok((problem, proof, rules));
     }
@@ -1800,9 +1808,10 @@ impl<'p, 's> Parser<'p, 's> {
                 let sort = if let Some(width) = args[0].as_integer() {
                     assert_indexed_op_args_value(&args, BV_WIDTH_RANGE)?;
                     Sort::BitVec(width.to_u32().unwrap())
-                } else {
-                    // TODO: used to be an error. maybe still should be an error outside rare files
+                } else if self.config.allow_parametric_bitvec_widths {
                     Sort::ParamBitVec
+                } else {
+                    return Err(ParserError::ExpectedIntegerConstant(args[0].clone()));
                 };
                 Ok(self.pool.add_sort(sort))
             }

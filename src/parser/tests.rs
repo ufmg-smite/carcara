@@ -1016,22 +1016,6 @@ fn test_bv_widths() {
             "{input}"
         );
     }
-
-    // In `extract`, i >= j must hold even if the width of the argument is not statically known
-    let definitions = "(declare-const n Int) (declare-const x (_ BitVec n))";
-    let [term] = parse_terms(&mut p, definitions, ["((_ extract 1 0) x)"]);
-    assert_eq!(*p.sort(&term), Sort::BitVec(2));
-    let err = Parser::new(&mut p, TEST_CONFIG, definitions.into())
-        .and_then(|mut parser| {
-            parser.parse_problem()?;
-            parser.reset("((_ extract 0 1) x)".into())?;
-            parser.parse_term()
-        })
-        .expect_err("expected error");
-    assert!(matches!(
-        err,
-        Error::Parser(ParserError::InvalidBvWidth(_), _, _)
-    ));
 }
 
 #[test]

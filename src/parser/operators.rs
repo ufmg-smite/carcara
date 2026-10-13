@@ -24,10 +24,12 @@ impl<'p, 's> Parser<'p, 's> {
         op: Operator,
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Term>, ParserError> {
-        if let Some(term) = self.type_check_op(op, &args)? {
-            return Ok(term);
-        }
-        Ok(self.pool.add(Term::Op(op, args)))
+        let term = match self.type_check_op(op, &args)? {
+            Some(term) => term,
+            None => self.pool.add(Term::Op(op, args)),
+        };
+        self.check_bv_parametric_width(&term)?;
+        Ok(term)
     }
 
     /// Constructs and type checks an indexed operation term.
@@ -40,7 +42,9 @@ impl<'p, 's> Parser<'p, 's> {
         if let Some(term) = self.type_check_indexed_op(op, &op_args, &args)? {
             return Ok(term);
         }
-        Ok(self.pool.add(Term::ParamOp { op, op_args, args }))
+        let term = self.pool.add(Term::ParamOp { op, op_args, args });
+        self.check_bv_parametric_width(&term)?;
+        Ok(term)
     }
 
     /// Constructs and type checks a qualified operation term.
@@ -64,6 +68,17 @@ impl<'p, 's> Parser<'p, 's> {
             }
         }
         Ok(self.pool.add(Term::AsOp(op, sort, args)))
+    }
+
+    /// If parametric bitvector widths are not allowed, returns an error if `term` is a bitvector
+    /// whose width is not statically known.
+    fn check_bv_parametric_width(&mut self, term: &Rc<Term>) -> Result<(), ParserError> {
+        if !self.config.allow_parametric_bitvec_widths && *self.pool.sort(term) == Sort::ParamBitVec
+        {
+            Err(ParserError::NonConstantBvWidth(term.clone()))
+        } else {
+            Ok(())
+        }
     }
 
     /// Type checks the arguments of an operation term.

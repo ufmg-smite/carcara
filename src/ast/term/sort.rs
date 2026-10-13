@@ -88,7 +88,6 @@ pub enum Sort {
     /// files, and this simplified representation is sufficient in this case, as long as we make
     /// sure to type check the concretely-sorted terms that are created when instantiating the
     /// parametric sorts in the Rare rules.
-    // TODO: actually perform this extra type checking
     ParamBitVec,
 
     /// A datatype sort, specified by its name and the provided sort arguments.
