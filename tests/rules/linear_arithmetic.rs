@@ -74,6 +74,10 @@ fn la_generic() {
             "(step t1 (cl (not (> (+ a b) 0.0)) (not (< (+ a b) 1.0)))
                 :rule la_generic :args (1.0 1.0))": false,
         }
+        "Strengthening depends on the constant, not on its product with the argument" {
+            "(step t1 (cl (< n 1) (>= n 1)) :rule la_generic :args (0.5 0.5))": true,
+            "(step t1 (cl (< n 1) (> n 1)) :rule la_generic :args (0.5 0.5))": false,
+        }
     }
 }
 

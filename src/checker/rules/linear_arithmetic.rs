@@ -200,18 +200,20 @@ impl LinearComb {
     }
 }
 
-fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Operator {
-    // Multiplications are expensive, so we avoid them if we can
-    let is_integer = if *a == 0 {
-        true
-    } else if *a == 1 {
-        disequality.1.is_integer()
-    } else {
-        (disequality.1.clone() * a).is_integer()
-    };
+fn strengthen(pool: &Pool, op: Operator, disequality: &mut LinearComb) -> Operator {
+    // The strengthening rules are only applied if all variables are integer sorted. The
+    // specification assumes that the coefficients are also integers in this case, but with Int/Real
+    // subtyping that might not be the case, so we also check that
+    let is_integral = disequality
+        .0
+        .iter()
+        .all(|(var, coeff)| coeff.is_integer() && *pool.sort(var) == Sort::Int);
+    if !is_integral {
+        return op;
+    }
 
     match op {
-        Operator::GreaterEq if is_integer => op,
+        Operator::GreaterEq if disequality.1.is_integer() => op,
 
         // In some cases, when the disequality is over integers, we can make the strengthening
         // rules even stronger. Consider for instance the following example:
@@ -240,14 +242,14 @@ fn strengthen(op: Operator, disequality: &mut LinearComb, a: &Rational) -> Opera
         // all coefficients will continue being integers after the division. This strengthening is
         // still valid because, since the variables are integers, the result of their linear
         // combination will always be a multiple of their GCD.
-        Operator::GreaterThan if is_integer => {
+        Operator::GreaterThan => {
             // Instead of dividing and then multiplying back, we just multiply the "+ 1"
             // that is added by the strengthening rule
             disequality.1.floor_mut();
             disequality.1 += disequality.coefficients_gcd();
             Operator::GreaterEq
         }
-        Operator::GreaterThan | Operator::GreaterEq => {
+        Operator::GreaterEq => {
             disequality.1.floor_mut();
             disequality.1 += 1;
             Operator::GreaterEq
@@ -298,11 +300,8 @@ fn process_disequality(
         }
     };
 
-    // Step 4: Apply strengthening rules. These are only applied if all variables are integer sorted
-    let all_vars_are_int = disequality.0.keys().all(|var| *pool.sort(var) == Sort::Int);
-    if all_vars_are_int {
-        op = strengthen(op, &mut disequality, &arg);
-    }
+    // Step 4: Apply strengthening rules.
+    op = strengthen(pool, op, &mut disequality);
 
     // Step 5: Multiply disequality by a. If a is zero, we must also weaken `>` into `>=`
     let arg = match op {
