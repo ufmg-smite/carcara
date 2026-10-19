@@ -357,6 +357,28 @@ fn onepoint() {
                 (or (P u) (forall ((z Int)) (or (not (= u z)) (Q z))))
             )) :rule onepoint)": false,
         }
+        "Points that depend on eliminated variables" {
+            "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) (+ t 1))))
+            (step t1.t1 (cl (= (=> (= x t) (=> (= y (+ x 1)) (P y)))
+                               (=> (= t t) (=> (= (+ t 1) (+ t 1)) (P (+ t 1)))))) :rule hole)
+            (step t1 (cl (=
+                (forall ((x Int) (y Int)) (=> (= x t) (=> (= y (+ x 1)) (P y))))
+                (=> (= t t) (=> (= (+ t 1) (+ t 1)) (P (+ t 1))))
+            )) :rule onepoint)": true,
+
+            "(anchor :step t1 :args ((:= (x Int) t)))
+            (step t1.t1 (cl (= (=> (= x x) (P x)) (=> (= t t) (P t)))) :rule hole)
+            (step t1 (cl (= (forall ((x Int)) (=> (= x x) (P x))) (=> (= t t) (P t))))
+                :rule onepoint)": false,
+
+            "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) t)))
+            (step t1.t1 (cl (= (=> (and (= x y) (= y x)) (P x))
+                               (=> (and (= t t) (= t t)) (P t)))) :rule hole)
+            (step t1 (cl (=
+                (forall ((x Int) (y Int)) (=> (and (= x y) (= y x)) (P x)))
+                (=> (and (= t t) (= t t)) (P t))
+            )) :rule onepoint)": false,
+        }
     }
 }
 
@@ -387,6 +409,17 @@ fn sko_ex() {
                 (= (choice ((x Int)) (exists ((y Int)) (= x y)))
                    (choice ((y Int)) (= (choice ((x Int)) (exists ((y Int)) (= x y))) y)))
             )) :rule sko_ex)": true,
+        }
+        "Extra anchor arguments" {
+            "(anchor :step t1 :args ((:= (x Int) (choice ((x Int)) (p x))) (:= (z Int) 5)))
+            (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (p x))))) :rule hole)
+            (step t1 (cl (= (exists ((x Int)) (p x)) (p (choice ((x Int)) (p x)))))
+                :rule sko_ex)": false,
+
+            "(anchor :step t1 :args ((z Int) (:= (x Int) (choice ((x Int)) (p x)))))
+            (step t1.t1 (cl (= (p x) (p (choice ((x Int)) (p x))))) :rule hole)
+            (step t1 (cl (= (exists ((x Int)) (p x)) (p (choice ((x Int)) (p x)))))
+                :rule sko_ex)": false,
         }
     }
 }

@@ -360,10 +360,22 @@ pub fn onepoint(
 
     let points = extract_points(pool, quant, left);
 
+    let assigned: HashSet<String> = context
+        .last()
+        .unwrap()
+        .args
+        .iter()
+        .filter_map(AnchorArg::as_assign)
+        .map(|(name, _)| name.clone())
+        .collect();
+
     // Since a substitution may use a variable introduced in a previous substitution, we apply the
-    // substitution to the points in order to replace these variables by their value.
+    // substitution to the points in order to replace these variables by their value. We skip points
+    // whose right-hand side is a variable assigned in this anchor, like `(= x x)`, or `(= x y)` with
+    // `(= y x)`, since they would justify any assignment.
     let points: HashSet<_> = points
         .into_iter()
+        .filter(|(_, t)| !t.as_var().is_some_and(|v| assigned.contains(v)))
         .map(|(x, t)| (x, context.apply(pool, &t)))
         .collect();
 
@@ -456,9 +468,17 @@ fn generic_skolemization_rule(
         current_phi = context.apply_previous(pool, &current_phi);
     }
 
-    let args = context.last().unwrap().args.iter();
+    let args = &context.last().unwrap().args;
+
+    // The anchor must only assign the quantified variables. Since we check below that each of them
+    // has an assignment, it's enough to check the number of arguments
+    rassert!(
+        args.len() == bindings.len(),
+        "expected the anchor to only assign the quantified variables"
+    );
 
     let substitution: HashMap<Rc<Term>, Rc<Term>> = args
+        .iter()
         .filter_map(AnchorArg::as_assign)
         .map(|(k, v)| {
             let var = Term::new_var(k, pool.sort(v));
