@@ -265,6 +265,17 @@ impl<T> ElemDiff<T> {
     }
 }
 
+/// Returns `true` if the term is an application term with at least one argument.
+fn is_app(t: &Term) -> bool {
+    match t {
+        Term::App(_, args)
+        | Term::Op(_, args)
+        | Term::ParamOp { args, .. }
+        | Term::AsOp(_, _, args) => !args.is_empty(),
+        _ => false,
+    }
+}
+
 fn as_application(t: &Rc<Term>) -> (Applicand, &[Rc<Term>]) {
     match t.as_ref() {
         Term::App(f, args) => (Applicand::Func(f.clone()), args),
@@ -279,11 +290,8 @@ pub fn diff(l: &Rc<Term>, r: &Rc<Term>) -> TermDiff {
     match (l.as_ref(), r.as_ref()) {
         _ if l == r => TermDiff::Identical(l.clone()),
 
-        // match on App
-        (
-            Term::App(_, _) | Term::Op(_, _) | Term::ParamOp { .. } | Term::AsOp(..),
-            Term::App(_, _) | Term::Op(_, _) | Term::ParamOp { .. } | Term::AsOp(..),
-        ) => {
+        // match on applications
+        _ if is_app(l) && is_app(r) => {
             let (l, r) = (as_application(l), as_application(r));
             let head = UnaryDiff::new(l.0, r.0);
             let args = diff_args(l.1, r.1);
@@ -368,11 +376,8 @@ impl Diffable for Rc<Term> {
             return Some(1);
         }
         match (left.as_ref(), right.as_ref()) {
-            (
-                Term::App(..) | Term::Op(..) | Term::ParamOp { .. } | Term::AsOp(..),
-                Term::App(..) | Term::Op(..) | Term::ParamOp { .. } | Term::AsOp(..),
-            )
-            | (Term::Binder(..), Term::Binder(..))
+            _ if is_app(left) && is_app(right) => Some(100),
+            (Term::Binder(..), Term::Binder(..))
             | (Term::Let(..), Term::Let(..))
             | (Term::Match(..), Term::Match(..)) => Some(100),
             _ => None,
@@ -534,6 +539,9 @@ mod tests {
                 "(> a 0)",
                 "-(forall ((x Int)) (> x 0))\n+(> a 0)\n",
             ),
+            // Nullary operators are leaves, not applications
+            ("true", "false", "-true\n+false\n"),
+            ("false", "(= 1 0)", "-false\n+(= 1 0)\n"),
         ]);
     }
 
@@ -553,6 +561,12 @@ mod tests {
                 "(f (g a) b)",
                 "(f (g b) b)",
                 " (f\n   (g\n-    a\n+    b\n   )\n   b\n )\n",
+            ),
+            // Nullary operators should not be matched against applications
+            (
+                "(and true (= 0 1) false)",
+                "(and true false (= 1 0))",
+                " (and\n   true\n-  (= 0 1)\n   false\n+  (= 1 0)\n )\n",
             ),
         ]);
     }
