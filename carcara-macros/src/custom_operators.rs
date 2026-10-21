@@ -16,20 +16,66 @@ struct CustomOperatorsConfig {
 #[serde(deny_unknown_fields)]
 struct CustomOperatorEntry {
     name: String,
-    return_type: String,
     #[serde(default)]
-    arg_types: Vec<String>,
+    params: Vec<String>,
+    return_type: SortExpr,
+    #[serde(default)]
+    arg_types: Vec<SortExpr>,
 }
 
-/// Maps a supported sort name to the tokens for its `Sort` variant, panicking on an unknown sort.
-fn sort_tokens(name: &str, op_name: &str) -> TokenStream2 {
-    match name {
+/// A sort in the config file: either a sort name (`"Int"`) or a list representing a sort
+/// application (`["Set", "Int"]`).
+#[derive(serde::Deserialize)]
+#[serde(
+    untagged,
+    expecting = "a sort name or a list of sorts, like `[\"Set\", \"Int\"]`"
+)]
+enum SortExpr {
+    Name(String),
+    App(Vec<SortExpr>),
+}
+
+impl std::fmt::Display for SortExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            SortExpr::Name(name) => write!(f, "{name}"),
+            SortExpr::App(items) => match items.as_slice() {
+                [] => write!(f, "()"),
+                [head, tail @ ..] => {
+                    write!(f, "({head}")?;
+                    for arg in tail {
+                        write!(f, " {arg}")?;
+                    }
+                    write!(f, ")")
+                }
+            },
+        }
+    }
+}
+
+/// Maps a built-in sort name to the tokens for its `Sort` variant, or `None` if it isn't one.
+fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
+    Some(match name {
         "Bool" => quote! { Sort::Bool },
         "Int" => quote! { Sort::Int },
         "Real" => quote! { Sort::Real },
         "String" => quote! { Sort::String },
         "RegLan" => quote! { Sort::RegLan },
-        other => panic!("unknown sort `{other}` for custom operator `{op_name}`"),
+        _ => return None,
+    })
+}
+
+/// Maps a supported sort to the tokens for its `Sort` variant, panicking on an unknown sort.
+fn sort_tokens(sort: &SortExpr, entry: &CustomOperatorEntry) -> TokenStream2 {
+    let op_name = &entry.name;
+    match sort {
+        SortExpr::Name(name) if entry.params.contains(name) => panic!(
+            "sort `{name}` for custom operator `{op_name}`: sort parameters are not supported yet"
+        ),
+        SortExpr::Name(name) => builtin_sort_tokens(name)
+            .unwrap_or_else(|| panic!("unknown sort `{name}` for custom operator `{op_name}`")),
+
+        SortExpr::App(_) => panic!("sort arguments are not supported yet"),
     }
 }
 
@@ -82,11 +128,27 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
             );
         }
 
-        let return_sort = sort_tokens(&entry.return_type, &entry.name);
+        let mut seen_params = std::collections::HashSet::new();
+        for param in &entry.params {
+            if builtin_sort_tokens(param).is_some() {
+                panic!(
+                    "sort parameter `{param}` of custom operator `{}` shadows a built-in sort",
+                    entry.name,
+                );
+            }
+            if !seen_params.insert(param) {
+                panic!(
+                    "duplicate sort parameter `{param}` for custom operator `{}`",
+                    entry.name,
+                );
+            }
+        }
+
+        let return_sort = sort_tokens(&entry.return_type, entry);
         let arg_sorts: Vec<_> = entry
             .arg_types
             .iter()
-            .map(|t| sort_tokens(t, &entry.name))
+            .map(|t| sort_tokens(t, entry))
             .collect();
         let name = &entry.name;
 
