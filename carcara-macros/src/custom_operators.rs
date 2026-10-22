@@ -35,6 +35,16 @@ enum SortExpr {
     App(Vec<SortExpr>),
 }
 
+impl SortExpr {
+    /// Returns `true` if `name` occurs anywhere in this sort.
+    fn mentions(&self, name: &str) -> bool {
+        match self {
+            SortExpr::Name(n) => n == name,
+            SortExpr::App(items) => items.iter().any(|s| s.mentions(name)),
+        }
+    }
+}
+
 impl std::fmt::Display for SortExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -61,6 +71,7 @@ fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
         "Real" => quote! { SortSig::Real },
         "String" => quote! { SortSig::String },
         "RegLan" => quote! { SortSig::RegLan },
+        "UnitTuple" => quote! { SortSig::Tuple(&[]) },
         _ => return None,
     })
 }
@@ -69,13 +80,35 @@ fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
 fn sort_tokens(sort: &SortExpr, entry: &CustomOperatorEntry) -> TokenStream2 {
     let op_name = &entry.name;
     match sort {
-        SortExpr::Name(name) if entry.params.contains(name) => panic!(
-            "sort `{name}` for custom operator `{op_name}`: sort parameters are not supported yet"
-        ),
-        SortExpr::Name(name) => builtin_sort_tokens(name)
-            .unwrap_or_else(|| panic!("unknown sort `{name}` for custom operator `{op_name}`")),
-
-        SortExpr::App(_) => panic!("sort arguments are not supported yet"),
+        SortExpr::Name(name) => match entry.params.iter().position(|p| p == name) {
+            Some(i) => quote! { SortSig::Var(#i) },
+            None => builtin_sort_tokens(name)
+                .unwrap_or_else(|| panic!("unknown sort `{name}` for custom operator `{op_name}`")),
+        },
+        SortExpr::App(items) => match items.as_slice() {
+            [SortExpr::Name(head), args @ ..] => match (head.as_str(), args) {
+                ("Array", [a, b]) => {
+                    let [a, b] = [a, b].map(|s| sort_tokens(s, entry));
+                    quote! { SortSig::Array(&#a, &#b) }
+                }
+                ("Set", [a]) => {
+                    let a = sort_tokens(a, entry);
+                    quote! { SortSig::Set(&#a) }
+                }
+                ("Tuple", [_, ..]) => {
+                    let args = args.iter().map(|s| sort_tokens(s, entry));
+                    quote! { SortSig::Tuple(&[#(#args),*]) }
+                }
+                ("Array" | "Set" | "Tuple", _) => panic!(
+                    "wrong number of arguments in sort `{sort}` for custom operator `{op_name}`"
+                ),
+                _ => panic!(
+                    "unknown sort constructor `{head}` in sort `{sort}` for custom operator \
+                    `{op_name}`"
+                ),
+            },
+            _ => panic!("invalid sort `{sort}` for custom operator `{op_name}`"),
+        },
     }
 }
 
@@ -130,7 +163,9 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
 
         let mut seen_params = std::collections::HashSet::new();
         for param in &entry.params {
-            if builtin_sort_tokens(param).is_some() {
+            if builtin_sort_tokens(param).is_some()
+                || matches!(param.as_str(), "Array" | "Set" | "Tuple")
+            {
                 panic!(
                     "sort parameter `{param}` of custom operator `{}` shadows a built-in sort",
                     entry.name,
@@ -139,6 +174,13 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
             if !seen_params.insert(param) {
                 panic!(
                     "duplicate sort parameter `{param}` for custom operator `{}`",
+                    entry.name,
+                );
+            }
+            if !entry.arg_types.iter().any(|t| t.mentions(param)) {
+                panic!(
+                    "sort parameter `{param}` of custom operator `{}` must occur in `arg_types`, \
+                    otherwise it can't be inferred",
                     entry.name,
                 );
             }
@@ -151,11 +193,12 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
             .map(|t| sort_tokens(t, entry))
             .collect();
         let name = &entry.name;
+        let params = &entry.params;
 
         sig_exprs.push(quote! {
             OperatorSig {
                 name: #name,
-                params: &[],
+                params: &[#(#params),*],
                 arg_sorts: &[#(#arg_sorts),*],
                 return_sort: #return_sort,
             }
