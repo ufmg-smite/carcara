@@ -53,19 +53,19 @@ impl std::fmt::Display for SortExpr {
     }
 }
 
-/// Maps a built-in sort name to the tokens for its `Sort` variant, or `None` if it isn't one.
+/// Maps a built-in sort name to the tokens for its `SortSig` variant, or `None` if it isn't one.
 fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
     Some(match name {
-        "Bool" => quote! { Sort::Bool },
-        "Int" => quote! { Sort::Int },
-        "Real" => quote! { Sort::Real },
-        "String" => quote! { Sort::String },
-        "RegLan" => quote! { Sort::RegLan },
+        "Bool" => quote! { SortSig::Bool },
+        "Int" => quote! { SortSig::Int },
+        "Real" => quote! { SortSig::Real },
+        "String" => quote! { SortSig::String },
+        "RegLan" => quote! { SortSig::RegLan },
         _ => return None,
     })
 }
 
-/// Maps a supported sort to the tokens for its `Sort` variant, panicking on an unknown sort.
+/// Maps a supported sort to the tokens for its `SortSig`, panicking on an unknown sort.
 fn sort_tokens(sort: &SortExpr, entry: &CustomOperatorEntry) -> TokenStream2 {
     let op_name = &entry.name;
     match sort {
@@ -107,7 +107,7 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
     let mut seen_idents = std::collections::HashSet::new();
     let mut variant_idents = Vec::new();
     let mut names = Vec::new();
-    let mut def_exprs = Vec::new();
+    let mut sig_exprs = Vec::new();
 
     for entry in &config.operator {
         if !seen_names.insert(entry.name.clone()) {
@@ -152,9 +152,10 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
             .collect();
         let name = &entry.name;
 
-        def_exprs.push(quote! {
-            CustomOperatorDef {
+        sig_exprs.push(quote! {
+            OperatorSig {
                 name: #name,
+                params: &[],
                 arg_sorts: &[#(#arg_sorts),*],
                 return_sort: #return_sort,
             }
@@ -190,12 +191,12 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
                 }
             }
 
-            /// Returns this operator's declared type signature.
-            pub fn def(self) -> &'static CustomOperatorDef {
-                static DEFS: [CustomOperatorDef; #num_operators] = [
-                    #(#def_exprs),*
+            /// Returns this operator's type signature.
+            pub fn sig(self) -> &'static OperatorSig {
+                static SIGS: [OperatorSig; #num_operators] = [
+                    #(#sig_exprs),*
                 ];
-                &DEFS[self as usize]
+                &SIGS[self as usize]
             }
         }
     }

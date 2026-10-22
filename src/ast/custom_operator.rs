@@ -2,14 +2,6 @@
 
 use super::{Rc, Sort, pool::Pool};
 
-/// The declared type signature of a custom operator.
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct CustomOperatorDef {
-    pub name: &'static str,
-    pub arg_sorts: &'static [Sort],
-    pub return_sort: Sort,
-}
-
 /// A sort in the type signature of a custom operator.
 #[derive(Debug)]
 pub enum SortSig {
@@ -153,7 +145,7 @@ mod tests {
     #[test]
     fn custom_operator_names_do_not_shadow_built_ins() {
         for op in CustomOperator::ALL {
-            assert!(Operator::from_str(op.def().name).is_err());
+            assert!(Operator::from_str(op.sig().name).is_err());
         }
     }
 

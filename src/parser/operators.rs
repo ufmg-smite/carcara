@@ -425,10 +425,15 @@ fn custom_check(
             Ok(None)
         }
         Operator::Custom(custom) => {
-            let def = custom.def();
-            assert_num_args(sorts, def.arg_sorts.len())?;
-            for (expected, got) in def.arg_sorts.iter().zip(sorts) {
-                parser.check_sort_eq(expected, got)?;
+            let sig = custom.sig();
+            assert_num_args(sorts, sig.arg_sorts.len())?;
+            let mut params = vec![None; sig.params.len()];
+            for (arg_sig, got) in sig.arg_sorts.iter().zip(sorts) {
+                if !arg_sig.match_with(&mut params, got) {
+                    let expected = arg_sig.instantiate(parser.pool, &params, sig.params);
+                    let expected = vec![expected].into_boxed_slice();
+                    return Err(SortError { expected, got: got.clone() }.into());
+                }
             }
             Ok(None)
         }

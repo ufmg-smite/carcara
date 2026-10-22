@@ -21,7 +21,7 @@ mod term;
 #[cfg(test)]
 mod tests;
 
-pub use custom_operator::{CustomOperator, CustomOperatorDef, OperatorSig, SortSig};
+pub use custom_operator::{CustomOperator, OperatorSig, SortSig};
 pub use evaluate::Value;
 pub use iter::ProofIter;
 pub use node::{ProofNode, ProofNodeForest, StepNode, SubproofNode};
