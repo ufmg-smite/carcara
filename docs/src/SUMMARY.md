@@ -12,4 +12,5 @@
 - [Other features](./etc.md)
   - [Proof parsing/printing](./etc/parse.md)
   - [Proof slicing](./etc/slice.md)
+  - [Term diff](./etc/diff.md)
 - [Contributing](./contributing.md)
