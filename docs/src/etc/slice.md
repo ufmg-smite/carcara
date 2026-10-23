@@ -44,7 +44,7 @@ results in the slice:
 ```
 A few things of note:
 - Since we did not pass `--max-distance`/`-d`, the slice only included the direct premises of
-`t3.t2`, and no transitive premises. For example, `t0`, which is a transitive premise of `t3.t2` via
+`t3.t0`, and no transitive premises. For example, `t0`, which is a transitive premise of `t3.t0` via
 `t1`, was not included.
 - To keep any context that might be introduced in an `anchor`, the slice included all `anchor`s
 surrounding the sliced step (in this case, `(anchor :step t3)`).

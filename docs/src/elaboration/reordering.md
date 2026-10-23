@@ -12,7 +12,7 @@ the following proof:
 (step t3 (cl b a c d) :rule weakening :premises (t2))
 ```
 Here, step `t2` will be eliminated, such that step `t3` uses `t1` directly as its premise. However,
-simply changing the premise clause of step `t4` would make it invalid[^1]. To avoid this, Carcara
+simply changing the premise clause of step `t3` would make it invalid[^1]. To avoid this, Carcara
 must also recompute the conclusion of `t3`, resulting in the following proof:
 ```
 (step t1 (cl a b c) :rule hole)

@@ -4,6 +4,7 @@ small local way. These are grouped in the `local` elaboration pass. The rules af
 - `eq_transitive`
 - `trans`
 - `eq_congruent`
+- `eq_congruent_pred`
 - `cong`
 - `resolution`
 - `eq_mp`

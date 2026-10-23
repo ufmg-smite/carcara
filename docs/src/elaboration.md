@@ -17,11 +17,10 @@ The specific way in which Carcara elaborates the proof is controlled via a `--pi
 This takes a series of _elaboration passes_, and will apply them in the given order. The possible
 elaboration passes are:
 - [`polyeq`](./elaboration/polyeq.md)
-- [`lia-generic`]()
+- [`hole`]()
 - [`local`](./elaboration/local.md)
 - [`uncrowd`](./elaboration/uncrowding.md)
 - [`reordering`](./elaboration/reordering.md)
-- [`hole`]()
 
 By default, Carcara will attempt to apply all of these in the listed order.
 
