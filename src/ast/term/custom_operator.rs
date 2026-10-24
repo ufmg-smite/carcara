@@ -1,6 +1,6 @@
 //! Custom operators, defined in `custom_operators.toml` and loaded at compile time.
 
-use super::{Rc, Sort, pool::Pool};
+use crate::ast::{Rc, Sort, pool::Pool};
 
 /// A sort in the type signature of a custom operator.
 #[derive(Debug)]

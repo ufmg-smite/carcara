@@ -3,7 +3,6 @@
 //! This module also contains various utilities for manipulating Alethe proofs and terms.
 
 mod context;
-mod custom_operator;
 mod evaluate;
 mod iter;
 mod macros;
@@ -15,13 +14,11 @@ mod problem;
 mod proof;
 pub mod rare_rules;
 mod rc;
-mod sort;
 mod substitution;
 mod term;
 #[cfg(test)]
 mod tests;
 
-pub use custom_operator::{CustomOperator, OperatorSig, SortSig};
 pub use evaluate::Value;
 pub use iter::ProofIter;
 pub use node::{ProofNode, ProofNodeForest, StepNode, SubproofNode};
@@ -29,17 +26,18 @@ pub use polyeq::{Polyeq, PolyeqComparable, PolyeqConfig, alpha_equiv, polyeq};
 pub use problem::{Problem, ProblemPrelude};
 pub use proof::{AnchorArg, Proof, ProofCommand, ProofStep, Subproof};
 pub use rc::Rc;
-pub use sort::Sort;
 pub use substitution::{SortSubstitution, Substitution, SubstitutionError};
 pub use term::{
     Binder, BindingList, Constant, MatchCase, MatchPattern, NaryCase, Operator, ParamOperator,
     QualifiedOperator, SortedVar, Term,
+    custom_operator::{CustomOperator, OperatorSig, SortSig},
+    sort::Sort,
 };
 
 pub(crate) use carcara_macros::match_term;
 pub(crate) use context::ContextStack;
-pub(crate) use custom_operator::lookup_operator;
 pub(crate) use macros::{build_sort, build_term, impl_str_conversion_traits, match_term_err};
+pub(crate) use term::custom_operator::lookup_operator;
 
 #[cfg(test)]
 pub(crate) use node::compare_forests;
