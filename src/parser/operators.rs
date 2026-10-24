@@ -2,7 +2,7 @@
 
 use super::{
     Parser,
-    error::{ParserError, SortError, assert_num_args, check_relation_sort, check_set_sort},
+    error::{ParserError, SortError, assert_num_args, check_relation_sort},
 };
 use crate::{
     ast::{Constant, Operator, Rc, Sort, Term},
@@ -45,8 +45,6 @@ enum ArgsCheck {
     FirstThenAllEq(ArgSort),
     /// All arguments are pairwise equal, with no other constraint.
     AllEq,
-    /// All arguments are pairwise equal, and each independently satisfies this constraint.
-    AllEqAndEach(ArgSort),
     /// One explicit constraint per argument position.
     Positional(&'static [ArgSort]),
 }
@@ -67,13 +65,6 @@ impl ArgsCheck {
                 Ok(parser.check_sort_all_eq(sorts)?)
             }
             ArgsCheck::AllEq => Ok(parser.check_sort_all_eq(sorts)?),
-            ArgsCheck::AllEqAndEach(arg_sort) => {
-                parser.check_sort_all_eq(sorts)?;
-                for sort in sorts {
-                    arg_sort.check(parser, sort)?;
-                }
-                Ok(())
-            }
             ArgsCheck::Positional(arg_sorts) => {
                 for (arg_sort, sort) in arg_sorts.iter().zip(sorts) {
                     arg_sort.check(parser, sort)?;
@@ -156,7 +147,7 @@ enum OpCheck {
 /// Returns the type-checking behavior for `op`, given whether Int/Real subtyping is allowed.
 fn op_check(op: Operator, subtyping: bool) -> OpCheck {
     use ArgSort::{AnyBitVec, Exact, OneOf, Predicate};
-    use ArgsCheck::{AllEq, AllEqAndEach, Each, FirstThenAllEq, Positional, Unconstrained};
+    use ArgsCheck::{AllEq, Each, FirstThenAllEq, Positional, Unconstrained};
 
     match op {
         Operator::True | Operator::False => OpCheck::Rule(Rule::arity(0, Unconstrained)),
@@ -213,10 +204,6 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         Operator::IndexOf => OpCheck::Rule(Rule::arity(
             3,
             Positional(&[Exact(Sort::String), Exact(Sort::String), Exact(Sort::Int)]),
-        )),
-        Operator::IndexOfRe => OpCheck::Rule(Rule::arity(
-            3,
-            Positional(&[Exact(Sort::String), Exact(Sort::RegLan), Exact(Sort::Int)]),
         )),
         Operator::Replace | Operator::ReplaceAll => {
             OpCheck::Rule(Rule::arity(3, Each(Exact(Sort::String))))
@@ -285,41 +272,11 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         | Operator::BvSGe => OpCheck::Rule(Rule::arity(2, FirstThenAllEq(AnyBitVec))),
         Operator::BvIte => OpCheck::Custom,
         Operator::RareList => OpCheck::Rule(Rule::arity(.., Unconstrained)),
-        Operator::Pow2 | Operator::Log2 | Operator::IsPow2 => {
-            OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Int))))
-        }
-        Operator::RealPi => OpCheck::Rule(Rule::arity(0, Unconstrained)),
-        Operator::Sqrt
-        | Operator::Exp
-        | Operator::Sin
-        | Operator::Cos
-        | Operator::Tan
-        | Operator::Csc
-        | Operator::Sec
-        | Operator::Cot
-        | Operator::Arcsin
-        | Operator::Arccos
-        | Operator::Arctan
-        | Operator::Arccsc
-        | Operator::Arcsec
-        | Operator::Arccot => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Real)))),
-        Operator::SetUnion | Operator::SetInter | Operator::SetMinus | Operator::SetSubset => {
-            OpCheck::Rule(Rule::arity(2, AllEqAndEach(Predicate(check_set_sort))))
-        }
-        // Note: `set.singleton` genuinely has no sort check in the original code
-        Operator::SetSingleton => OpCheck::Rule(Rule::arity(1, Unconstrained)),
-        Operator::SetMember => OpCheck::Custom,
-        Operator::SetIsEmpty
-        | Operator::SetIsSingleton
-        | Operator::SetCard
-        | Operator::SetComplement => OpCheck::Rule(Rule::arity(1, Each(Predicate(check_set_sort)))),
         Operator::SetInsert => OpCheck::Custom,
         Operator::Tuple => OpCheck::Rule(Rule::arity(1.., Unconstrained)),
-        Operator::TupleUnit => OpCheck::Rule(Rule::arity(0, Unconstrained)),
         Operator::RelTranspose => {
             OpCheck::Rule(Rule::arity(1, Each(Predicate(check_relation_sort))))
         }
-        Operator::RelTclosure => OpCheck::Custom,
         // TODO: `rel.join`/`rel.product` sort checking could be more precise
         Operator::RelJoin | Operator::RelProduct => {
             OpCheck::Rule(Rule::arity(2, Each(Predicate(check_relation_sort))))
@@ -387,35 +344,11 @@ fn custom_check(
                 Err(ParserError::ExpectedAnAutomatonDeclaration(args[0].clone()))
             }
         }
-        Operator::SetMember => {
-            assert_num_args(sorts, 2)?;
-            let expected = parser.pool.add_sort(Sort::Set(sorts[0].clone()));
-            parser.check_sort_eq(&expected, &sorts[1])?;
-            Ok(None)
-        }
         Operator::SetInsert => {
             assert_num_args(sorts, 2..)?;
             parser.check_sort_all_eq(&sorts[..sorts.len() - 1])?;
             let expected = parser.pool.add_sort(Sort::Set(sorts[0].clone()));
             parser.check_sort_eq(&expected, sorts.last().unwrap())?;
-            Ok(None)
-        }
-        Operator::RelTclosure => {
-            assert_num_args(sorts, 1)?;
-            check_relation_sort(&sorts[0])?;
-            let Sort::Set(tuple) = sorts[0].as_ref() else {
-                unreachable!()
-            };
-            let Sort::Tuple(elems) = tuple.as_ref() else {
-                unreachable!()
-            };
-            if elems.len() != 2 {
-                // Hacky way to print an error saying the relation should be binary
-                let any = parser.pool.add_sort(Sort::Var("?".into()));
-                let tuple = parser.pool.add_sort(Sort::Tuple(vec![any.clone(), any]));
-                let expected = vec![parser.pool.add_sort(Sort::Set(tuple))].into_boxed_slice();
-                return Err(SortError { expected, got: sorts[0].clone() }.into());
-            }
             Ok(None)
         }
         Operator::BvIte => {

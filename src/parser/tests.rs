@@ -924,6 +924,74 @@ fn test_custom_operators() {
         parse_term_err("(str.update \"abc\" 1)"),
         Error::Parser(ParserError::WrongNumberOfArgs(_, _), _, _),
     ));
+
+    let term = parse_term(&mut p, "(int.pow2 3)");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Int);
+
+    let term = parse_term(&mut p, "(int.ispow2 3)");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Bool);
+
+    let term = parse_term(&mut p, "(sin real.pi)");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Real);
+
+    let term = parse_term(&mut p, "(str.indexof_re \"abc\" re.all 0)");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Int);
+
+    assert!(matches!(
+        parse_term_err("(sin 1)"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+}
+
+#[test]
+fn test_parametric_custom_operators() {
+    let mut p = Pool::new();
+    let [int, string] = [Sort::Int, Sort::String].map(|s| p.add_sort(s));
+
+    let term = parse_term(
+        &mut p,
+        "(set.union (set.singleton \"a\") (set.singleton \"b\"))",
+    );
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Set(string));
+
+    let term = parse_term(&mut p, "(set.member 1 (set.singleton 2))");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Bool);
+
+    let term = parse_term(&mut p, "(set.card (set.singleton 1))");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Int);
+
+    let term = parse_term(&mut p, "(rel.tclosure (set.singleton (tuple 1 2)))");
+    let pair = p.add_sort(Sort::Tuple(vec![int.clone(), int]));
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Set(pair));
+
+    let term = parse_term(&mut p, "tuple.unit");
+    assert_eq!(p.sort(&term).as_ref(), &Sort::Tuple(Vec::new()));
+
+    assert!(matches!(
+        parse_term_err("(set.member 1 (set.singleton \"a\"))"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(set.card 1)"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(rel.tclosure (set.singleton (tuple 1 \"a\")))"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+    assert!(matches!(
+        parse_term_err("(rel.tclosure (set.singleton (tuple 1 2 3)))"),
+        Error::Parser(ParserError::SortError(_), _, _),
+    ));
+
+    // Like in RARE rules, terms whose sort is a sort variable are accepted
+    let [member, card] = parse_terms(
+        &mut p,
+        "(declare-const @T0 Type) (declare-const x @T0)",
+        ["(set.member x (set.singleton 1))", "(set.card x)"],
+    );
+    assert_eq!(p.sort(&member).as_ref(), &Sort::Bool);
+    assert_eq!(p.sort(&card).as_ref(), &Sort::Int);
 }
 
 #[test]

@@ -8,8 +8,108 @@
 #
 # Operators can also declare sort parameters in `params`, which can be used in the other sorts.
 #
-# The entries below are real cvc5 string extensions carcara doesn't implement as built-ins, see
-# https://cvc5.github.io/docs/cvc5-1.0.2/theories/strings.html
+# Every operator here is a cvc5 extension to SMT-LIB. Standard SMT-LIB operators are built-ins,
+# in `enum Operator`.
+
+# Integer operators
+
+[[operator]]
+name = "int.pow2"
+return_type = "Int"
+arg_types = ["Int"]
+
+[[operator]]
+name = "int.log2"
+return_type = "Int"
+arg_types = ["Int"]
+
+[[operator]]
+name = "int.ispow2"
+return_type = "Bool"
+arg_types = ["Int"]
+
+# Transcendentals, see https://cvc5.github.io/docs-ci/docs-main/theories/transcendentals.html
+
+[[operator]]
+name = "real.pi"
+return_type = "Real"
+
+[[operator]]
+name = "sqrt"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "exp"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "sin"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "cos"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "tan"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "csc"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "sec"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "cot"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "arcsin"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "arccos"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "arctan"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "arccsc"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "arcsec"
+return_type = "Real"
+arg_types = ["Real"]
+
+[[operator]]
+name = "arccot"
+return_type = "Real"
+arg_types = ["Real"]
+
+# Strings, see https://cvc5.github.io/docs-ci/docs-main/theories/strings.html
+
+[[operator]]
+name = "str.indexof_re"
+return_type = "Int"
+arg_types = ["String", "RegLan", "Int"]
 
 [[operator]]
 name = "str.rev"
@@ -30,3 +130,75 @@ arg_types = ["String"]
 name = "str.update"
 return_type = "String"
 arg_types = ["String", "Int", "String"]
+
+# Sets and relations, see https://cvc5.github.io/docs-ci/docs-main/theories/sets-and-relations.html
+
+[[operator]]
+name = "set.union"
+params = ["X"]
+return_type = ["Set", "X"]
+arg_types = [["Set", "X"], ["Set", "X"]]
+
+[[operator]]
+name = "set.inter"
+params = ["X"]
+return_type = ["Set", "X"]
+arg_types = [["Set", "X"], ["Set", "X"]]
+
+[[operator]]
+name = "set.minus"
+params = ["X"]
+return_type = ["Set", "X"]
+arg_types = [["Set", "X"], ["Set", "X"]]
+
+[[operator]]
+name = "set.member"
+params = ["X"]
+return_type = "Bool"
+arg_types = ["X", ["Set", "X"]]
+
+[[operator]]
+name = "set.subset"
+params = ["X"]
+return_type = "Bool"
+arg_types = [["Set", "X"], ["Set", "X"]]
+
+[[operator]]
+name = "set.singleton"
+params = ["X"]
+return_type = ["Set", "X"]
+arg_types = ["X"]
+
+[[operator]]
+name = "set.is_empty"
+params = ["X"]
+return_type = "Bool"
+arg_types = [["Set", "X"]]
+
+[[operator]]
+name = "set.is_singleton"
+params = ["X"]
+return_type = "Bool"
+arg_types = [["Set", "X"]]
+
+[[operator]]
+name = "set.card"
+params = ["X"]
+return_type = "Int"
+arg_types = [["Set", "X"]]
+
+[[operator]]
+name = "set.complement"
+params = ["X"]
+return_type = ["Set", "X"]
+arg_types = [["Set", "X"]]
+
+[[operator]]
+name = "tuple.unit"
+return_type = "UnitTuple"
+
+[[operator]]
+name = "rel.tclosure"
+params = ["X"]
+return_type = ["Set", ["Tuple", "X", "X"]]
+arg_types = [["Set", ["Tuple", "X", "X"]]]

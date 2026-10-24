@@ -1,4 +1,4 @@
-use super::{Constant, Operator, ParamOperator, Rc, Sort, Term, pool::Pool};
+use super::{Constant, CustomOperator, Operator, ParamOperator, Rc, Sort, Term, pool::Pool};
 use rug::{
     Integer, Rational,
     ops::{DivRounding, RemRounding},
@@ -356,7 +356,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
             Value::Real(r) => Value::Real(r.clone().abs()),
             _ => return None,
         },
-        Operator::Pow2 => {
+        Operator::Custom(CustomOperator::IntPow2) => {
             let v = args[0].as_ref()?.as_int()?;
             if v < 0 {
                 return Some(Value::Integer(Integer::from(0)));
@@ -364,7 +364,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
             let v = v.to_usize()?;
             Value::Integer(Integer::from(1) << v)
         }
-        Operator::Log2 => {
+        Operator::Custom(CustomOperator::IntLog2) => {
             let v = args[0].as_ref()?.as_int()?;
             if v <= 0 {
                 Value::Integer(Integer::from(0))
@@ -372,27 +372,10 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
                 Value::Integer(Integer::from(v.significant_bits() - 1))
             }
         }
-        Operator::IsPow2 => {
+        Operator::Custom(CustomOperator::IntIspow2) => {
             let v = args[0].as_ref()?.as_int()?;
             Value::Bool(v.is_power_of_two())
         }
-
-        // TODO: Transcendentals
-        Operator::RealPi
-        | Operator::Sqrt
-        | Operator::Exp
-        | Operator::Sin
-        | Operator::Cos
-        | Operator::Tan
-        | Operator::Csc
-        | Operator::Sec
-        | Operator::Cot
-        | Operator::Arcsin
-        | Operator::Arccos
-        | Operator::Arctan
-        | Operator::Arccsc
-        | Operator::Arcsec
-        | Operator::Arccot => return None,
 
         Operator::LessThan => comparison_op!(<, args),
         Operator::GreaterThan => comparison_op!(>, args),
@@ -483,8 +466,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
             let index_found = trimmed[..index_found].chars().count();
             Value::Integer(Integer::from(i + index_found))
         }
-        Operator::IndexOfRe
-        | Operator::Replace
+        Operator::Replace
         | Operator::ReplaceAll
         | Operator::ReplaceRe
         | Operator::ReplaceReAll
@@ -734,21 +716,9 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
         Operator::RareList | Operator::Cl | Operator::Delete => return None,
 
         // TODO: Sets and relations
-        Operator::SetUnion
-        | Operator::SetInter
-        | Operator::SetMinus
-        | Operator::SetMember
-        | Operator::SetSubset
-        | Operator::SetSingleton
-        | Operator::SetIsEmpty
-        | Operator::SetIsSingleton
-        | Operator::SetCard
-        | Operator::SetInsert
-        | Operator::SetComplement
+        Operator::SetInsert
         | Operator::Tuple
-        | Operator::TupleUnit
         | Operator::RelTranspose
-        | Operator::RelTclosure
         | Operator::RelJoin
         | Operator::RelProduct
         | Operator::Custom(_) => return None,

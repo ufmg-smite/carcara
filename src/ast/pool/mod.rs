@@ -302,11 +302,9 @@ impl Pool {
                     y.clone()
                 }
                 Operator::Store => self.compute_sort(&args[0]).clone(),
-                Operator::StrLen
-                | Operator::IndexOf
-                | Operator::IndexOfRe
-                | Operator::StrToCode
-                | Operator::StrToInt => self.add_sort(Sort::Int),
+                Operator::StrLen | Operator::IndexOf | Operator::StrToCode | Operator::StrToInt => {
+                    self.add_sort(Sort::Int)
+                }
                 Operator::StrConcat
                 | Operator::CharAt
                 | Operator::Substring
@@ -336,39 +334,7 @@ impl Pool {
                     [] => self.add_sort(Sort::Var("?".to_owned())),
                     [arg, ..] => self.compute_sort(arg).clone(),
                 },
-                Operator::Pow2 | Operator::Log2 => self.add_sort(Sort::Int),
-                Operator::IsPow2 => self.add_sort(Sort::Bool),
-
-                Operator::RealPi
-                | Operator::Sqrt
-                | Operator::Exp
-                | Operator::Sin
-                | Operator::Cos
-                | Operator::Tan
-                | Operator::Csc
-                | Operator::Sec
-                | Operator::Cot
-                | Operator::Arcsin
-                | Operator::Arccos
-                | Operator::Arctan
-                | Operator::Arccsc
-                | Operator::Arcsec
-                | Operator::Arccot => self.add_sort(Sort::Real),
-
                 // Sets and relations
-                Operator::SetUnion
-                | Operator::SetInter
-                | Operator::SetMinus
-                | Operator::SetComplement => self.compute_sort(&args[0]).clone(),
-                Operator::SetMember
-                | Operator::SetSubset
-                | Operator::SetIsEmpty
-                | Operator::SetIsSingleton => self.add_sort(Sort::Bool),
-                Operator::SetSingleton => {
-                    let elem_sort = Sort::Set(self.compute_sort(&args[0]).clone());
-                    self.add_sort(elem_sort)
-                }
-                Operator::SetCard => self.add_sort(Sort::Int),
                 Operator::SetInsert => self.compute_sort(args.last().unwrap()).clone(),
                 Operator::Tuple => {
                     let sorts = args
@@ -377,7 +343,6 @@ impl Pool {
                         .collect();
                     self.add_sort(Sort::Tuple(sorts))
                 }
-                Operator::TupleUnit => self.add_sort(Sort::Tuple(Vec::new())),
                 Operator::RelTranspose => {
                     let sort = self.compute_sort(&args[0]);
                     let Sort::Set(tuple) = sort.as_ref() else {
@@ -391,7 +356,6 @@ impl Pool {
                     let tuple = self.add_sort(Sort::Tuple(sorts));
                     self.add_sort(Sort::Set(tuple))
                 }
-                Operator::RelTclosure => self.compute_sort(&args[0]).clone(),
                 Operator::RelJoin => {
                     let [mut left, right] = [&args[0], &args[1]].map(|arg| {
                         let sort = self.compute_sort(arg).clone();
