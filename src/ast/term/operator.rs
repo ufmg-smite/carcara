@@ -452,15 +452,12 @@ impl Operator {
     /// If this is a binary operator that can be applied to multiple arguments, returns an
     /// `[NaryCase]` representing its behaviour in that situation. Otherwise, returns `None`.
     pub fn nary_case(&self) -> Option<NaryCase> {
-        // We avoid using the wildcard pattern (i.e. `_`) in this match expression so that when
-        // someone adds a new operator, they are reminded to add it to this match
         match self {
             // Logical
             Operator::Implies => Some(NaryCase::RightAssoc),
             Operator::And | Operator::Or | Operator::Xor => Some(NaryCase::LeftAssoc),
             Operator::Equals => Some(NaryCase::Chainable),
             Operator::Distinct => Some(NaryCase::Pairwise),
-            Operator::True | Operator::False | Operator::Not | Operator::Ite => None,
 
             // Integers/Reals
             Operator::Add
@@ -471,14 +468,6 @@ impl Operator {
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 Some(NaryCase::Chainable)
             }
-            Operator::Mod
-            | Operator::Abs
-            | Operator::ToReal
-            | Operator::ToInt
-            | Operator::IsInt => None,
-
-            // Arrays
-            Operator::Select | Operator::Store => None,
 
             // Strings
             Operator::StrConcat
@@ -487,117 +476,16 @@ impl Operator {
             | Operator::ReIntersection
             | Operator::ReDiff => Some(NaryCase::LeftAssoc),
             Operator::StrLessThan | Operator::StrLessEq => Some(NaryCase::Chainable),
-            Operator::StrLen
-            | Operator::CharAt
-            | Operator::Substring
-            | Operator::PrefixOf
-            | Operator::SuffixOf
-            | Operator::Contains
-            | Operator::IndexOf
-            | Operator::Replace
-            | Operator::ReplaceAll
-            | Operator::ReplaceRe
-            | Operator::ReplaceReAll
-            | Operator::StrIsDigit
-            | Operator::StrToCode
-            | Operator::StrFromCode
-            | Operator::StrToInt
-            | Operator::StrFromInt
-            | Operator::StrToRe
-            | Operator::StrInRe
-            | Operator::ReNone
-            | Operator::ReAll
-            | Operator::ReAllChar
-            | Operator::ReKleeneClosure
-            | Operator::ReComplement
-            | Operator::ReKleeneCross
-            | Operator::ReOption
-            | Operator::ReRange
-            | Operator::ReFromAutomaton => None,
 
             // Bitvectors
             Operator::BvAnd | Operator::BvOr | Operator::BvAdd | Operator::BvMul => {
                 Some(NaryCase::LeftAssoc)
             }
-            Operator::BvNot
-            | Operator::BvNeg
-            | Operator::BvUDiv
-            | Operator::BvURem
-            | Operator::BvShl
-            | Operator::BvLShr
-            | Operator::BvULt
-            | Operator::BvConcat
-            | Operator::BvNAnd
-            | Operator::BvNOr
-            | Operator::BvXor
-            | Operator::BvXNor
-            | Operator::BvComp
-            | Operator::BvSub
-            | Operator::BvSDiv
-            | Operator::BvSRem
-            | Operator::BvSMod
-            | Operator::BvAShr
-            | Operator::BvULe
-            | Operator::BvUGt
-            | Operator::BvUGe
-            | Operator::BvSLt
-            | Operator::BvSLe
-            | Operator::BvSGt
-            | Operator::BvSGe
-            | Operator::UBvToInt
-            | Operator::SBvToInt
-            | Operator::BvPBbTerm
-            | Operator::BvBbTerm
-            | Operator::BvConst
-            | Operator::BvSize
-            | Operator::BvIte
-            | Operator::RareList => None,
 
             // Clausal
             Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
 
-            // Sets and relations
-            Operator::SetInsert
-            | Operator::Tuple
-            | Operator::RelTranspose
-            | Operator::RelJoin
-            | Operator::RelProduct => None,
-
-            Operator::IntPow2
-            | Operator::IntLog2
-            | Operator::IntIspow2
-            | Operator::RealPi
-            | Operator::Sqrt
-            | Operator::Exp
-            | Operator::Sin
-            | Operator::Cos
-            | Operator::Tan
-            | Operator::Csc
-            | Operator::Sec
-            | Operator::Cot
-            | Operator::Arcsin
-            | Operator::Arccos
-            | Operator::Arctan
-            | Operator::Arccsc
-            | Operator::Arcsec
-            | Operator::Arccot
-            | Operator::StrIndexofRe
-            | Operator::StrRev
-            | Operator::StrToLower
-            | Operator::StrToUpper
-            | Operator::StrUpdate
-            | Operator::SetUnion
-            | Operator::SetInter
-            | Operator::SetMinus
-            | Operator::SetMember
-            | Operator::SetSubset
-            | Operator::SetSingleton
-            | Operator::SetIsEmpty
-            | Operator::SetIsSingleton
-            | Operator::SetCard
-            | Operator::SetComplement
-            | Operator::TupleUnit
-            | Operator::RelTclosure => None,
+            _ => None,
         }
     }
 }
