@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
+use std::path::Path;
 use syn::parse_macro_input;
 
 /// A parsed `custom_operators.toml` file.
@@ -124,41 +125,30 @@ fn pascal_case_ident(name: &str) -> String {
         .collect()
 }
 
-pub fn custom_operators(input: TokenStream) -> TokenStream {
-    let relative_path = parse_macro_input!(input as syn::LitStr).value();
+struct Operators {
+    names: Vec<String>,
+    idents: Vec<Ident>,
+    sigs: Vec<TokenStream2>,
+}
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let full_path = std::path::Path::new(&manifest_dir).join(&relative_path);
-    let full_path_str = full_path.to_str().expect("config path is not valid UTF-8");
-
-    let content = std::fs::read_to_string(&full_path)
-        .unwrap_or_else(|e| panic!("failed to read `{}`: {e}", full_path.display()));
+fn load_operators(path: &Path) -> Operators {
+    let content = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("failed to read `{}`: {e}", path.display()));
     let config: CustomOperatorsConfig = toml::from_str(&content)
-        .unwrap_or_else(|e| panic!("failed to parse `{}`: {e}", full_path.display()));
-
-    let mut seen_names = std::collections::HashSet::new();
+        .unwrap_or_else(|e| panic!("failed to parse `{}`: {e}", path.display()));
     let mut seen_idents = std::collections::HashSet::new();
-    let mut variant_idents = Vec::new();
     let mut names = Vec::new();
-    let mut sig_exprs = Vec::new();
+    let mut idents = Vec::new();
+    let mut sigs = Vec::new();
 
     for entry in &config.operator {
-        if !seen_names.insert(entry.name.clone()) {
-            panic!("duplicate custom operator name `{}`", entry.name);
+        let name = &entry.name;
+        let ident = pascal_case_ident(name);
+        if ident.is_empty() {
+            panic!("operator name `{name}` does not yield a valid identifier");
         }
-
-        let ident_str = pascal_case_ident(&entry.name);
-        if ident_str.is_empty() {
-            panic!(
-                "custom operator name `{}` does not yield a valid identifier",
-                entry.name
-            );
-        }
-        if !seen_idents.insert(ident_str.clone()) {
-            panic!(
-                "custom operators `{}` and a previous entry both derive the identifier `{ident_str}`",
-                entry.name,
-            );
+        if !seen_idents.insert(ident.clone()) {
+            panic!("duplicate operator identifier `{ident}`");
         }
 
         let mut seen_params = std::collections::HashSet::new();
@@ -166,48 +156,48 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
             if builtin_sort_tokens(param).is_some()
                 || matches!(param.as_str(), "Array" | "Set" | "Tuple")
             {
-                panic!(
-                    "sort parameter `{param}` of custom operator `{}` shadows a built-in sort",
-                    entry.name,
-                );
+                panic!("sort parameter `{param}` of operator `{name}` shadows a built-in sort");
             }
             if !seen_params.insert(param) {
-                panic!(
-                    "duplicate sort parameter `{param}` for custom operator `{}`",
-                    entry.name,
-                );
+                panic!("duplicate sort parameter `{param}` for operator `{name}`");
             }
             if !entry.arg_types.iter().any(|t| t.mentions(param)) {
                 panic!(
-                    "sort parameter `{param}` of custom operator `{}` must occur in `arg_types`, \
+                    "sort parameter `{param}` of operator `{name}` must occur in `arg_types`, \
                     otherwise it can't be inferred",
-                    entry.name,
                 );
             }
         }
 
         let return_sort = sort_tokens(&entry.return_type, entry);
-        let arg_sorts: Vec<_> = entry
-            .arg_types
-            .iter()
-            .map(|t| sort_tokens(t, entry))
-            .collect();
-        let name = &entry.name;
+        let arg_sorts = entry.arg_types.iter().map(|t| sort_tokens(t, entry));
         let params = &entry.params;
-
-        sig_exprs.push(quote! {
+        let sig = quote! {
             OperatorSig {
                 name: #name,
                 params: &[#(#params),*],
                 arg_sorts: &[#(#arg_sorts),*],
                 return_sort: #return_sort,
             }
-        });
+        };
         names.push(name.clone());
-        variant_idents.push(format_ident!("{}", ident_str));
+        idents.push(format_ident!("{ident}"));
+        sigs.push(sig.clone());
     }
 
-    let num_operators = variant_idents.len();
+    Operators { names, idents, sigs }
+}
+
+pub fn custom_operators(input: TokenStream) -> TokenStream {
+    let relative_path = parse_macro_input!(input as syn::LitStr).value();
+
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let full_path = std::path::Path::new(&manifest_dir).join(&relative_path);
+    let full_path_str = full_path.to_str().expect("config path is not valid UTF-8");
+
+    let Operators { names, idents, sigs } = load_operators(&full_path);
+
+    let num_operators = idents.len();
 
     quote! {
         // `include_str!` registers the config as a tracked input, since `tracked_path` is unstable.
@@ -217,19 +207,19 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
         /// A custom operator, defined via `custom_operators.toml`.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum CustomOperator {
-            #(#variant_idents),*
+            #(#idents),*
         }
 
         impl CustomOperator {
             /// All custom operators, in declaration order.
             pub const ALL: &'static [CustomOperator] = &[
-                #(CustomOperator::#variant_idents),*
+                #(CustomOperator::#idents),*
             ];
 
             /// Looks up a custom operator by name, returning `None` if it isn't one.
             pub fn lookup(name: &str) -> Option<Self> {
                 match name {
-                    #(#names => Some(CustomOperator::#variant_idents),)*
+                    #(#names => Some(CustomOperator::#idents),)*
                     _ => None,
                 }
             }
@@ -237,7 +227,7 @@ pub fn custom_operators(input: TokenStream) -> TokenStream {
             /// Returns this operator's type signature.
             pub fn sig(self) -> &'static OperatorSig {
                 static SIGS: [OperatorSig; #num_operators] = [
-                    #(#sig_exprs),*
+                    #(#sigs),*
                 ];
                 &SIGS[self as usize]
             }
