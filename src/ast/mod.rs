@@ -28,9 +28,9 @@ pub use proof::{AnchorArg, Proof, ProofCommand, ProofStep, Subproof};
 pub use rc::Rc;
 pub use substitution::{SortSubstitution, Substitution, SubstitutionError};
 pub use term::{
-    Binder, BindingList, Constant, MatchCase, MatchPattern, NaryCase, Operator, ParamOperator,
-    QualifiedOperator, SortedVar, Term,
-    custom_operator::{CustomOperator, OperatorSig, SortSig},
+    Binder, BindingList, Constant, MatchCase, MatchPattern, ParamOperator, QualifiedOperator,
+    SortedVar, Term,
+    custom_operator::{CustomOperator, NaryCase, Operator, OperatorSig, SortSig},
     sort::Sort,
 };
 
