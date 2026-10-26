@@ -1,9 +1,9 @@
-pub mod custom_operator;
+pub mod operator;
 pub mod sort;
 
 use super::{Rc, macros::impl_str_conversion_traits, match_term, match_term_err, pool::Pool};
 use crate::{CheckerError, automata::Automaton};
-use custom_operator::Operator;
+use operator::Operator;
 use rug::{Integer, Rational};
 use sort::Sort;
 use std::{hash::Hash, ops::Deref};
