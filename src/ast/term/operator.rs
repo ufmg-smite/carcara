@@ -1,7 +1,7 @@
 use crate::ast::{Rc, Sort, pool::Pool};
 
 /// The operator of an operation term.
-#[carcara_macros::extend_operator_enum("custom_operators.toml")]
+#[carcara_macros::extend_operator_enum("operators.toml")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     /// The `true` boolean constant.
@@ -521,7 +521,7 @@ pub enum NaryCase {
     Pairwise,
 }
 
-/// A sort in the type signature of a custom operator.
+/// A sort in the type signature of an operator.
 #[derive(Debug)]
 pub enum SortSig {
     Var(usize),
@@ -603,7 +603,7 @@ impl SortSig {
     }
 }
 
-/// The type signature of a custom operator.
+/// The type signature of an operator.
 #[derive(Debug)]
 pub struct OperatorSig {
     pub name: &'static str,

@@ -3,18 +3,18 @@ use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use std::path::Path;
 
-/// A parsed `custom_operators.toml` file.
+/// A parsed `operators.toml` file.
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CustomOperatorsConfig {
+struct OperatorsConfig {
     #[serde(default)]
-    operator: Vec<CustomOperatorEntry>,
+    operator: Vec<OperatorEntry>,
 }
 
 /// One `[[operator]]` entry parsed from the config file.
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CustomOperatorEntry {
+struct OperatorEntry {
     name: String,
     #[serde(default)]
     params: Vec<String>,
@@ -77,13 +77,13 @@ fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
 }
 
 /// Maps a supported sort to the tokens for its `SortSig`, panicking on an unknown sort.
-fn sort_tokens(sort: &SortExpr, entry: &CustomOperatorEntry) -> TokenStream2 {
+fn sort_tokens(sort: &SortExpr, entry: &OperatorEntry) -> TokenStream2 {
     let op_name = &entry.name;
     match sort {
         SortExpr::Name(name) => match entry.params.iter().position(|p| p == name) {
             Some(i) => quote! { SortSig::Var(#i) },
             None => builtin_sort_tokens(name)
-                .unwrap_or_else(|| panic!("unknown sort `{name}` for custom operator `{op_name}`")),
+                .unwrap_or_else(|| panic!("unknown sort `{name}` for operator `{op_name}`")),
         },
         SortExpr::App(items) => match items.as_slice() {
             [SortExpr::Name(head), args @ ..] => match (head.as_str(), args) {
@@ -99,15 +99,14 @@ fn sort_tokens(sort: &SortExpr, entry: &CustomOperatorEntry) -> TokenStream2 {
                     let args = args.iter().map(|s| sort_tokens(s, entry));
                     quote! { SortSig::Tuple(&[#(#args),*]) }
                 }
-                ("Array" | "Set" | "Tuple", _) => panic!(
-                    "wrong number of arguments in sort `{sort}` for custom operator `{op_name}`"
-                ),
+                ("Array" | "Set" | "Tuple", _) => {
+                    panic!("wrong number of arguments in sort `{sort}` for operator `{op_name}`")
+                }
                 _ => panic!(
-                    "unknown sort constructor `{head}` in sort `{sort}` for custom operator \
-                    `{op_name}`"
+                    "unknown sort constructor `{head}` in sort `{sort}` for operator `{op_name}`"
                 ),
             },
-            _ => panic!("invalid sort `{sort}` for custom operator `{op_name}`"),
+            _ => panic!("invalid sort `{sort}` for operator `{op_name}`"),
         },
     }
 }
@@ -133,7 +132,7 @@ struct Operators {
 fn load_operators(path: &Path) -> Operators {
     let content = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("failed to read `{}`: {e}", path.display()));
-    let config: CustomOperatorsConfig = toml::from_str(&content)
+    let config: OperatorsConfig = toml::from_str(&content)
         .unwrap_or_else(|e| panic!("failed to parse `{}`: {e}", path.display()));
     let mut seen_idents = std::collections::HashSet::new();
     let mut names = Vec::new();
@@ -243,7 +242,7 @@ pub fn extend_operator_enum(config_path: &Path, mut enum_item: syn::ItemEnum) ->
     quote! {
         // `include_str!` registers the config as a tracked input, since `tracked_path` is unstable.
         #[doc(hidden)]
-        const _CUSTOM_OPERATORS_TOML: &str = include_str!(#path_str);
+        const _OPERATORS_TOML: &str = include_str!(#path_str);
 
         #enum_item
 

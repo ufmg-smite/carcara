@@ -1,5 +1,5 @@
-mod custom_operators;
 mod match_term;
+mod operator;
 mod version_string;
 
 use proc_macro::TokenStream;
@@ -14,7 +14,7 @@ pub fn extend_operator_enum(attr: TokenStream, input: TokenStream) -> TokenStrea
     let enum_item = parse_macro_input!(input as syn::ItemEnum);
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let config_path = Path::new(&manifest_dir).join(relative_path);
-    custom_operators::extend_operator_enum(&config_path, enum_item)
+    operator::extend_operator_enum(&config_path, enum_item)
 }
 
 #[proc_macro]
