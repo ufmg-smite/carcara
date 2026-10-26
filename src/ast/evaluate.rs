@@ -1,4 +1,4 @@
-use super::{Constant, CustomOperator, Operator, ParamOperator, Rc, Sort, Term, pool::Pool};
+use super::{Constant, Operator, ParamOperator, Rc, Sort, Term, pool::Pool};
 use rug::{
     Integer, Rational,
     ops::{DivRounding, RemRounding},
@@ -356,7 +356,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
             Value::Real(r) => Value::Real(r.clone().abs()),
             _ => return None,
         },
-        Operator::Custom(CustomOperator::IntPow2) => {
+        Operator::IntPow2 => {
             let v = args[0].as_ref()?.as_int()?;
             if v < 0 {
                 return Some(Value::Integer(Integer::from(0)));
@@ -364,7 +364,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
             let v = v.to_usize()?;
             Value::Integer(Integer::from(1) << v)
         }
-        Operator::Custom(CustomOperator::IntLog2) => {
+        Operator::IntLog2 => {
             let v = args[0].as_ref()?.as_int()?;
             if v <= 0 {
                 Value::Integer(Integer::from(0))
@@ -372,7 +372,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
                 Value::Integer(Integer::from(v.significant_bits() - 1))
             }
         }
-        Operator::Custom(CustomOperator::IntIspow2) => {
+        Operator::IntIspow2 => {
             let v = args[0].as_ref()?.as_int()?;
             Value::Bool(v.is_power_of_two())
         }
@@ -716,12 +716,7 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
         Operator::RareList | Operator::Cl | Operator::Delete => return None,
 
         // TODO: Sets and relations
-        Operator::SetInsert
-        | Operator::Tuple
-        | Operator::RelTranspose
-        | Operator::RelJoin
-        | Operator::RelProduct
-        | Operator::Custom(_) => return None,
+        _ => return None,
     })
 }
 

@@ -281,7 +281,7 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         Operator::RelJoin | Operator::RelProduct => {
             OpCheck::Rule(Rule::arity(2, Each(Predicate(check_relation_sort))))
         }
-        Operator::Custom(_) => OpCheck::Custom,
+        _ => OpCheck::Custom,
     }
 }
 
@@ -357,8 +357,8 @@ fn custom_check(
             parser.check_sort_all_eq(&sorts[1..])?;
             Ok(None)
         }
-        Operator::Custom(custom) => {
-            let sig = custom.sig();
+        other => {
+            let sig = other.sig().unwrap();
             assert_num_args(sorts, sig.arg_sorts.len())?;
             let mut params = vec![None; sig.params.len()];
             for (arg_sig, got) in sig.arg_sorts.iter().zip(sorts) {
@@ -370,7 +370,6 @@ fn custom_check(
             }
             Ok(None)
         }
-        op => unreachable!("operator {op:?} does not have custom type-checking logic"),
     }
 }
 

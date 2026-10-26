@@ -1,316 +1,416 @@
-use crate::ast::{Rc, Sort, macros::impl_str_conversion_traits, pool::Pool};
+use crate::ast::{Rc, Sort, pool::Pool};
 
 /// The operator of an operation term.
+#[carcara_macros::extend_operator_enum("custom_operators.toml")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
     /// The `true` boolean constant.
+    #[name("true")]
     True,
 
     /// The `false` boolean constant.
+    #[name("false")]
     False,
 
     // Logic
     /// The `not` operator.
+    #[name("not")]
     Not,
 
     /// The `=>` operator.
+    #[name("=>")]
     Implies,
 
     /// The `and` operator.
+    #[name("and")]
     And,
 
     /// The `or` operator.
+    #[name("or")]
     Or,
 
     /// The `xor` operator.
+    #[name("xor")]
     Xor,
 
     /// The `=` operator.
+    #[name("=")]
     Equals,
 
     /// The `distinct` operator.
+    #[name("distinct")]
     Distinct,
 
     /// The `ite` operator.
+    #[name("ite")]
     Ite,
 
     // Arithmetic
     /// The `+` operator.
+    #[name("+")]
     Add,
 
     /// The `-` operator.
+    #[name("-")]
     Sub,
 
     /// The `*` operator.
+    #[name("*")]
     Mult,
 
     /// The `div` operator.
+    #[name("div")]
     IntDiv,
 
     /// The `/` operator.
+    #[name("/")]
     RealDiv,
 
     /// The `mod` operator.
+    #[name("mod")]
     Mod,
 
     /// The `abs` operator.
+    #[name("abs")]
     Abs,
 
     /// The `<` operator.
+    #[name("<")]
     LessThan,
 
     /// The `>` operator.
+    #[name(">")]
     GreaterThan,
 
     /// The `<=` operator.
+    #[name("<=")]
     LessEq,
 
     /// The `>=` operator.
+    #[name(">=")]
     GreaterEq,
 
     /// The `to_real` operator.
+    #[name("to_real")]
     ToReal,
 
     /// The `to_int` operator.
+    #[name("to_int")]
     ToInt,
 
     /// The `is_int` operator.
+    #[name("is_int")]
     IsInt,
 
     // Arrays
     /// The `select` operator.
+    #[name("select")]
     Select,
 
     /// The `store` operator.
+    #[name("store")]
     Store,
 
     // Strings
     /// The `str.++` operator.
+    #[name("str.++")]
     StrConcat,
 
     /// The `str.len` operator.
+    #[name("str.len")]
     StrLen,
 
     /// The `str.<` operator.
+    #[name("str.<")]
     StrLessThan,
 
     /// The `str.<=` operator.
+    #[name("str.<=")]
     StrLessEq,
 
     /// The `str.at` operator.
+    #[name("str.at")]
     CharAt,
 
     /// The `str.substr` operator.
+    #[name("str.substr")]
     Substring,
 
     /// The `str.prefixof` operator.
+    #[name("str.prefixof")]
     PrefixOf,
 
     /// The `str.suffixof` operator.
+    #[name("str.suffixof")]
     SuffixOf,
 
     /// The `str.contains` operator.
+    #[name("str.contains")]
     Contains,
 
     /// The `str.indexof` operator.
+    #[name("str.indexof")]
     IndexOf,
 
     /// The `str.replace` operator.
+    #[name("str.replace")]
     Replace,
 
     /// The `str.replace_all` operator.
+    #[name("str.replace_all")]
     ReplaceAll,
 
     /// The `str.replace_re` operator.
+    #[name("str.replace_re")]
     ReplaceRe,
 
     /// The `str.replace_re_all` operator.
+    #[name("str.replace_re_all")]
     ReplaceReAll,
 
     /// The `str.is_digit` operator.
+    #[name("str.is_digit")]
     StrIsDigit,
 
     /// The `str.to_code` operator.
+    #[name("str.to_code")]
     StrToCode,
 
     /// The `str.from_code` operator.
+    #[name("str.from_code")]
     StrFromCode,
 
     /// The `str.to_int` operator.
+    #[name("str.to_int")]
     StrToInt,
 
     /// The `str.from_int` operator.
+    #[name("str.from_int")]
     StrFromInt,
 
     // Regular Expressions
     /// The `str.to_re` operator.
+    #[name("str.to_re")]
     StrToRe,
 
     /// The `str.in_re` operator.
+    #[name("str.in_re")]
     StrInRe,
 
     /// The `re.none` operator.
+    #[name("re.none")]
     ReNone,
 
     /// The `re.all` operator.
+    #[name("re.all")]
     ReAll,
 
     /// The `re.allchar` operator.
+    #[name("re.allchar")]
     ReAllChar,
 
     /// The `re.++` operator.
+    #[name("re.++")]
     ReConcat,
 
     /// The `re.union` operator.
+    #[name("re.union")]
     ReUnion,
 
     /// The `re.inter` operator.
+    #[name("re.inter")]
     ReIntersection,
 
     /// The `re.*` operator.
+    #[name("re.*")]
     ReKleeneClosure,
 
     /// The `re.comp` operator.
+    #[name("re.comp")]
     ReComplement,
 
     /// The `re.diff` operator.
+    #[name("re.diff")]
     ReDiff,
 
     /// The `re.+` operator.
+    #[name("re.+")]
     ReKleeneCross,
 
     /// The `re.opt` operator.
+    #[name("re.opt")]
     ReOption,
 
     /// The `re.range` operator.
+    #[name("re.range")]
     ReRange,
 
     /// The `re.from_automaton` operator.
+    #[name("re.from_automaton")]
     ReFromAutomaton,
 
     // BV operators (unary)
     /// The `bvnot` operator.
+    #[name("bvnot")]
     BvNot,
 
     /// The `bvneg` operator.
+    #[name("bvneg")]
     BvNeg,
 
     // BV operators (binary, left-assoc)
     /// The `bvand` operator.
+    #[name("bvand")]
     BvAnd,
 
     /// The `bvor` operator.
+    #[name("bvor")]
     BvOr,
 
     /// The `bvadd` operator.
+    #[name("bvadd")]
     BvAdd,
 
     /// The `bvmul` operator.
+    #[name("bvmul")]
     BvMul,
 
     // BV operators (binary)
     /// The `bvudiv` operator.
+    #[name("bvudiv")]
     BvUDiv,
 
     /// The `bvurem` operator.
+    #[name("bvurem")]
     BvURem,
 
     /// The `bvshl` operator.
+    #[name("bvshl")]
     BvShl,
 
     /// The `bvlshr` operator.
+    #[name("bvlshr")]
     BvLShr,
 
     /// The `bvult` operator.
+    #[name("bvult")]
     BvULt,
 
     /// The `concat` operator.
+    #[name("concat")]
     BvConcat,
 
     /// The `bvnand` operator.
+    #[name("bvnand")]
     BvNAnd,
 
     /// The `bvnor` operator.
+    #[name("bvnor")]
     BvNOr,
 
     /// The `bvxor` operator.
+    #[name("bvxor")]
     BvXor,
 
     /// The `bvxnor` operator.
+    #[name("bvxnor")]
     BvXNor,
 
     /// The `bvcomp` operator.
+    #[name("bvcomp")]
     BvComp,
 
     /// The `bvsub` operator.
+    #[name("bvsub")]
     BvSub,
 
     /// The `bvsdiv` operator.
+    #[name("bvsdiv")]
     BvSDiv,
 
     /// The `bvsrem` operator.
+    #[name("bvsrem")]
     BvSRem,
 
     /// The `bvsmod` operator.
+    #[name("bvsmod")]
     BvSMod,
 
     /// The `bvashr` operator.
+    #[name("bvashr")]
     BvAShr,
 
     /// The `bvule` operator.
+    #[name("bvule")]
     BvULe,
 
     /// The `bvugt` operator.
+    #[name("bvugt")]
     BvUGt,
 
     /// The `bvuge` operator.
+    #[name("bvuge")]
     BvUGe,
 
     /// The `bvslt` operator.
+    #[name("bvslt")]
     BvSLt,
 
     /// The `bvsle` operator.
+    #[name("bvsle")]
     BvSLe,
 
     /// The `bvsgt` operator.
+    #[name("bvsgt")]
     BvSGt,
 
     /// The `bvsge` operator.
+    #[name("bvsge")]
     BvSGe,
 
     /// The `ubv_to_int` operator.
+    #[name("ubv_to_int")]
     UBvToInt,
 
     /// The `sbv_to_int` operator.
+    #[name("sbv_to_int")]
     SBvToInt,
 
     /// The `@pbbterm` operator.
+    #[name("@pbbterm")]
     BvPBbTerm,
 
     /// The `@bbterm` operator.
+    #[name("@bbterm")]
     BvBbTerm,
 
     /// The `@bv` operator.
+    #[name("@bv")]
     BvConst,
 
     /// The `@bvsize` operator.
+    #[name("@bvsize")]
     BvSize,
 
     /// The `bvite` operator.
     ///
     /// This operator is not standard SMT-LIB, but from an extension of the bit-vectors theory used
     /// by cvc5. We have support for it to facilitate checking cvc5 proofs.
+    #[name("bvite")]
     BvIte,
 
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
+    #[name("rare-list")]
     RareList,
 
     // The clausal operators
     /// The `cl` operator.
+    #[name("cl")]
     Cl,
 
     /// The `@d` operator.
+    #[name("@d")]
     Delete,
 
     // Sets and relations
@@ -318,148 +418,37 @@ pub enum Operator {
     // These operators are from cvc5's "Sets and Relations" theory extension, see:
     // https://cvc5.github.io/docs-ci/docs-main/theories/sets-and-relations.html
     /// The `set.insert` operator.
+    #[name("set.insert")]
     SetInsert,
 
     /// The `tuple` operator.
+    #[name("tuple")]
     Tuple,
 
     /// The `rel.transpose` operator.
+    #[name("rel.transpose")]
     RelTranspose,
 
     /// The `rel.join` operator.
+    #[name("rel.join")]
     RelJoin,
 
     /// The `rel.product` operator.
+    #[name("rel.product")]
     RelProduct,
-
-    /// A custom operator, defined via `custom_operators.toml`.
-    Custom(CustomOperator),
 }
 
-impl_str_conversion_traits!(Operator {
-    True: "true",
-    False: "false",
-
-    Not: "not",
-    Implies: "=>",
-    And: "and",
-    Or: "or",
-    Xor: "xor",
-    Equals: "=",
-    Distinct: "distinct",
-    Ite: "ite",
-
-    Add: "+",
-    Sub: "-",
-    Mult: "*",
-    IntDiv: "div",
-    RealDiv: "/",
-    Mod: "mod",
-    Abs: "abs",
-    LessThan: "<",
-    GreaterThan: ">",
-    LessEq: "<=",
-    GreaterEq: ">=",
-    ToReal: "to_real",
-    ToInt: "to_int",
-    IsInt: "is_int",
-
-    Select: "select",
-    Store: "store",
-
-    StrConcat: "str.++",
-    StrLen: "str.len",
-    StrLessThan: "str.<",
-    StrLessEq: "str.<=",
-    CharAt: "str.at",
-    Substring: "str.substr",
-    PrefixOf: "str.prefixof",
-    SuffixOf: "str.suffixof",
-    Contains: "str.contains",
-    IndexOf: "str.indexof",
-    Replace: "str.replace",
-    ReplaceAll: "str.replace_all",
-    ReplaceRe: "str.replace_re",
-    ReplaceReAll: "str.replace_re_all",
-    StrIsDigit: "str.is_digit",
-    StrToCode: "str.to_code",
-    StrFromCode: "str.from_code",
-    StrToInt: "str.to_int",
-    StrFromInt: "str.from_int",
-
-    StrToRe: "str.to_re",
-    StrInRe: "str.in_re",
-    ReNone: "re.none",
-    ReAll: "re.all",
-    ReAllChar: "re.allchar",
-    ReConcat: "re.++",
-    ReUnion: "re.union",
-    ReIntersection: "re.inter",
-    ReKleeneClosure: "re.*",
-    ReComplement: "re.comp",
-    ReDiff: "re.diff",
-    ReKleeneCross: "re.+",
-    ReOption: "re.opt",
-    ReRange: "re.range",
-    ReFromAutomaton: "re.from_automaton",
-
-    BvNot: "bvnot",
-    BvNeg: "bvneg",
-    BvAnd: "bvand",
-    BvOr: "bvor",
-    BvAdd: "bvadd",
-    BvMul: "bvmul",
-    BvUDiv: "bvudiv",
-    BvURem: "bvurem",
-    BvShl: "bvshl",
-    BvLShr: "bvlshr",
-    BvULt: "bvult",
-
-    BvConcat: "concat",
-    BvNAnd: "bvnand",
-    BvNOr: "bvnor",
-    BvXor: "bvxor",
-    BvXNor: "bvxnor",
-    BvComp: "bvcomp",
-    BvSub: "bvsub",
-    BvSDiv: "bvsdiv",
-    BvSRem: "bvsrem",
-    BvSMod: "bvsmod",
-    BvAShr: "bvashr",
-
-    BvULe: "bvule",
-    BvUGt: "bvugt",
-    BvUGe: "bvuge",
-    BvSLt: "bvslt",
-    BvSLe: "bvsle",
-    BvSGt: "bvsgt",
-    BvSGe: "bvsge",
-
-    UBvToInt: "ubv_to_int",
-    SBvToInt: "sbv_to_int",
-
-    BvPBbTerm: "@pbbterm",
-    BvBbTerm: "@bbterm",
-    BvConst: "@bv",
-    BvSize: "@bvsize",
-
-    BvIte: "bvite",
-
-    RareList: "rare-list",
-
-    Cl: "cl",
-    Delete: "@d",
-
-    SetInsert: "set.insert",
-    Tuple: "tuple",
-    RelTranspose: "rel.transpose",
-    RelJoin: "rel.join",
-    RelProduct: "rel.product",
-}, extra_display: |f| {
-    Operator::Custom(op) => write!(f, "{}", op.sig().name),
-});
-
 impl Operator {
+    /// Returns this operator's signature, if it exists.
+    ///
+    /// Some operators cannot be represented with an [`OperatorSig`], in which case this method
+    /// returns `None`.
+    pub fn sig(&self) -> Option<&'static OperatorSig> {
+        // We wrap the generated `raw_sig` method instead of using it directly, so that
+        // rust-analyzer can properly suggest the `sig` method and infer its type
+        self.raw_sig()
+    }
+
     /// If this is a binary operator that can be applied to multiple arguments, returns an
     /// `[NaryCase]` representing its behaviour in that situation. Otherwise, returns `None`.
     pub fn nary_case(&self) -> Option<NaryCase> {
@@ -574,7 +563,41 @@ impl Operator {
             | Operator::RelJoin
             | Operator::RelProduct => None,
 
-            Operator::Custom(_) => None,
+            Operator::IntPow2
+            | Operator::IntLog2
+            | Operator::IntIspow2
+            | Operator::RealPi
+            | Operator::Sqrt
+            | Operator::Exp
+            | Operator::Sin
+            | Operator::Cos
+            | Operator::Tan
+            | Operator::Csc
+            | Operator::Sec
+            | Operator::Cot
+            | Operator::Arcsin
+            | Operator::Arccos
+            | Operator::Arctan
+            | Operator::Arccsc
+            | Operator::Arcsec
+            | Operator::Arccot
+            | Operator::StrIndexofRe
+            | Operator::StrRev
+            | Operator::StrToLower
+            | Operator::StrToUpper
+            | Operator::StrUpdate
+            | Operator::SetUnion
+            | Operator::SetInter
+            | Operator::SetMinus
+            | Operator::SetMember
+            | Operator::SetSubset
+            | Operator::SetSingleton
+            | Operator::SetIsEmpty
+            | Operator::SetIsSingleton
+            | Operator::SetCard
+            | Operator::SetComplement
+            | Operator::TupleUnit
+            | Operator::RelTclosure => None,
         }
     }
 }
@@ -712,22 +735,10 @@ impl OperatorSig {
     }
 }
 
-carcara_macros::custom_operators!("custom_operators.toml");
-
-/// Looks up an operator by name, checking built-in operators first, then custom ones.
-pub fn lookup_operator(name: &str) -> Option<super::Operator> {
-    use std::str::FromStr;
-    if let Ok(op) = super::Operator::from_str(name) {
-        return Some(op);
-    }
-    CustomOperator::lookup(name).map(super::Operator::Custom)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{CustomOperator, OperatorSig, Pool, SortSig};
-    use crate::ast::{Operator, Rc, Sort};
-    use std::str::FromStr;
+    use super::{OperatorSig, Pool, SortSig};
+    use crate::ast::{Rc, Sort};
 
     /// The signature of `store`: `(Array X Y) X Y -> (Array X Y)`.
     static STORE: OperatorSig = OperatorSig {
@@ -748,13 +759,6 @@ mod tests {
             .iter()
             .zip(sorts)
             .all(|(arg_sig, sort)| arg_sig.match_with(&mut params, sort))
-    }
-
-    #[test]
-    fn custom_operator_names_do_not_shadow_built_ins() {
-        for op in CustomOperator::ALL {
-            assert!(Operator::from_str(op.sig().name).is_err());
-        }
     }
 
     #[test]

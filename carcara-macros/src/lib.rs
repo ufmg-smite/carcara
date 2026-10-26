@@ -4,12 +4,17 @@ mod version_string;
 
 use proc_macro::TokenStream;
 use quote::quote;
+use std::path::Path;
 use syn::{DataStruct, DeriveInput, parse_macro_input};
 
-/// Reads a custom-operator TOML config file and expands to a `CustomOperator` enum and impl.
-#[proc_macro]
-pub fn custom_operators(input: TokenStream) -> TokenStream {
-    custom_operators::custom_operators(input)
+/// Extends the AST's `Operator` enum with operators from a TOML file.
+#[proc_macro_attribute]
+pub fn extend_operator_enum(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let relative_path = parse_macro_input!(attr as syn::LitStr).value();
+    let enum_item = parse_macro_input!(input as syn::ItemEnum);
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let config_path = Path::new(&manifest_dir).join(relative_path);
+    custom_operators::extend_operator_enum(&config_path, enum_item)
 }
 
 #[proc_macro]

@@ -2,7 +2,6 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use std::path::Path;
-use syn::parse_macro_input;
 
 /// A parsed `custom_operators.toml` file.
 #[derive(serde::Deserialize)]
@@ -188,48 +187,91 @@ fn load_operators(path: &Path) -> Operators {
     Operators { names, idents, sigs }
 }
 
-pub fn custom_operators(input: TokenStream) -> TokenStream {
-    let relative_path = parse_macro_input!(input as syn::LitStr).value();
+fn get_variant_name_attr(variant: &syn::Variant) -> String {
+    let ident = &variant.ident;
+    variant
+        .attrs
+        .iter()
+        .find(|a| a.path().is_ident("name"))
+        .unwrap_or_else(|| panic!("missing `name` attribute for variant {ident}"))
+        .parse_args::<syn::LitStr>()
+        .unwrap_or_else(|e| panic!("invalid `name` attribute for variant {ident}: {e}"))
+        .value()
+}
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let full_path = std::path::Path::new(&manifest_dir).join(&relative_path);
-    let full_path_str = full_path.to_str().expect("config path is not valid UTF-8");
+pub fn extend_operator_enum(config_path: &Path, mut enum_item: syn::ItemEnum) -> TokenStream {
+    let path_str = config_path.to_str().unwrap();
+    let enum_name = &enum_item.ident;
+    let extra_operators = load_operators(config_path);
+    let sigs = extra_operators.sigs;
+    let extra_idents = extra_operators.idents;
 
-    let Operators { names, idents, sigs } = load_operators(&full_path);
+    let all_names: Vec<_> = enum_item
+        .variants
+        .iter()
+        .map(get_variant_name_attr)
+        .chain(extra_operators.names.iter().cloned())
+        .collect();
+    let all_idents: Vec<_> = enum_item
+        .variants
+        .iter()
+        .map(|v| &v.ident)
+        .chain(&extra_idents)
+        .cloned()
+        .collect();
 
-    let num_operators = idents.len();
+    let mut seen_names = std::collections::HashMap::new();
+    for (name, ident) in all_names.iter().zip(&all_idents) {
+        if let Some(prev) = seen_names.insert(name, ident) {
+            panic!("operator name `{name}` is used by both `{prev}` and `{ident}`");
+        }
+    }
+
+    // We must remove the `name` attributes from the variants before generating the enum definition
+    for variant in &mut enum_item.variants {
+        variant.attrs.retain(|a| !a.path().is_ident("name"));
+    }
+
+    for (name, ident) in extra_operators.names.iter().zip(&extra_idents) {
+        let doc = format!(" The `{name}` operator.");
+        enum_item.variants.push(syn::parse_quote! {
+            #[doc = #doc]
+            #ident
+        });
+    }
 
     quote! {
         // `include_str!` registers the config as a tracked input, since `tracked_path` is unstable.
         #[doc(hidden)]
-        const _CUSTOM_OPERATORS_TOML: &str = include_str!(#full_path_str);
+        const _CUSTOM_OPERATORS_TOML: &str = include_str!(#path_str);
 
-        /// A custom operator, defined via `custom_operators.toml`.
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        pub enum CustomOperator {
-            #(#idents),*
-        }
+        #enum_item
 
-        impl CustomOperator {
-            /// All custom operators, in declaration order.
-            pub const ALL: &'static [CustomOperator] = &[
-                #(CustomOperator::#idents),*
-            ];
-
-            /// Looks up a custom operator by name, returning `None` if it isn't one.
-            pub fn lookup(name: &str) -> Option<Self> {
-                match name {
-                    #(#names => Some(CustomOperator::#idents),)*
+        impl #enum_name {
+            fn raw_sig(self) -> Option<&'static OperatorSig> {
+                match self {
+                    #(#enum_name::#extra_idents => Some(&#sigs),)*
                     _ => None,
                 }
             }
+        }
 
-            /// Returns this operator's type signature.
-            pub fn sig(self) -> &'static OperatorSig {
-                static SIGS: [OperatorSig; #num_operators] = [
-                    #(#sigs),*
-                ];
-                &SIGS[self as usize]
+        impl std::str::FromStr for #enum_name {
+            type Err = ();
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    #(#all_names => Ok(#enum_name::#all_idents),)*
+                    _ => Err(()),
+                }
+            }
+        }
+
+        impl std::fmt::Display for #enum_name {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                match self {
+                    #(#enum_name::#all_idents => write!(f, #all_names),)*
+                }
             }
         }
     }

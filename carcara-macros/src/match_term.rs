@@ -322,8 +322,8 @@ pub fn op_to_variant(op: &str) -> TokenStream2 {
         "to_int" => quote! { crate::ast::Operator::ToInt },
 
         // TODO: we should support dots in operators for these cases
-        "int_pow2" => quote! { crate::ast::Operator::Custom(crate::ast::CustomOperator::IntPow2) },
-        "int_log2" => quote! { crate::ast::Operator::Custom(crate::ast::CustomOperator::IntLog2) },
+        "int_pow2" => quote! { crate::ast::Operator::IntPow2 },
+        "int_log2" => quote! { crate::ast::Operator::IntLog2 },
 
         // Clause / delete
         "cl" => quote! { crate::ast::Operator::Cl },

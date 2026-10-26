@@ -30,14 +30,13 @@ pub use substitution::{SortSubstitution, Substitution, SubstitutionError};
 pub use term::{
     Binder, BindingList, Constant, MatchCase, MatchPattern, ParamOperator, QualifiedOperator,
     SortedVar, Term,
-    operator::{CustomOperator, NaryCase, Operator, OperatorSig, SortSig},
+    operator::{NaryCase, Operator, OperatorSig, SortSig},
     sort::Sort,
 };
 
 pub(crate) use carcara_macros::match_term;
 pub(crate) use context::ContextStack;
 pub(crate) use macros::{build_sort, build_term, impl_str_conversion_traits, match_term_err};
-pub(crate) use term::operator::lookup_operator;
 
 #[cfg(test)]
 pub(crate) use node::compare_forests;

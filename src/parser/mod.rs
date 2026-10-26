@@ -12,7 +12,7 @@ use crate::{
     ast::{
         AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
         Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
-        Subproof, Substitution, Term, build_sort, build_term, lookup_operator,
+        Subproof, Substitution, Term, build_sort, build_term,
         pool::Pool,
         rare_rules::{RareStatements, Rules},
     },
@@ -1265,7 +1265,7 @@ impl<'p, 's> Parser<'p, 's> {
                 return if let Some(func) = self.state.function_defs.get(&s) {
                     func.apply(self.pool, Vec::new())
                         .map_err(|err| self.err(err, pos))
-                } else if let Some(op) = lookup_operator(&s)
+                } else if let Ok(op) = Operator::from_str(&s)
                     // Declared symbols shadow built-in operators
                     && self.get_symbol(&s).is_none()
                 {
@@ -1673,8 +1673,8 @@ impl<'p, 's> Parser<'p, 's> {
             //
             // However, `if let` guards are still nightly only. For more info, see:
             // https://github.com/rust-lang/rust/issues/51114
-            Token::Symbol(s) if lookup_operator(s).is_some() => {
-                let operator = lookup_operator(s).unwrap();
+            Token::Symbol(s) if Operator::from_str(s).is_ok() => {
+                let operator = Operator::from_str(s).unwrap();
                 self.next_token()?;
                 let args = self.parse_sequence(Self::parse_term, true)?;
                 self.make_op(operator, args)
