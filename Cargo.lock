@@ -71,6 +71,7 @@ dependencies = [
  "carcara-macros",
  "clap",
  "crossbeam-queue",
+ "hashbrown",
  "indexmap",
  "log",
  "nom",

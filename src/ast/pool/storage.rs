@@ -5,47 +5,25 @@
 //* clone it; otherwise, we allocate a new `Rc`.
 
 use crate::ast::*;
-use rapidhash::RapidHashSet;
-use std::{borrow::Borrow, hash::Hash};
-
-/// A wrapper to make `ast::Rc` operations by-value instead of by-reference.
-///
-/// Since `ast::Rc` intentionally implements hashing and equality by reference, we cannot safely
-/// implement `Borrow<T>` for `Rc<T>`, so we cannot access a `HashSet<Rc<T>>` using a `&T` as a key.
-/// To go around that, we use this struct that wraps an `Rc<T>` and that re-implements hashing and
-/// equality by value, meaning we can implement `Borrow<T>` for it, and use it as the contents of
-/// the hash set instead.
-#[derive(Debug, Clone, Eq)]
-struct ByValue<T>(Rc<T>);
-
-impl<T: Eq> PartialEq for ByValue<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_ref() == other.0.as_ref()
-    }
-}
-
-impl<T: Hash> Hash for ByValue<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.as_ref().hash(state);
-    }
-}
-
-impl<T> Borrow<T> for ByValue<T> {
-    fn borrow(&self) -> &T {
-        self.0.as_ref()
-    }
-}
+use hashbrown::{HashTable, hash_table::Entry};
+use std::hash::{BuildHasher, Hash};
 
 /// A hash-consing enforcing storage of objects.
 ///
 /// This struct stores objects ensuring that identical object are only allocated once, and hands out
 /// [`ast::Rc`] handles to those allocations.
 #[derive(Debug, Clone)]
-pub struct Storage<T>(RapidHashSet<ByValue<T>>);
+pub struct Storage<T> {
+    table: HashTable<Rc<T>>,
+    hasher: rapidhash::fast::RandomState,
+}
 
 impl<T> Default for Storage<T> {
     fn default() -> Self {
-        Self(Default::default())
+        Self {
+            table: HashTable::new(),
+            hasher: Default::default(),
+        }
     }
 }
 
@@ -55,15 +33,16 @@ impl<T: Hash + Eq> Storage<T> {
     /// If the object was not originally in the storage, it is added to it. Otherwise, this method
     /// just returns an `Rc` pointing to the existing allocation.
     pub fn add(&mut self, object: T) -> Rc<T> {
-        // If the `hash_set_entry` feature was stable, this would be much simpler to do using
-        // `get_or_insert_with` (and would avoid rehashing the object)
-        match self.0.get(&object) {
-            Some(o) => o.0.clone(),
-            None => {
+        let hasher = &self.hasher;
+        let hash = hasher.hash_one(&object);
+        let eq = |o: &Rc<T>| o.as_ref() == &object;
+        match self.table.entry(hash, eq, |o| hasher.hash_one(o.as_ref())) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(entry) => {
                 // SAFETY: We have just checked that the object does not exist in the pool, so we can
                 // create a new allocation.
                 let result = unsafe { Rc::new_raw(object) };
-                self.0.insert(ByValue(result.clone()));
+                entry.insert(result.clone());
                 result
             }
         }
@@ -71,12 +50,13 @@ impl<T: Hash + Eq> Storage<T> {
 
     /// Returns a reference to the allocation of `object` stored in `self`, if it is present.
     pub fn get(&self, object: &T) -> Option<&Rc<T>> {
-        self.0.get(object).map(|t| &t.0)
+        let hash = self.hasher.hash_one(object);
+        self.table.find(hash, |o| o.as_ref() == object)
     }
 
     // This method is only necessary for the hash consing tests
     #[cfg(test)]
     pub fn into_vec(self) -> Vec<Rc<T>> {
-        self.0.into_iter().map(|ByValue(t)| t).collect()
+        self.table.into_iter().collect()
     }
 }
