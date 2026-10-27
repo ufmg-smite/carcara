@@ -208,9 +208,7 @@ impl<'s> Lexer<'s> {
     /// Advances the lexer by one line, discarding the remaining contents of the current line.
     fn next_line(&mut self) {
         // Read characters until line end
-        while self.current().is_some_and(|c| c != '\n') {
-            self.next_char();
-        }
+        self.read_chars_while(|c| c != '\n');
         // Then read the \n char itself
         if self.current() == Some('\n') {
             self.next_char();
@@ -230,33 +228,35 @@ impl<'s> Lexer<'s> {
         (self.lines_read + 1, self.offset - self.line_start + 1)
     }
 
-    /// Reads characters while the given predicate returns `true`, and stores them in a `String`.
+    /// Reads characters while the given predicate returns `true`, and returns them as a slice of
+    /// the source contents.
     ///
-    /// At the end, all characters in the returned string will satisfy the predicate, and
-    /// `self.current_char` will be the first character that didn't satisfy the predicate.
-    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> String {
-        let mut result = String::new();
-        while let Some(c) = self.current() {
+    /// At the end, all characters in the returned slice will satisfy the predicate, and
+    /// `self.current()` will be the first character that didn't satisfy the predicate.
+    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> &str {
+        let start = self.offset;
+        let rest = &self.source.contents()[start..];
+        let mut len = rest.len();
+        let (mut lines_read, mut line_start) = (self.lines_read, self.line_start);
+        for (i, c) in rest.char_indices() {
             if !predicate(c) {
+                len = i;
                 break;
             }
-            result.push(c);
-            self.next_char();
+            if c == '\n' {
+                lines_read += 1;
+                line_start = start + i + 1;
+            }
         }
-        result
+        self.lines_read = lines_read;
+        self.line_start = line_start;
+        self.offset += len;
+        &self.source.contents()[start..self.offset]
     }
 
     /// Reads and drops characters until a non-whitespace character is encountered.
-    ///
-    /// This is similar to calling `self.read_chars_while(char::is_whitespace)`, but this method
-    /// doesn't allocate a string to store the result.
     fn drop_while_whitespace(&mut self) {
-        while let Some(c) = self.current() {
-            if !c.is_whitespace() {
-                break;
-            }
-            self.next_char();
-        }
+        self.read_chars_while(char::is_whitespace);
     }
 
     /// Consumes all leading whitespace and comments in the input source.
@@ -275,52 +275,51 @@ impl<'s> Lexer<'s> {
         let token = match self.current() {
             Some('(') => {
                 self.next_char();
-                Ok(Token::OpenParen)
+                Token::OpenParen
             }
             Some(')') => {
                 self.next_char();
-                Ok(Token::CloseParen)
+                Token::CloseParen
             }
-            Some('"') => self.read_string(),
-            Some('|') => self.read_quoted_symbol(),
-            Some(':') => Ok(self.read_keyword()),
-            Some('#') => self.read_bitvector(),
+            Some('"') => self.read_string()?,
+            Some('|') => self.read_quoted_symbol()?,
+            Some(':') => self.read_keyword(),
+            Some('#') => self.read_bitvector()?,
             Some('-') => {
                 // If we encounter the '-' character, the token can either be a GMP-style numerical
                 // literal (e.g. '-5'), or a symbol that starts with '-' (e.g. the '-' operator
                 // itself)
                 self.next_char();
                 if self.current().as_ref().is_some_and(char::is_ascii_digit) {
-                    self.read_number(true)
+                    self.read_number(true)?
                 } else {
                     // This assumes that the symbol is never a reserved a word.
-                    let mut symbol = self.read_chars_while(is_symbol_character);
-                    symbol.insert(0, '-');
-                    Ok(Token::Symbol(symbol))
+                    let symbol = self.read_chars_while(is_symbol_character);
+                    Token::Symbol(format!("-{symbol}"))
                 }
             }
-            Some(c) if c.is_ascii_digit() => self.read_number(false),
-            Some(c) if is_symbol_character(c) => Ok(self.read_simple_symbol()),
-            None => Ok(Token::Eof),
-            Some(other) => Err(self.err(ParserError::UnexpectedChar(other))),
-        }?;
+            Some(c) if c.is_ascii_digit() => self.read_number(false)?,
+            Some(c) if is_symbol_character(c) => self.read_simple_symbol(),
+            None => Token::Eof,
+            Some(other) => return Err(self.err(ParserError::UnexpectedChar(other))),
+        };
         Ok((token, start_position))
     }
 
     /// Reads a simple symbol from the input source.
     fn read_simple_symbol(&mut self) -> Token {
         let symbol = self.read_chars_while(is_symbol_character);
-        if let Ok(reserved) = Reserved::from_str(&symbol) {
+        if let Ok(reserved) = Reserved::from_str(symbol) {
             Token::ReservedWord(reserved)
         } else {
-            Token::Symbol(symbol)
+            Token::Symbol(symbol.to_owned())
         }
     }
 
     /// Reads a quoted symbol from the input source.
     fn read_quoted_symbol(&mut self) -> CarcaraResult<Token> {
         self.next_char(); // Consume `|`
-        let symbol = self.read_chars_while(|c| c != '|' && c != '\\');
+        let symbol = self.read_chars_while(|c| c != '|' && c != '\\').to_owned();
         match self.current() {
             Some('\\') => Err(self.err(ParserError::BackslashInQuotedSymbol)),
             None => Err(self.err(ParserError::EofInQuotedSymbol)),
@@ -336,7 +335,7 @@ impl<'s> Lexer<'s> {
     fn read_keyword(&mut self) -> Token {
         self.next_char(); // Consume `:`
         let symbol = self.read_chars_while(is_symbol_character);
-        Token::Keyword(symbol)
+        Token::Keyword(symbol.to_owned())
     }
 
     /// Reads a binary or hexadecimal bitvector literal, e.g. `#b0110` or `#x01Ab`.
@@ -357,13 +356,13 @@ impl<'s> Lexer<'s> {
         }
 
         let width = s.len() * bits_per_char;
-        let value = Integer::from_str_radix(&s, base).unwrap();
+        let value = Integer::from_str_radix(s, base).unwrap();
         Ok(Token::Bitvector(value, width))
     }
 
     /// Reads an integer or decimal numerical literal.
     fn read_number(&mut self, negated: bool) -> CarcaraResult<Token> {
-        let first_part = self.read_chars_while(|c| c.is_ascii_digit());
+        let first_part = self.read_chars_while(|c| c.is_ascii_digit()).to_owned();
 
         if first_part.len() > 1 && first_part.starts_with('0') {
             return Err(self.err(ParserError::LeadingZero(first_part)));
@@ -371,7 +370,7 @@ impl<'s> Lexer<'s> {
 
         if let Some(delimiter @ ('/' | '.')) = self.current() {
             self.next_char();
-            let second_part = self.read_chars_while(|c| c.is_ascii_digit());
+            let second_part = self.read_chars_while(|c| c.is_ascii_digit()).to_owned();
             if let Some('/' | '.') = self.current() {
                 // A number can have only one delimiter
                 let e = ParserError::UnexpectedChar(self.current().unwrap());
