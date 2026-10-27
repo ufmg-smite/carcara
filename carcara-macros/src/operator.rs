@@ -88,6 +88,7 @@ fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
         "UnitTuple" => quote! { SortSig::Tuple(&[]) },
         "BitVec" => quote! { SortSig::BitVec },
         "Bit" => quote! { SortSig::Bit },
+        "IntOrReal" => quote! { SortSig::IntOrReal },
         _ => return None,
     })
 }
@@ -189,15 +190,21 @@ fn load_operators(path: &Path) -> Operators {
             }
         }
 
-        // The shared bitvector width is an extra sort parameter, after the declared ones
+        // The shared sort of `BitVec` or `IntOrReal` is an extra sort parameter, after the declared
+        // ones
         let mut params = entry.params.clone();
-        if entry.arg_types.iter().any(|t| t.mentions("BitVec")) {
-            params.push("BitVec".to_owned());
-        } else if entry.return_type.mentions("BitVec") {
-            panic!(
-                "the bitvector width of operator `{name}` must occur in `arg_types`, otherwise it \
-                can't be inferred",
-            );
+        for shared in ["BitVec", "IntOrReal"] {
+            if entry.arg_types.iter().any(|t| t.mentions(shared)) {
+                params.push(shared.to_owned());
+            } else if entry.return_type.mentions(shared) {
+                panic!(
+                    "`{shared}` must occur in the `arg_types` of operator `{name}`, otherwise its \
+                    sort can't be inferred",
+                );
+            }
+        }
+        if params.len() > entry.params.len() + 1 {
+            panic!("operator `{name}` can't use both `BitVec` and `IntOrReal`");
         }
 
         // N-ary operators accept any number of arguments of a single sort

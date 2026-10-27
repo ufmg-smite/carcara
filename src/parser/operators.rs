@@ -242,8 +242,9 @@ fn custom_check(
             assert_num_args(sorts, arity)?;
             let mut params = [const { None }; OperatorSig::MAX_SORT_PARAMS];
             let params = &mut params[..sig.params.len()];
+            let subtyping = parser.config.allow_int_real_subtyping;
             for (arg_sig, got) in sig.arg_sigs().zip(sorts) {
-                if !arg_sig.match_with(params, got) {
+                if !arg_sig.match_with(params, got, subtyping) {
                     let expected = arg_sig.instantiate(parser.pool, params, sig.params);
                     let expected = vec![expected].into_boxed_slice();
                     return Err(SortError { expected, got: got.clone() }.into());

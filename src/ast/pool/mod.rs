@@ -311,7 +311,7 @@ impl Pool {
                     } else {
                         let sorts: Vec<_> =
                             args.iter().map(|a| self.compute_sort(a).clone()).collect();
-                        sig.compute_sort(self, &sorts)
+                        sig.compute_sort(self, &sorts, true)
                     }
                 }
             },

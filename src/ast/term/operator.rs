@@ -173,6 +173,10 @@ pub enum SortSig {
     BitVec,
     /// A bitvector of width 1. Its width is independent of the width shared by the `BitVec`s.
     Bit,
+    /// Either `Int` or `Real`. All occurrences of `IntOrReal` in a signature share a sort, stored in
+    /// an extra sort parameter, always the last in the parameter list. With Int/Real subtyping,
+    /// mixing `Int` and `Real` widens that sort to `Real`.
+    IntOrReal,
     Bool,
     Int,
     Real,
@@ -185,7 +189,12 @@ pub enum SortSig {
 
 impl SortSig {
     /// Matches `sort` against this signature, binding the sort parameters in `params` as needed.
-    pub fn match_with(&self, params: &mut [Option<Rc<Sort>>], sort: &Rc<Sort>) -> bool {
+    pub fn match_with(
+        &self,
+        params: &mut [Option<Rc<Sort>>],
+        sort: &Rc<Sort>,
+        subtyping: bool,
+    ) -> bool {
         match (self, sort.as_ref()) {
             (SortSig::Var(i), _) => match &params[*i] {
                 Some(existing) => existing.is_compatible(sort),
@@ -208,20 +217,38 @@ impl SortSig {
                 }
             }
             (SortSig::Bit, Sort::BitVec(1) | Sort::ParamBitVec) => true,
+            (SortSig::IntOrReal, Sort::Int | Sort::Real) => {
+                let slot = params.last_mut().unwrap();
+                match slot {
+                    Some(existing) if existing.as_ref() == sort.as_ref() => true,
+                    // With subtyping, mixing `Int` and `Real` widens the shared sort to `Real`
+                    Some(_) if subtyping => {
+                        if sort.as_ref() == &Sort::Real {
+                            *slot = Some(sort.clone());
+                        }
+                        true
+                    }
+                    Some(_) => false,
+                    None => {
+                        *slot = Some(sort.clone());
+                        true
+                    }
+                }
+            }
             (SortSig::Bool, Sort::Bool)
             | (SortSig::Int, Sort::Int)
             | (SortSig::Real, Sort::Real)
             | (SortSig::String, Sort::String)
             | (SortSig::RegLan, Sort::RegLan) => true,
             (SortSig::Array(a_sig, b_sig), Sort::Array(a, b)) => {
-                a_sig.match_with(params, a) && b_sig.match_with(params, b)
+                a_sig.match_with(params, a, subtyping) && b_sig.match_with(params, b, subtyping)
             }
-            (SortSig::Set(sig), Sort::Set(sort)) => sig.match_with(params, sort),
+            (SortSig::Set(sig), Sort::Set(sort)) => sig.match_with(params, sort, subtyping),
             (SortSig::Tuple(sigs), Sort::Tuple(sorts)) if sigs.len() != sorts.len() => false,
             (SortSig::Tuple(sigs), Sort::Tuple(sorts)) => sigs
                 .iter()
                 .zip(sorts)
-                .all(|(sig, sort)| sig.match_with(params, sort)),
+                .all(|(sig, sort)| sig.match_with(params, sort, subtyping)),
             (_, Sort::Var(_)) => true,
             (_, _) => false,
         }
@@ -245,6 +272,10 @@ impl SortSig {
                 None => pool.add_sort(Sort::ParamBitVec),
             },
             SortSig::Bit => pool.add_sort(Sort::BitVec(1)),
+            SortSig::IntOrReal => match params.last().unwrap() {
+                Some(s) => s.clone(),
+                None => pool.add_sort(Sort::Int),
+            },
             SortSig::Bool => pool.add_sort(Sort::Bool),
             SortSig::Int => pool.add_sort(Sort::Int),
             SortSig::Real => pool.add_sort(Sort::Real),
@@ -282,7 +313,7 @@ pub struct OperatorSig {
 
 impl OperatorSig {
     /// The maximum number of sort parameters in an operator signature, counting the extra parameter
-    /// for the bitvector width.
+    /// used by `BitVec` or `IntOrReal`.
     ///
     /// This allows the parameters to be stored in a stack-allocated array, for performance reasons.
     pub const MAX_SORT_PARAMS: usize = 4;
@@ -295,11 +326,16 @@ impl OperatorSig {
     }
 
     /// Computes the sort of an application of this operator to arguments with sorts `arg_sorts`.
-    pub fn compute_sort(&self, pool: &mut Pool, arg_sorts: &[Rc<Sort>]) -> Rc<Sort> {
+    pub fn compute_sort(
+        &self,
+        pool: &mut Pool,
+        arg_sorts: &[Rc<Sort>],
+        subtyping: bool,
+    ) -> Rc<Sort> {
         let mut params = [const { None }; Self::MAX_SORT_PARAMS];
         let params = &mut params[..self.params.len()];
         for (sig, sort) in self.arg_sigs().zip(arg_sorts) {
-            sig.match_with(params, sort);
+            sig.match_with(params, sort, subtyping);
         }
         self.return_sort.instantiate(pool, params, self.params)
     }
@@ -359,12 +395,26 @@ mod tests {
         nary: Some(NaryCase::Chainable),
     };
 
+    /// The signature of `+`: `IntOrReal IntOrReal -> IntOrReal`, left-associative.
+    static ADD: OperatorSig = OperatorSig {
+        name: "+",
+        params: &["IntOrReal"],
+        arg_sorts: &[SortSig::IntOrReal, SortSig::IntOrReal],
+        return_sort: SortSig::IntOrReal,
+        nary: Some(NaryCase::LeftAssoc),
+    };
+
     /// Matches every argument sort against the signature, failing on the first mismatch.
     fn matches(sig: &OperatorSig, sorts: &[Rc<Sort>]) -> bool {
+        matches_with_subtyping(sig, sorts, false)
+    }
+
+    /// Like `matches`, but with Int/Real subtyping allowed if `subtyping` is true.
+    fn matches_with_subtyping(sig: &OperatorSig, sorts: &[Rc<Sort>], subtyping: bool) -> bool {
         let mut params = vec![None; sig.params.len()];
         sig.arg_sigs()
             .zip(sorts)
-            .all(|(arg_sig, sort)| arg_sig.match_with(&mut params, sort))
+            .all(|(arg_sig, sort)| arg_sig.match_with(&mut params, sort, subtyping))
     }
 
     #[test]
@@ -375,7 +425,7 @@ mod tests {
 
         let args = [array.clone(), int.clone(), string.clone()];
         assert!(matches(&STORE, &args));
-        assert_eq!(STORE.compute_sort(&mut pool, &args), array);
+        assert_eq!(STORE.compute_sort(&mut pool, &args, false), array);
 
         // `X` is bound to `Int` by the first argument
         assert!(!matches(
@@ -395,11 +445,11 @@ mod tests {
         // Like in RARE rules, each variable has its own sort variable
         let args = [array.clone(), t2, t3];
         assert!(matches(&STORE, &args));
-        assert_eq!(STORE.compute_sort(&mut pool, &args), array);
+        assert_eq!(STORE.compute_sort(&mut pool, &args, false), array);
 
         // Sort variables match signatures that don't use sort parameters
-        assert!(SortSig::Int.match_with(&mut [], &t0));
-        assert!(SortSig::Set(&SortSig::Int).match_with(&mut [], &t0));
+        assert!(SortSig::Int.match_with(&mut [], &t0, false));
+        assert!(SortSig::Set(&SortSig::Int).match_with(&mut [], &t0, false));
     }
 
     #[test]
@@ -409,7 +459,7 @@ mod tests {
         let array = pool.add_sort(Sort::Array(int, string.clone()));
 
         let args = [array.clone(), string.clone(), string];
-        assert_eq!(STORE.compute_sort(&mut pool, &args), array);
+        assert_eq!(STORE.compute_sort(&mut pool, &args, false), array);
     }
 
     #[test]
@@ -437,7 +487,7 @@ mod tests {
         // All bitvectors must have the same width
         assert!(matches(&BVADD, &[bv8.clone(), bv8.clone()]));
         assert_eq!(
-            BVADD.compute_sort(&mut pool, &[bv8.clone(), bv8.clone()]),
+            BVADD.compute_sort(&mut pool, &[bv8.clone(), bv8.clone()], false),
             bv8
         );
         assert!(!matches(&BVADD, &[bv8.clone(), bv4]));
@@ -447,25 +497,28 @@ mod tests {
         // first known width, if there is one
         assert!(matches(&BVADD, &[param.clone(), bv8.clone()]));
         assert_eq!(
-            BVADD.compute_sort(&mut pool, &[param.clone(), bv8.clone()]),
+            BVADD.compute_sort(&mut pool, &[param.clone(), bv8.clone()], false),
             bv8
         );
         assert_eq!(
-            BVADD.compute_sort(&mut pool, &[bv8.clone(), param.clone()]),
+            BVADD.compute_sort(&mut pool, &[bv8.clone(), param.clone()], false),
             bv8
         );
         assert_eq!(
-            BVADD.compute_sort(&mut pool, &[param.clone(), param.clone()]),
+            BVADD.compute_sort(&mut pool, &[param.clone(), param.clone()], false),
             param
         );
 
         // Sort variables match any bitvector, without binding its width
         assert!(matches(&BVADD, &[var.clone(), bv8.clone()]));
         assert_eq!(
-            BVADD.compute_sort(&mut pool, &[var.clone(), bv8.clone()]),
+            BVADD.compute_sort(&mut pool, &[var.clone(), bv8.clone()], false),
             bv8
         );
-        assert_eq!(BVADD.compute_sort(&mut pool, &[var.clone(), var]), param);
+        assert_eq!(
+            BVADD.compute_sort(&mut pool, &[var.clone(), var], false),
+            param
+        );
     }
 
     #[test]
@@ -497,7 +550,7 @@ mod tests {
         // All bitvectors must have the same width
         let bvs = [bv8.clone(), bv8.clone(), bv8.clone()];
         assert!(matches(&BVADD, &bvs));
-        assert_eq!(BVADD.compute_sort(&mut pool, &bvs), bv8);
+        assert_eq!(BVADD.compute_sort(&mut pool, &bvs, false), bv8);
         assert!(!matches(&BVADD, &[bv8.clone(), bv8, bv4]));
     }
 
@@ -510,12 +563,54 @@ mod tests {
 
         // `Bit` only matches bitvectors of width 1, or of unknown width
         for sort in [&bv1, &param, &var] {
-            assert!(SortSig::Bit.match_with(&mut [], sort));
+            assert!(SortSig::Bit.match_with(&mut [], sort, false));
         }
-        assert!(!SortSig::Bit.match_with(&mut [], &bv8));
+        assert!(!SortSig::Bit.match_with(&mut [], &bv8, false));
 
         // The width of `Bit` is independent of the width shared by the other bitvectors
         assert!(matches(&BVCOMP, &[bv8.clone(), bv8.clone()]));
-        assert_eq!(BVCOMP.compute_sort(&mut pool, &[bv8.clone(), bv8]), bv1);
+        assert_eq!(
+            BVCOMP.compute_sort(&mut pool, &[bv8.clone(), bv8], false),
+            bv1
+        );
+    }
+
+    #[test]
+    fn match_int_or_real() {
+        let mut pool = Pool::new();
+        let [int, real, string] = [Sort::Int, Sort::Real, Sort::String].map(|s| pool.add_sort(s));
+        let var = pool.add_sort(Sort::Var("@T0".into()));
+
+        // Without subtyping, all arguments must have the same sort
+        assert!(matches(&ADD, &[int.clone(), int.clone()]));
+        assert!(matches(&ADD, &[real.clone(), real.clone()]));
+        assert!(!matches(&ADD, &[int.clone(), real.clone()]));
+        assert!(!matches(&ADD, &[int.clone(), string.clone()]));
+        assert_eq!(
+            ADD.compute_sort(&mut pool, &[int.clone(), int.clone()], false),
+            int
+        );
+        assert_eq!(
+            ADD.compute_sort(&mut pool, &[real.clone(), real.clone()], false),
+            real
+        );
+
+        // With subtyping, mixing `Int` and `Real` gives `Real`
+        for args in [
+            vec![int.clone(), real.clone()],
+            vec![real.clone(), int.clone()],
+            vec![int.clone(), int.clone(), real.clone()],
+        ] {
+            assert!(matches_with_subtyping(&ADD, &args, true));
+            assert_eq!(ADD.compute_sort(&mut pool, &args, true), real);
+        }
+        assert!(!matches_with_subtyping(&ADD, &[int.clone(), string], true));
+
+        // Sort variables don't set the shared sort, which defaults to `Int`
+        assert_eq!(
+            ADD.compute_sort(&mut pool, &[var.clone(), real.clone()], false),
+            real
+        );
+        assert_eq!(ADD.compute_sort(&mut pool, &[var.clone(), var], false), int);
     }
 }
