@@ -3,6 +3,10 @@
 # Each operator is declared with `[[operator]]`, `name`, `return_type`, and optional `arg_types`
 # (defaults to `[]` for nullary operators).
 #
+# Each operator then becomes a variant of `enum Operator`, named after `name` in PascalCase (e.g.
+# `str.to_lower` becomes `StrToLower`). You can set the optional `variant` key to choose the variant
+# name explicitly.
+#
 # Supported sorts are: Bool, Int, Real, String, RegLan, UnitTuple, and applications of Array, Set
 # and Tuple, written as lists (e.g. `(Set Int)` is written as `["Set", "Int"]`).
 #

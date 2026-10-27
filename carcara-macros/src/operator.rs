@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, TokenStream as TokenStream2};
-use quote::{format_ident, quote};
+use quote::quote;
 use std::path::Path;
 
 /// A parsed `operators.toml` file.
@@ -16,6 +16,8 @@ struct OperatorsConfig {
 #[serde(deny_unknown_fields)]
 struct OperatorEntry {
     name: String,
+    #[serde(default)]
+    variant: Option<String>,
     #[serde(default)]
     params: Vec<String>,
     return_type: SortExpr,
@@ -141,10 +143,13 @@ fn load_operators(path: &Path) -> Operators {
 
     for entry in &config.operator {
         let name = &entry.name;
-        let ident = pascal_case_ident(name);
-        if ident.is_empty() {
-            panic!("operator name `{name}` does not yield a valid identifier");
-        }
+        let ident = entry
+            .variant
+            .clone()
+            .unwrap_or_else(|| pascal_case_ident(name));
+        let ident: Ident = syn::parse_str(&ident).unwrap_or_else(|_| {
+            panic!("`{ident}` is not a valid variant name for operator `{name}`")
+        });
         if !seen_idents.insert(ident.clone()) {
             panic!("duplicate operator identifier `{ident}`");
         }
@@ -179,7 +184,7 @@ fn load_operators(path: &Path) -> Operators {
             }
         };
         names.push(name.clone());
-        idents.push(format_ident!("{ident}"));
+        idents.push(ident);
         sigs.push(sig.clone());
     }
 
