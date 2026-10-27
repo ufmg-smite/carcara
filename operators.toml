@@ -37,12 +37,59 @@ return_type = "Bool"
 arg_types = ["Bool"]
 
 [[operator]]
+name = "=>"
+variant = "Implies"
+return_type = "Bool"
+arg_types = ["Bool", "Bool"]
+nary = "right-assoc"
+
+[[operator]]
+name = "and"
+return_type = "Bool"
+arg_types = ["Bool", "Bool"]
+nary = "left-assoc"
+
+[[operator]]
+name = "or"
+return_type = "Bool"
+arg_types = ["Bool", "Bool"]
+nary = "left-assoc"
+
+[[operator]]
+name = "xor"
+return_type = "Bool"
+arg_types = ["Bool", "Bool"]
+nary = "left-assoc"
+
+[[operator]]
+name = "="
+variant = "Equals"
+params = ["X"]
+return_type = "Bool"
+arg_types = ["X", "X"]
+nary = "chainable"
+
+[[operator]]
+name = "distinct"
+params = ["X"]
+return_type = "Bool"
+arg_types = ["X", "X"]
+nary = "pairwise"
+
+[[operator]]
 name = "ite"
 params = ["X"]
 return_type = "X"
 arg_types = ["Bool", "X", "X"]
 
 # Arithmetic operators
+
+[[operator]]
+name = "div"
+variant = "IntDiv"
+return_type = "Int"
+arg_types = ["Int", "Int"]
+nary = "left-assoc"
 
 [[operator]]
 name = "mod"
@@ -179,6 +226,41 @@ name = "bvneg"
 variant = "BvNeg"
 return_type = "BitVec"
 arg_types = ["BitVec"]
+
+[[operator]]
+name = "bvand"
+variant = "BvAnd"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+nary = "left-assoc"
+
+[[operator]]
+name = "bvor"
+variant = "BvOr"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+nary = "left-assoc"
+
+[[operator]]
+name = "bvxor"
+variant = "BvXor"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+nary = "left-assoc"
+
+[[operator]]
+name = "bvadd"
+variant = "BvAdd"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+nary = "left-assoc"
+
+[[operator]]
+name = "bvmul"
+variant = "BvMul"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+nary = "left-assoc"
 
 [[operator]]
 name = "bvudiv"
@@ -321,6 +403,13 @@ arg_types = ["BitVec"]
 # Strings
 
 [[operator]]
+name = "str.++"
+variant = "StrConcat"
+return_type = "String"
+arg_types = ["String", "String"]
+nary = "left-assoc"
+
+[[operator]]
 name = "str.len"
 return_type = "Int"
 arg_types = ["String"]
@@ -448,6 +537,32 @@ return_type = "RegLan"
 name = "re.allchar"
 variant = "ReAllChar"
 return_type = "RegLan"
+
+[[operator]]
+name = "re.++"
+variant = "ReConcat"
+return_type = "RegLan"
+arg_types = ["RegLan", "RegLan"]
+nary = "left-assoc"
+
+[[operator]]
+name = "re.union"
+return_type = "RegLan"
+arg_types = ["RegLan", "RegLan"]
+nary = "left-assoc"
+
+[[operator]]
+name = "re.inter"
+variant = "ReIntersection"
+return_type = "RegLan"
+arg_types = ["RegLan", "RegLan"]
+nary = "left-assoc"
+
+[[operator]]
+name = "re.diff"
+return_type = "RegLan"
+arg_types = ["RegLan", "RegLan"]
+nary = "left-assoc"
 
 [[operator]]
 name = "re.*"

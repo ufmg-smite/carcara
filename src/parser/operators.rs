@@ -43,8 +43,6 @@ enum ArgsCheck {
     Each(ArgSort),
     /// The first argument satisfies this constraint, then all arguments are pairwise equal.
     FirstThenAllEq(ArgSort),
-    /// All arguments are pairwise equal, with no other constraint.
-    AllEq,
 }
 
 impl ArgsCheck {
@@ -62,7 +60,6 @@ impl ArgsCheck {
                 arg_sort.check(parser, &sorts[0])?;
                 Ok(parser.check_sort_all_eq(sorts)?)
             }
-            ArgsCheck::AllEq => Ok(parser.check_sort_all_eq(sorts)?),
         }
     }
 }
@@ -139,19 +136,18 @@ enum OpCheck {
 /// Returns the type-checking behavior for `op`, given whether Int/Real subtyping is allowed.
 fn op_check(op: Operator, subtyping: bool) -> OpCheck {
     use ArgSort::{AnyBitVec, Exact, OneOf, Predicate};
-    use ArgsCheck::{AllEq, Each, FirstThenAllEq, Unconstrained};
+    use ArgsCheck::{Each, FirstThenAllEq, Unconstrained};
 
     match op {
-        Operator::Implies => OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::Bool)))),
+        // These are defined in `operators.toml`, but unary `and`, `or` and `xor` terms are allowed
+        // outside of strict mode, which their signatures can't express
         Operator::Or | Operator::And | Operator::Xor => {
             OpCheck::Rule(Rule::strict_arity(2.., 1.., Each(Exact(Sort::Bool))))
         }
-        Operator::Equals | Operator::Distinct => OpCheck::Rule(Rule::arity(2.., AllEq)),
         Operator::Add | Operator::Mult => {
             OpCheck::Rule(Rule::arity(2.., int_or_real_args(subtyping)))
         }
         Operator::Sub => OpCheck::Rule(Rule::arity(1.., int_or_real_args(subtyping))),
-        Operator::IntDiv => OpCheck::Rule(Rule::arity(2.., FirstThenAllEq(Exact(Sort::Int)))),
         Operator::RealDiv => OpCheck::Custom,
         Operator::Abs => {
             let args = if subtyping {
@@ -165,20 +161,13 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
             OpCheck::Rule(Rule::arity(2.., Each(OneOf(INT_OR_REAL))))
         }
         Operator::ToReal => OpCheck::Rule(Rule::arity(1, Each(OneOf(INT_OR_REAL)))),
-        Operator::StrConcat => OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::String)))),
         Operator::ReFromAutomaton => OpCheck::Custom,
-        Operator::ReConcat | Operator::ReUnion | Operator::ReIntersection | Operator::ReDiff => {
-            OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::RegLan))))
-        }
         Operator::BvBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Bool)))),
         Operator::BvPBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Int)))),
         Operator::BvConst => OpCheck::Rule(Rule::arity(2, Each(Exact(Sort::Int)))),
         // Note: not all-equal here -- different bitvector widths are allowed in `concat`
         Operator::BvConcat => OpCheck::Rule(Rule::arity(2.., Each(AnyBitVec))),
         Operator::Cl => OpCheck::Rule(Rule::arity(.., Unconstrained)),
-        Operator::BvAdd | Operator::BvMul | Operator::BvAnd | Operator::BvOr | Operator::BvXor => {
-            OpCheck::Rule(Rule::arity(2.., FirstThenAllEq(AnyBitVec)))
-        }
         Operator::BvComp => OpCheck::Rule(Rule::arity(2, FirstThenAllEq(AnyBitVec))),
         Operator::BvIte => OpCheck::Custom,
         Operator::RareList => OpCheck::Rule(Rule::arity(.., Unconstrained)),

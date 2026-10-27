@@ -4,31 +4,6 @@ use crate::ast::{Rc, Sort, pool::Pool};
 #[carcara_macros::extend_operator_enum("operators.toml")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
-    // Logic
-    /// The `=>` operator.
-    #[name("=>")]
-    Implies,
-
-    /// The `and` operator.
-    #[name("and")]
-    And,
-
-    /// The `or` operator.
-    #[name("or")]
-    Or,
-
-    /// The `xor` operator.
-    #[name("xor")]
-    Xor,
-
-    /// The `=` operator.
-    #[name("=")]
-    Equals,
-
-    /// The `distinct` operator.
-    #[name("distinct")]
-    Distinct,
-
     // Arithmetic
     /// The `+` operator.
     #[name("+")]
@@ -41,10 +16,6 @@ pub enum Operator {
     /// The `*` operator.
     #[name("*")]
     Mult,
-
-    /// The `div` operator.
-    #[name("div")]
-    IntDiv,
 
     /// The `/` operator.
     #[name("/")]
@@ -74,56 +45,15 @@ pub enum Operator {
     #[name("to_real")]
     ToReal,
 
-    // Strings
-    /// The `str.++` operator.
-    #[name("str.++")]
-    StrConcat,
-
     // Regular Expressions
-    /// The `re.++` operator.
-    #[name("re.++")]
-    ReConcat,
-
-    /// The `re.union` operator.
-    #[name("re.union")]
-    ReUnion,
-
-    /// The `re.inter` operator.
-    #[name("re.inter")]
-    ReIntersection,
-
-    /// The `re.diff` operator.
-    #[name("re.diff")]
-    ReDiff,
-
     /// The `re.from_automaton` operator.
     #[name("re.from_automaton")]
     ReFromAutomaton,
 
     // BV operators
-    /// The `bvand` operator.
-    #[name("bvand")]
-    BvAnd,
-
-    /// The `bvor` operator.
-    #[name("bvor")]
-    BvOr,
-
-    /// The `bvadd` operator.
-    #[name("bvadd")]
-    BvAdd,
-
-    /// The `bvmul` operator.
-    #[name("bvmul")]
-    BvMul,
-
     /// The `concat` operator.
     #[name("concat")]
     BvConcat,
-
-    /// The `bvxor` operator.
-    #[name("bvxor")]
-    BvXor,
 
     /// The `bvcomp` operator.
     #[name("bvcomp")]
@@ -198,32 +128,12 @@ impl Operator {
     /// `[NaryCase]` representing its behaviour in that situation. Otherwise, returns `None`.
     pub fn nary_case(&self) -> Option<NaryCase> {
         match self {
-            // Logical
-            Operator::Implies => Some(NaryCase::RightAssoc),
-            Operator::And | Operator::Or | Operator::Xor => Some(NaryCase::LeftAssoc),
-            Operator::Equals => Some(NaryCase::Chainable),
-            Operator::Distinct => Some(NaryCase::Pairwise),
-
             // Integers/Reals
-            Operator::Add
-            | Operator::Sub
-            | Operator::Mult
-            | Operator::IntDiv
-            | Operator::RealDiv => Some(NaryCase::LeftAssoc),
+            Operator::Add | Operator::Sub | Operator::Mult | Operator::RealDiv => {
+                Some(NaryCase::LeftAssoc)
+            }
             Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
                 Some(NaryCase::Chainable)
-            }
-
-            // Strings
-            Operator::StrConcat
-            | Operator::ReConcat
-            | Operator::ReUnion
-            | Operator::ReIntersection
-            | Operator::ReDiff => Some(NaryCase::LeftAssoc),
-
-            // Bitvectors
-            Operator::BvAnd | Operator::BvOr | Operator::BvAdd | Operator::BvMul => {
-                Some(NaryCase::LeftAssoc)
             }
 
             // Clausal

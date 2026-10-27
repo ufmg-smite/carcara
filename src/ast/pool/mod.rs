@@ -192,32 +192,12 @@ impl Pool {
             }),
             Term::Var(_, sort) => sort.clone(),
             Term::Op(op, args) => match op {
-                Operator::Implies
-                | Operator::And
-                | Operator::Or
-                | Operator::Xor
-                | Operator::Equals
-                | Operator::Distinct
-                | Operator::LessThan
+                Operator::LessThan
                 | Operator::GreaterThan
                 | Operator::LessEq
                 | Operator::GreaterEq
                 | Operator::Cl => self.add_sort(Sort::Bool),
 
-                Operator::BvAdd
-                | Operator::BvAnd
-                | Operator::BvOr
-                | Operator::BvMul
-                | Operator::BvXor => 'block: {
-                    for a in args {
-                        match self.compute_sort(a).as_ref() {
-                            Sort::BitVec(_) => break 'block self.compute_sort(a).clone(),
-                            Sort::ParamBitVec => (),
-                            _ => unreachable!(),
-                        }
-                    }
-                    self.add_sort(Sort::ParamBitVec)
-                }
                 Operator::BvComp => self.add_sort(Sort::BitVec(1)),
                 Operator::BvBbTerm | Operator::BvPBbTerm => self.add_sort(Sort::BitVec(args.len())),
                 Operator::BvConst => {
@@ -255,13 +235,7 @@ impl Pool {
                     self.add_sort(s)
                 }
                 Operator::RealDiv | Operator::ToReal => self.add_sort(Sort::Real),
-                Operator::IntDiv => self.add_sort(Sort::Int),
-                Operator::StrConcat => self.add_sort(Sort::String),
-                Operator::ReConcat
-                | Operator::ReUnion
-                | Operator::ReIntersection
-                | Operator::ReDiff
-                | Operator::ReFromAutomaton => self.add_sort(Sort::RegLan),
+                Operator::ReFromAutomaton => self.add_sort(Sort::RegLan),
                 Operator::RareList => match args.as_slice() {
                     // For empty lists, we can't know the element sort, so we use a placeholder
                     // variable sort `?`
