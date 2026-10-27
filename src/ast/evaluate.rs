@@ -249,6 +249,14 @@ macro_rules! comparison_op {
     }};
 }
 
+/// Evaluates a chainable comparison between strings, which holds if it holds for every pair of
+/// adjacent arguments.
+fn compare_strings(args: &[Option<Value>], compare: fn(&str, &str) -> bool) -> Option<bool> {
+    args.windows(2).try_fold(true, |acc, w| {
+        Some(acc && compare(w[0].as_ref()?.as_str()?, w[1].as_ref()?.as_str()?))
+    })
+}
+
 macro_rules! bitvec_comparison_op {
     ($op:tt, $args:expr, "signed") => {{
         let args = $args;
@@ -399,16 +407,8 @@ fn eval_op(pool: &mut Pool, op: Operator, arg_terms: &[Rc<Term>]) -> Option<Valu
             Value::String(result)
         }
         Operator::StrLen => Value::Integer(args[0].as_ref()?.as_str()?.chars().count().into()),
-        Operator::StrLessThan => {
-            let a = args[0].as_ref()?.as_str()?;
-            let b = args[1].as_ref()?.as_str()?;
-            Value::Bool(a < b)
-        }
-        Operator::StrLessEq => {
-            let a = args[0].as_ref()?.as_str()?;
-            let b = args[1].as_ref()?.as_str()?;
-            Value::Bool(a <= b)
-        }
+        Operator::StrLessThan => Value::Bool(compare_strings(&args, |a, b| a < b)?),
+        Operator::StrLessEq => Value::Bool(compare_strings(&args, |a, b| a <= b)?),
         Operator::CharAt => {
             let s = args[0].as_ref()?.as_str()?;
             let Some(i) = args[1].as_ref()?.as_int()?.to_usize() else {
@@ -909,6 +909,10 @@ mod tests {
             (r#"(str.< "a" "ab")"#, "true"),
             (r#"(str.<= "a" "a")"#, "true"),
             (r#"(str.<= "b" "a")"#, "false"),
+            (r#"(str.< "a" "b" "c")"#, "true"),
+            (r#"(str.< "a" "b" "a")"#, "false"),
+            (r#"(str.<= "a" "a" "b")"#, "true"),
+            (r#"(str.<= "a" "b" "a")"#, "false"),
             (r#"(str.at "abc" 1)"#, r#""b""#),
             (r#"(str.at "abc" 3)"#, r#""""#),
             (r#"(str.at "abc" (- 1))"#, r#""""#),

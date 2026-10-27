@@ -220,7 +220,6 @@ impl Operator {
             | Operator::ReUnion
             | Operator::ReIntersection
             | Operator::ReDiff => Some(NaryCase::LeftAssoc),
-            Operator::StrLessThan | Operator::StrLessEq => Some(NaryCase::Chainable),
 
             // Bitvectors
             Operator::BvAnd | Operator::BvOr | Operator::BvAdd | Operator::BvMul => {
@@ -230,7 +229,7 @@ impl Operator {
             // Clausal
             Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
 
-            _ => None,
+            _ => self.sig().and_then(|sig| sig.nary),
         }
     }
 }
@@ -375,13 +374,21 @@ pub struct OperatorSig {
     pub params: &'static [&'static str],
     pub arg_sorts: &'static [SortSig],
     pub return_sort: SortSig,
+    pub nary: Option<NaryCase>,
 }
 
 impl OperatorSig {
+    /// Returns the signature of each argument. For n-ary operators, the last one is repeated
+    /// indefinitely.
+    pub fn arg_sigs(&self) -> impl Iterator<Item = &SortSig> {
+        let rest = self.nary.and(self.arg_sorts.last());
+        self.arg_sorts.iter().chain(rest.into_iter().cycle())
+    }
+
     /// Computes the sort of an application of this operator to arguments with sorts `arg_sorts`.
     pub fn compute_sort(&self, pool: &mut Pool, arg_sorts: &[Rc<Sort>]) -> Rc<Sort> {
         let mut params = vec![None; self.params.len()];
-        for (sig, sort) in self.arg_sorts.iter().zip(arg_sorts) {
+        for (sig, sort) in self.arg_sigs().zip(arg_sorts) {
             sig.match_with(&mut params, sort);
         }
         self.return_sort.instantiate(pool, &params, self.params)
@@ -390,7 +397,7 @@ impl OperatorSig {
 
 #[cfg(test)]
 mod tests {
-    use super::{OperatorSig, Pool, SortSig};
+    use super::{NaryCase, OperatorSig, Pool, SortSig};
     use crate::ast::{Rc, Sort};
 
     /// The signature of `store`: `(Array X Y) X Y -> (Array X Y)`.
@@ -403,21 +410,40 @@ mod tests {
             SortSig::Var(1),
         ],
         return_sort: SortSig::Array(&SortSig::Var(0), &SortSig::Var(1)),
+        nary: None,
     };
 
-    /// The signature of `bvadd`, restricted to two arguments: `BitVec BitVec -> BitVec`.
+    /// The signature of `bvadd`: `BitVec BitVec -> BitVec`, left-associative.
     static BVADD: OperatorSig = OperatorSig {
         name: "bvadd",
         params: &["BitVec"],
         arg_sorts: &[SortSig::BitVec, SortSig::BitVec],
         return_sort: SortSig::BitVec,
+        nary: Some(NaryCase::LeftAssoc),
+    };
+
+    /// The signature of `and`: `Bool Bool -> Bool`, left-associative.
+    static AND: OperatorSig = OperatorSig {
+        name: "and",
+        params: &[],
+        arg_sorts: &[SortSig::Bool, SortSig::Bool],
+        return_sort: SortSig::Bool,
+        nary: Some(NaryCase::LeftAssoc),
+    };
+
+    /// The signature of `=`: `X X -> Bool`, chainable.
+    static EQUALS: OperatorSig = OperatorSig {
+        name: "=",
+        params: &["X"],
+        arg_sorts: &[SortSig::Var(0), SortSig::Var(0)],
+        return_sort: SortSig::Bool,
+        nary: Some(NaryCase::Chainable),
     };
 
     /// Matches every argument sort against the signature, failing on the first mismatch.
     fn matches(sig: &OperatorSig, sorts: &[Rc<Sort>]) -> bool {
         let mut params = vec![None; sig.params.len()];
-        sig.arg_sorts
-            .iter()
+        sig.arg_sigs()
             .zip(sorts)
             .all(|(arg_sig, sort)| arg_sig.match_with(&mut params, sort))
     }
@@ -521,5 +547,38 @@ mod tests {
             bv8
         );
         assert_eq!(BVADD.compute_sort(&mut pool, &[var.clone(), var]), param);
+    }
+
+    #[test]
+    fn match_nary() {
+        let mut pool = Pool::new();
+        let [bool_sort, int, string, bv4, bv8] = [
+            Sort::Bool,
+            Sort::Int,
+            Sort::String,
+            Sort::BitVec(4),
+            Sort::BitVec(8),
+        ]
+        .map(|s| pool.add_sort(s));
+        let var = pool.add_sort(Sort::Var("@T0".into()));
+
+        // The last argument sort is repeated only for n-ary operators
+        assert_eq!(STORE.arg_sigs().count(), STORE.arg_sorts.len());
+        assert_eq!(AND.arg_sigs().take(5).count(), 5);
+
+        let bools = [bool_sort.clone(), bool_sort.clone(), bool_sort.clone()];
+        assert!(matches(&AND, &bools));
+        assert!(!matches(&AND, &[bool_sort.clone(), bool_sort, int.clone()]));
+
+        // All arguments of `=` must have the same sort
+        assert!(matches(&EQUALS, &[int.clone(), int.clone(), int.clone()]));
+        assert!(!matches(&EQUALS, &[int.clone(), int.clone(), string]));
+        assert!(matches(&EQUALS, &[int.clone(), var, int]));
+
+        // All bitvectors must have the same width
+        let bvs = [bv8.clone(), bv8.clone(), bv8.clone()];
+        assert!(matches(&BVADD, &bvs));
+        assert_eq!(BVADD.compute_sort(&mut pool, &bvs), bv8);
+        assert!(!matches(&BVADD, &[bv8.clone(), bv8, bv4]));
     }
 }

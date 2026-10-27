@@ -1,6 +1,6 @@
 # Operators definitions, loaded by the `extend_operator_enum` macro at compile time. Not all
-# operators supported by Carcara can be represented here with a fixed signature (e.g. variadic
-# operators), so some are hand-written in `enum Operator`.
+# operators supported by Carcara can be represented here with a fixed signature, so some are
+# hand-written in `enum Operator`.
 #
 # Each operator is declared with `[[operator]]`, `name`, `return_type`, and optional `arg_types`
 # (defaults to `[]` for nullary operators).
@@ -16,6 +16,10 @@
 # have the same width.
 #
 # Operators can also declare sort parameters in `params`, which can be used in the other sorts.
+#
+# Operators can be made n-ary by setting `nary` to one of the SMT-LIB attributes `left-assoc`,
+# `right-assoc`, `chainable` or `pairwise`. N-ary operators must have exactly two identical
+# `arg_types`, and accept two or more arguments of that sort.
 
 # Core operators
 
@@ -326,12 +330,14 @@ name = "str.<"
 variant = "StrLessThan"
 return_type = "Bool"
 arg_types = ["String", "String"]
+nary = "chainable"
 
 [[operator]]
 name = "str.<="
 variant = "StrLessEq"
 return_type = "Bool"
 arg_types = ["String", "String"]
+nary = "chainable"
 
 [[operator]]
 name = "str.at"

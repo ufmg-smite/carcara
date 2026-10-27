@@ -253,9 +253,14 @@ fn custom_check(
         }
         other => {
             let sig = other.sig().unwrap();
-            assert_num_args(sorts, sig.arg_sorts.len())?;
+            let arity: Range = if sig.nary.is_some() {
+                (sig.arg_sorts.len()..).into()
+            } else {
+                sig.arg_sorts.len().into()
+            };
+            assert_num_args(sorts, arity)?;
             let mut params = vec![None; sig.params.len()];
-            for (arg_sig, got) in sig.arg_sorts.iter().zip(sorts) {
+            for (arg_sig, got) in sig.arg_sigs().zip(sorts) {
                 if !arg_sig.match_with(&mut params, got) {
                     let expected = arg_sig.instantiate(parser.pool, &params, sig.params);
                     let expected = vec![expected].into_boxed_slice();

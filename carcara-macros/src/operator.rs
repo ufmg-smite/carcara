@@ -23,11 +23,23 @@ struct OperatorEntry {
     return_type: SortExpr,
     #[serde(default)]
     arg_types: Vec<SortExpr>,
+    #[serde(default)]
+    nary: Option<Nary>,
+}
+
+/// The SMT-LIB attribute that makes an operator n-ary.
+#[derive(serde::Deserialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum Nary {
+    LeftAssoc,
+    RightAssoc,
+    Chainable,
+    Pairwise,
 }
 
 /// A sort in the config file: either a sort name (`"Int"`) or a list representing a sort
 /// application (`["Set", "Int"]`).
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, PartialEq)]
 #[serde(
     untagged,
     expecting = "a sort name or a list of sorts, like `[\"Set\", \"Int\"]`"
@@ -184,6 +196,18 @@ fn load_operators(path: &Path) -> Operators {
             );
         }
 
+        // N-ary operators accept any number of arguments of a single sort
+        if entry.nary.is_some() && !matches!(entry.arg_types.as_slice(), [a, b] if a == b) {
+            panic!("n-ary operator `{name}` must have exactly two identical `arg_types`");
+        }
+        let nary = match entry.nary {
+            Some(Nary::LeftAssoc) => quote! { Some(NaryCase::LeftAssoc) },
+            Some(Nary::RightAssoc) => quote! { Some(NaryCase::RightAssoc) },
+            Some(Nary::Chainable) => quote! { Some(NaryCase::Chainable) },
+            Some(Nary::Pairwise) => quote! { Some(NaryCase::Pairwise) },
+            None => quote! { None },
+        };
+
         let return_sort = sort_tokens(&entry.return_type, entry);
         let arg_sorts = entry.arg_types.iter().map(|t| sort_tokens(t, entry));
         let sig = quote! {
@@ -192,6 +216,7 @@ fn load_operators(path: &Path) -> Operators {
                 params: &[#(#params),*],
                 arg_sorts: &[#(#arg_sorts),*],
                 return_sort: #return_sort,
+                nary: #nary,
             }
         };
         names.push(name.clone());
