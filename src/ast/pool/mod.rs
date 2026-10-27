@@ -192,10 +192,7 @@ impl Pool {
             }),
             Term::Var(_, sort) => sort.clone(),
             Term::Op(op, args) => match op {
-                Operator::True
-                | Operator::False
-                | Operator::Not
-                | Operator::Implies
+                Operator::Implies
                 | Operator::And
                 | Operator::Or
                 | Operator::Xor
@@ -205,14 +202,6 @@ impl Pool {
                 | Operator::GreaterThan
                 | Operator::LessEq
                 | Operator::GreaterEq
-                | Operator::IsInt
-                | Operator::StrLessThan
-                | Operator::StrLessEq
-                | Operator::PrefixOf
-                | Operator::SuffixOf
-                | Operator::Contains
-                | Operator::StrIsDigit
-                | Operator::StrInRe
                 | Operator::BvULt
                 | Operator::BvULe
                 | Operator::BvUGt
@@ -221,8 +210,7 @@ impl Pool {
                 | Operator::BvSLe
                 | Operator::BvSGt
                 | Operator::BvSGe
-                | Operator::Cl
-                | Operator::Delete => self.add_sort(Sort::Bool),
+                | Operator::Cl => self.add_sort(Sort::Bool),
 
                 Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
                     self.add_sort(Sort::Int)
@@ -280,7 +268,6 @@ impl Pool {
                     self.add_sort(s)
                 }
                 Operator::BvIte => self.compute_sort(&args[1]).clone(),
-                Operator::Ite => self.compute_sort(&args[1]).clone(),
                 Operator::Abs => self.compute_sort(&args[0]).clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     let s = if args
@@ -294,39 +281,12 @@ impl Pool {
                     self.add_sort(s)
                 }
                 Operator::RealDiv | Operator::ToReal => self.add_sort(Sort::Real),
-                Operator::IntDiv | Operator::Mod | Operator::ToInt => self.add_sort(Sort::Int),
-                Operator::Select => {
-                    let Sort::Array(_, y) = self.compute_sort(&args[0]).as_ref() else {
-                        unreachable!()
-                    };
-                    y.clone()
-                }
-                Operator::Store => self.compute_sort(&args[0]).clone(),
-                Operator::StrLen | Operator::IndexOf | Operator::StrToCode | Operator::StrToInt => {
-                    self.add_sort(Sort::Int)
-                }
-                Operator::StrConcat
-                | Operator::CharAt
-                | Operator::Substring
-                | Operator::Replace
-                | Operator::ReplaceAll
-                | Operator::ReplaceRe
-                | Operator::ReplaceReAll
-                | Operator::StrFromCode
-                | Operator::StrFromInt => self.add_sort(Sort::String),
-                Operator::StrToRe
-                | Operator::ReNone
-                | Operator::ReAll
-                | Operator::ReAllChar
-                | Operator::ReConcat
+                Operator::IntDiv => self.add_sort(Sort::Int),
+                Operator::StrConcat => self.add_sort(Sort::String),
+                Operator::ReConcat
                 | Operator::ReUnion
                 | Operator::ReIntersection
-                | Operator::ReKleeneClosure
-                | Operator::ReComplement
                 | Operator::ReDiff
-                | Operator::ReKleeneCross
-                | Operator::ReOption
-                | Operator::ReRange
                 | Operator::ReFromAutomaton => self.add_sort(Sort::RegLan),
                 Operator::RareList => match args.as_slice() {
                     // For empty lists, we can't know the element sort, so we use a placeholder
@@ -388,8 +348,15 @@ impl Pool {
                     self.add_sort(Sort::Set(tuple))
                 }
                 other => {
-                    let sorts: Vec<_> = args.iter().map(|a| self.compute_sort(a).clone()).collect();
-                    other.sig().unwrap().compute_sort(self, &sorts)
+                    let sig = other.sig().unwrap();
+                    // Without sort parameters, the result sort doesn't depend on the arguments
+                    if sig.params.is_empty() {
+                        sig.return_sort.instantiate(self, &[], &[])
+                    } else {
+                        let sorts: Vec<_> =
+                            args.iter().map(|a| self.compute_sort(a).clone()).collect();
+                        sig.compute_sort(self, &sorts)
+                    }
                 }
             },
             Term::App(f, args) => {

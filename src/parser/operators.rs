@@ -45,8 +45,6 @@ enum ArgsCheck {
     FirstThenAllEq(ArgSort),
     /// All arguments are pairwise equal, with no other constraint.
     AllEq,
-    /// One explicit constraint per argument position.
-    Positional(&'static [ArgSort]),
 }
 
 impl ArgsCheck {
@@ -65,12 +63,6 @@ impl ArgsCheck {
                 Ok(parser.check_sort_all_eq(sorts)?)
             }
             ArgsCheck::AllEq => Ok(parser.check_sort_all_eq(sorts)?),
-            ArgsCheck::Positional(arg_sorts) => {
-                for (arg_sort, sort) in arg_sorts.iter().zip(sorts) {
-                    arg_sort.check(parser, sort)?;
-                }
-                Ok(())
-            }
         }
     }
 }
@@ -147,27 +139,20 @@ enum OpCheck {
 /// Returns the type-checking behavior for `op`, given whether Int/Real subtyping is allowed.
 fn op_check(op: Operator, subtyping: bool) -> OpCheck {
     use ArgSort::{AnyBitVec, Exact, OneOf, Predicate};
-    use ArgsCheck::{AllEq, Each, FirstThenAllEq, Positional, Unconstrained};
+    use ArgsCheck::{AllEq, Each, FirstThenAllEq, Unconstrained};
 
     match op {
-        Operator::True | Operator::False => OpCheck::Rule(Rule::arity(0, Unconstrained)),
-        Operator::Not => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Bool)))),
         Operator::Implies => OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::Bool)))),
         Operator::Or | Operator::And | Operator::Xor => {
             OpCheck::Rule(Rule::strict_arity(2.., 1.., Each(Exact(Sort::Bool))))
         }
         Operator::Equals | Operator::Distinct => OpCheck::Rule(Rule::arity(2.., AllEq)),
-        Operator::Ite => OpCheck::Custom,
         Operator::Add | Operator::Mult => {
             OpCheck::Rule(Rule::arity(2.., int_or_real_args(subtyping)))
         }
         Operator::Sub => OpCheck::Rule(Rule::arity(1.., int_or_real_args(subtyping))),
         Operator::IntDiv => OpCheck::Rule(Rule::arity(2.., FirstThenAllEq(Exact(Sort::Int)))),
         Operator::RealDiv => OpCheck::Custom,
-        Operator::Mod => OpCheck::Rule(Rule::arity(
-            2,
-            Positional(&[Exact(Sort::Int), Exact(Sort::Int)]),
-        )),
         Operator::Abs => {
             let args = if subtyping {
                 Each(OneOf(INT_OR_REAL))
@@ -180,61 +165,11 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
             OpCheck::Rule(Rule::arity(2.., Each(OneOf(INT_OR_REAL))))
         }
         Operator::ToReal => OpCheck::Rule(Rule::arity(1, Each(OneOf(INT_OR_REAL)))),
-        Operator::ToInt | Operator::IsInt => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Real)))),
-        Operator::Select => OpCheck::Custom,
-        Operator::Store => OpCheck::Custom,
         Operator::StrConcat => OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::String)))),
-        Operator::StrLen | Operator::StrIsDigit | Operator::StrToCode | Operator::StrToInt => {
-            OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::String))))
-        }
-        Operator::StrLessThan
-        | Operator::StrLessEq
-        | Operator::PrefixOf
-        | Operator::SuffixOf
-        | Operator::Contains
-        | Operator::ReRange => OpCheck::Rule(Rule::arity(2, Each(Exact(Sort::String)))),
-        Operator::CharAt => OpCheck::Rule(Rule::arity(
-            2,
-            Positional(&[Exact(Sort::String), Exact(Sort::Int)]),
-        )),
-        Operator::Substring => OpCheck::Rule(Rule::arity(
-            3,
-            Positional(&[Exact(Sort::String), Exact(Sort::Int), Exact(Sort::Int)]),
-        )),
-        Operator::IndexOf => OpCheck::Rule(Rule::arity(
-            3,
-            Positional(&[Exact(Sort::String), Exact(Sort::String), Exact(Sort::Int)]),
-        )),
-        Operator::Replace | Operator::ReplaceAll => {
-            OpCheck::Rule(Rule::arity(3, Each(Exact(Sort::String))))
-        }
         Operator::ReFromAutomaton => OpCheck::Custom,
-        Operator::StrFromCode | Operator::StrFromInt => {
-            OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Int))))
-        }
-        Operator::StrToRe => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::String)))),
-        Operator::StrInRe => OpCheck::Rule(Rule::arity(
-            2,
-            Positional(&[Exact(Sort::String), Exact(Sort::RegLan)]),
-        )),
-        Operator::ReNone | Operator::ReAll | Operator::ReAllChar => {
-            OpCheck::Rule(Rule::arity(0, Unconstrained))
-        }
         Operator::ReConcat | Operator::ReUnion | Operator::ReIntersection | Operator::ReDiff => {
             OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::RegLan))))
         }
-        Operator::ReKleeneClosure
-        | Operator::ReComplement
-        | Operator::ReKleeneCross
-        | Operator::ReOption => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::RegLan)))),
-        Operator::ReplaceRe | Operator::ReplaceReAll => OpCheck::Rule(Rule::arity(
-            3,
-            Positional(&[
-                Exact(Sort::String),
-                Exact(Sort::RegLan),
-                Exact(Sort::String),
-            ]),
-        )),
         Operator::BvNot | Operator::BvNeg => OpCheck::Rule(Rule::arity(1, Each(AnyBitVec))),
         Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
             OpCheck::Rule(Rule::arity(1, Each(AnyBitVec)))
@@ -245,7 +180,6 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         // Note: not all-equal here -- different bitvector widths are allowed in `concat`
         Operator::BvConcat => OpCheck::Rule(Rule::arity(2.., Each(AnyBitVec))),
         Operator::Cl => OpCheck::Rule(Rule::arity(.., Unconstrained)),
-        Operator::Delete => OpCheck::Rule(Rule::arity(1, Each(Exact(Sort::Bool)))),
         Operator::BvAdd | Operator::BvMul | Operator::BvAnd | Operator::BvOr | Operator::BvXor => {
             OpCheck::Rule(Rule::arity(2.., FirstThenAllEq(AnyBitVec)))
         }
@@ -293,12 +227,6 @@ fn custom_check(
     sorts: &[Rc<Sort>],
 ) -> Result<Option<Rc<Term>>, ParserError> {
     match op {
-        Operator::Ite => {
-            assert_num_args(sorts, 3)?;
-            parser.check_sort_eq(&Sort::Bool, &sorts[0])?;
-            parser.check_sort_eq(sorts[1].as_ref(), &sorts[2])?;
-            Ok(None)
-        }
         Operator::RealDiv => {
             // Normally, the `/` operator may only receive Real arguments, but if we are allowing
             // Int/Real subtyping, it may also receive Ints
@@ -312,16 +240,6 @@ fn custom_check(
                 [a, b] => Ok(parser.interpret_div_as_real_lit(a, b)),
                 _ => Ok(None),
             }
-        }
-        Operator::Select => {
-            assert_num_args(sorts, 2)?;
-            parser.check_array_sort(Some(&sorts[1]), None, &sorts[0])?;
-            Ok(None)
-        }
-        Operator::Store => {
-            assert_num_args(sorts, 3)?;
-            parser.check_array_sort(Some(&sorts[1]), Some(&sorts[2]), &sorts[0])?;
-            Ok(None)
         }
         Operator::ReFromAutomaton => {
             assert_num_args(sorts, 1)?;

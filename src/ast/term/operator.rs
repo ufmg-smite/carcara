@@ -4,19 +4,7 @@ use crate::ast::{Rc, Sort, pool::Pool};
 #[carcara_macros::extend_operator_enum("operators.toml")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
-    /// The `true` boolean constant.
-    #[name("true")]
-    True,
-
-    /// The `false` boolean constant.
-    #[name("false")]
-    False,
-
     // Logic
-    /// The `not` operator.
-    #[name("not")]
-    Not,
-
     /// The `=>` operator.
     #[name("=>")]
     Implies,
@@ -41,10 +29,6 @@ pub enum Operator {
     #[name("distinct")]
     Distinct,
 
-    /// The `ite` operator.
-    #[name("ite")]
-    Ite,
-
     // Arithmetic
     /// The `+` operator.
     #[name("+")]
@@ -65,10 +49,6 @@ pub enum Operator {
     /// The `/` operator.
     #[name("/")]
     RealDiv,
-
-    /// The `mod` operator.
-    #[name("mod")]
-    Mod,
 
     /// The `abs` operator.
     #[name("abs")]
@@ -94,121 +74,12 @@ pub enum Operator {
     #[name("to_real")]
     ToReal,
 
-    /// The `to_int` operator.
-    #[name("to_int")]
-    ToInt,
-
-    /// The `is_int` operator.
-    #[name("is_int")]
-    IsInt,
-
-    // Arrays
-    /// The `select` operator.
-    #[name("select")]
-    Select,
-
-    /// The `store` operator.
-    #[name("store")]
-    Store,
-
     // Strings
     /// The `str.++` operator.
     #[name("str.++")]
     StrConcat,
 
-    /// The `str.len` operator.
-    #[name("str.len")]
-    StrLen,
-
-    /// The `str.<` operator.
-    #[name("str.<")]
-    StrLessThan,
-
-    /// The `str.<=` operator.
-    #[name("str.<=")]
-    StrLessEq,
-
-    /// The `str.at` operator.
-    #[name("str.at")]
-    CharAt,
-
-    /// The `str.substr` operator.
-    #[name("str.substr")]
-    Substring,
-
-    /// The `str.prefixof` operator.
-    #[name("str.prefixof")]
-    PrefixOf,
-
-    /// The `str.suffixof` operator.
-    #[name("str.suffixof")]
-    SuffixOf,
-
-    /// The `str.contains` operator.
-    #[name("str.contains")]
-    Contains,
-
-    /// The `str.indexof` operator.
-    #[name("str.indexof")]
-    IndexOf,
-
-    /// The `str.replace` operator.
-    #[name("str.replace")]
-    Replace,
-
-    /// The `str.replace_all` operator.
-    #[name("str.replace_all")]
-    ReplaceAll,
-
-    /// The `str.replace_re` operator.
-    #[name("str.replace_re")]
-    ReplaceRe,
-
-    /// The `str.replace_re_all` operator.
-    #[name("str.replace_re_all")]
-    ReplaceReAll,
-
-    /// The `str.is_digit` operator.
-    #[name("str.is_digit")]
-    StrIsDigit,
-
-    /// The `str.to_code` operator.
-    #[name("str.to_code")]
-    StrToCode,
-
-    /// The `str.from_code` operator.
-    #[name("str.from_code")]
-    StrFromCode,
-
-    /// The `str.to_int` operator.
-    #[name("str.to_int")]
-    StrToInt,
-
-    /// The `str.from_int` operator.
-    #[name("str.from_int")]
-    StrFromInt,
-
     // Regular Expressions
-    /// The `str.to_re` operator.
-    #[name("str.to_re")]
-    StrToRe,
-
-    /// The `str.in_re` operator.
-    #[name("str.in_re")]
-    StrInRe,
-
-    /// The `re.none` operator.
-    #[name("re.none")]
-    ReNone,
-
-    /// The `re.all` operator.
-    #[name("re.all")]
-    ReAll,
-
-    /// The `re.allchar` operator.
-    #[name("re.allchar")]
-    ReAllChar,
-
     /// The `re.++` operator.
     #[name("re.++")]
     ReConcat,
@@ -221,29 +92,9 @@ pub enum Operator {
     #[name("re.inter")]
     ReIntersection,
 
-    /// The `re.*` operator.
-    #[name("re.*")]
-    ReKleeneClosure,
-
-    /// The `re.comp` operator.
-    #[name("re.comp")]
-    ReComplement,
-
     /// The `re.diff` operator.
     #[name("re.diff")]
     ReDiff,
-
-    /// The `re.+` operator.
-    #[name("re.+")]
-    ReKleeneCross,
-
-    /// The `re.opt` operator.
-    #[name("re.opt")]
-    ReOption,
-
-    /// The `re.range` operator.
-    #[name("re.range")]
-    ReRange,
 
     /// The `re.from_automaton` operator.
     #[name("re.from_automaton")]
@@ -408,10 +259,6 @@ pub enum Operator {
     /// The `cl` operator.
     #[name("cl")]
     Cl,
-
-    /// The `@d` operator.
-    #[name("@d")]
-    Delete,
 
     // Sets and relations
     //

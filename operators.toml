@@ -1,4 +1,6 @@
-# Extra SMT-LIB operators, loaded by the `extend_operator_enum` macro at compile time.
+# Operators definitions, loaded by the `extend_operator_enum` macro at compile time. Not all
+# operators supported by Carcara can be represented here with a fixed signature (e.g. variadic
+# operators), so some are hand-written in `enum Operator`.
 #
 # Each operator is declared with `[[operator]]`, `name`, `return_type`, and optional `arg_types`
 # (defaults to `[]` for nullary operators).
@@ -11,11 +13,46 @@
 # and Tuple, written as lists (e.g. `(Set Int)` is written as `["Set", "Int"]`).
 #
 # Operators can also declare sort parameters in `params`, which can be used in the other sorts.
-#
-# Every operator here is a cvc5 extension to SMT-LIB. Standard SMT-LIB operators are built-ins,
-# in `enum Operator`.
 
-# Integer operators
+# Core operators
+
+[[operator]]
+name = "true"
+return_type = "Bool"
+
+[[operator]]
+name = "false"
+return_type = "Bool"
+
+[[operator]]
+name = "not"
+return_type = "Bool"
+arg_types = ["Bool"]
+
+[[operator]]
+name = "ite"
+params = ["X"]
+return_type = "X"
+arg_types = ["Bool", "X", "X"]
+
+# Arithmetic operators
+
+[[operator]]
+name = "mod"
+return_type = "Int"
+arg_types = ["Int", "Int"]
+
+[[operator]]
+name = "to_int"
+return_type = "Int"
+arg_types = ["Real"]
+
+[[operator]]
+name = "is_int"
+return_type = "Bool"
+arg_types = ["Real"]
+
+# Integer operators from cvc5
 
 [[operator]]
 name = "int.pow2"
@@ -108,7 +145,179 @@ name = "arccot"
 return_type = "Real"
 arg_types = ["Real"]
 
-# Strings, see https://cvc5.github.io/docs-ci/docs-main/theories/strings.html
+# Arrays
+
+[[operator]]
+name = "select"
+params = ["X", "Y"]
+return_type = "Y"
+arg_types = [["Array", "X", "Y"], "X"]
+
+[[operator]]
+name = "store"
+params = ["X", "Y"]
+return_type = ["Array", "X", "Y"]
+arg_types = [["Array", "X", "Y"], "X", "Y"]
+
+# Strings
+
+[[operator]]
+name = "str.len"
+return_type = "Int"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.<"
+variant = "StrLessThan"
+return_type = "Bool"
+arg_types = ["String", "String"]
+
+[[operator]]
+name = "str.<="
+variant = "StrLessEq"
+return_type = "Bool"
+arg_types = ["String", "String"]
+
+[[operator]]
+name = "str.at"
+variant = "CharAt"
+return_type = "String"
+arg_types = ["String", "Int"]
+
+[[operator]]
+name = "str.substr"
+variant = "Substring"
+return_type = "String"
+arg_types = ["String", "Int", "Int"]
+
+[[operator]]
+name = "str.prefixof"
+variant = "PrefixOf"
+return_type = "Bool"
+arg_types = ["String", "String"]
+
+[[operator]]
+name = "str.suffixof"
+variant = "SuffixOf"
+return_type = "Bool"
+arg_types = ["String", "String"]
+
+[[operator]]
+name = "str.contains"
+variant = "Contains"
+return_type = "Bool"
+arg_types = ["String", "String"]
+
+[[operator]]
+name = "str.indexof"
+variant = "IndexOf"
+return_type = "Int"
+arg_types = ["String", "String", "Int"]
+
+[[operator]]
+name = "str.replace"
+variant = "Replace"
+return_type = "String"
+arg_types = ["String", "String", "String"]
+
+[[operator]]
+name = "str.replace_all"
+variant = "ReplaceAll"
+return_type = "String"
+arg_types = ["String", "String", "String"]
+
+[[operator]]
+name = "str.replace_re"
+variant = "ReplaceRe"
+return_type = "String"
+arg_types = ["String", "RegLan", "String"]
+
+[[operator]]
+name = "str.replace_re_all"
+variant = "ReplaceReAll"
+return_type = "String"
+arg_types = ["String", "RegLan", "String"]
+
+[[operator]]
+name = "str.is_digit"
+return_type = "Bool"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.to_code"
+return_type = "Int"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.from_code"
+return_type = "String"
+arg_types = ["Int"]
+
+[[operator]]
+name = "str.to_int"
+return_type = "Int"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.from_int"
+return_type = "String"
+arg_types = ["Int"]
+
+# Regular expressions
+
+[[operator]]
+name = "str.to_re"
+return_type = "RegLan"
+arg_types = ["String"]
+
+[[operator]]
+name = "str.in_re"
+return_type = "Bool"
+arg_types = ["String", "RegLan"]
+
+[[operator]]
+name = "re.none"
+return_type = "RegLan"
+
+[[operator]]
+name = "re.all"
+return_type = "RegLan"
+
+[[operator]]
+name = "re.allchar"
+variant = "ReAllChar"
+return_type = "RegLan"
+
+[[operator]]
+name = "re.*"
+variant = "ReKleeneClosure"
+return_type = "RegLan"
+arg_types = ["RegLan"]
+
+[[operator]]
+name = "re.comp"
+variant = "ReComplement"
+return_type = "RegLan"
+arg_types = ["RegLan"]
+
+[[operator]]
+name = "re.+"
+variant = "ReKleeneCross"
+return_type = "RegLan"
+arg_types = ["RegLan"]
+
+[[operator]]
+name = "re.opt"
+variant = "ReOption"
+return_type = "RegLan"
+arg_types = ["RegLan"]
+
+[[operator]]
+name = "re.range"
+return_type = "RegLan"
+arg_types = ["String", "String"]
+
+# String extensions from cvc5, see https://cvc5.github.io/docs-ci/docs-main/theories/strings.html
 
 [[operator]]
 name = "str.indexof_re"
@@ -206,3 +415,11 @@ name = "rel.tclosure"
 params = ["X"]
 return_type = ["Set", ["Tuple", "X", "X"]]
 arg_types = [["Set", ["Tuple", "X", "X"]]]
+
+# Clausal operators
+
+[[operator]]
+name = "@d"
+variant = "Delete"
+return_type = "Bool"
+arg_types = ["Bool"]
