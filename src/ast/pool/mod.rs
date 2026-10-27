@@ -202,39 +202,13 @@ impl Pool {
                 | Operator::GreaterThan
                 | Operator::LessEq
                 | Operator::GreaterEq
-                | Operator::BvULt
-                | Operator::BvULe
-                | Operator::BvUGt
-                | Operator::BvUGe
-                | Operator::BvSLt
-                | Operator::BvSLe
-                | Operator::BvSGt
-                | Operator::BvSGe
                 | Operator::Cl => self.add_sort(Sort::Bool),
 
-                Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
-                    self.add_sort(Sort::Int)
-                }
-
                 Operator::BvAdd
-                | Operator::BvSub
-                | Operator::BvNot
-                | Operator::BvNeg
                 | Operator::BvAnd
                 | Operator::BvOr
                 | Operator::BvMul
-                | Operator::BvUDiv
-                | Operator::BvURem
-                | Operator::BvShl
-                | Operator::BvLShr
-                | Operator::BvNAnd
-                | Operator::BvNOr
-                | Operator::BvXor
-                | Operator::BvXNor
-                | Operator::BvSDiv
-                | Operator::BvSRem
-                | Operator::BvSMod
-                | Operator::BvAShr => 'block: {
+                | Operator::BvXor => 'block: {
                     for a in args {
                         match self.compute_sort(a).as_ref() {
                             Sort::BitVec(_) => break 'block self.compute_sort(a).clone(),

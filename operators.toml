@@ -162,6 +162,158 @@ params = ["X", "Y"]
 return_type = ["Array", "X", "Y"]
 arg_types = [["Array", "X", "Y"], "X", "Y"]
 
+# Bit-vectors
+
+[[operator]]
+name = "bvnot"
+variant = "BvNot"
+return_type = "BitVec"
+arg_types = ["BitVec"]
+
+[[operator]]
+name = "bvneg"
+variant = "BvNeg"
+return_type = "BitVec"
+arg_types = ["BitVec"]
+
+[[operator]]
+name = "bvudiv"
+variant = "BvUDiv"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvurem"
+variant = "BvURem"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvshl"
+variant = "BvShl"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvlshr"
+variant = "BvLShr"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvnand"
+variant = "BvNAnd"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvnor"
+variant = "BvNOr"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvxnor"
+variant = "BvXNor"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsub"
+variant = "BvSub"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsdiv"
+variant = "BvSDiv"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsrem"
+variant = "BvSRem"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsmod"
+variant = "BvSMod"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvashr"
+variant = "BvAShr"
+return_type = "BitVec"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvult"
+variant = "BvULt"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvule"
+variant = "BvULe"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvugt"
+variant = "BvUGt"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvuge"
+variant = "BvUGe"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvslt"
+variant = "BvSLt"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsle"
+variant = "BvSLe"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsgt"
+variant = "BvSGt"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "bvsge"
+variant = "BvSGe"
+return_type = "Bool"
+arg_types = ["BitVec", "BitVec"]
+
+[[operator]]
+name = "ubv_to_int"
+variant = "UBvToInt"
+return_type = "Int"
+arg_types = ["BitVec"]
+
+[[operator]]
+name = "sbv_to_int"
+variant = "SBvToInt"
+return_type = "Int"
+arg_types = ["BitVec"]
+
+[[operator]]
+name = "@bvsize"
+variant = "BvSize"
+return_type = "Int"
+arg_types = ["BitVec"]
+
 # Strings
 
 [[operator]]

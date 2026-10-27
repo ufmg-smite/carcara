@@ -170,10 +170,6 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         Operator::ReConcat | Operator::ReUnion | Operator::ReIntersection | Operator::ReDiff => {
             OpCheck::Rule(Rule::arity(2.., Each(Exact(Sort::RegLan))))
         }
-        Operator::BvNot | Operator::BvNeg => OpCheck::Rule(Rule::arity(1, Each(AnyBitVec))),
-        Operator::BvSize | Operator::UBvToInt | Operator::SBvToInt => {
-            OpCheck::Rule(Rule::arity(1, Each(AnyBitVec)))
-        }
         Operator::BvBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Bool)))),
         Operator::BvPBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Int)))),
         Operator::BvConst => OpCheck::Rule(Rule::arity(2, Each(Exact(Sort::Int)))),
@@ -183,27 +179,7 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         Operator::BvAdd | Operator::BvMul | Operator::BvAnd | Operator::BvOr | Operator::BvXor => {
             OpCheck::Rule(Rule::arity(2.., FirstThenAllEq(AnyBitVec)))
         }
-        Operator::BvUDiv
-        | Operator::BvURem
-        | Operator::BvShl
-        | Operator::BvLShr
-        | Operator::BvULt
-        | Operator::BvNAnd
-        | Operator::BvNOr
-        | Operator::BvXNor
-        | Operator::BvComp
-        | Operator::BvSub
-        | Operator::BvSDiv
-        | Operator::BvSRem
-        | Operator::BvSMod
-        | Operator::BvAShr
-        | Operator::BvULe
-        | Operator::BvUGt
-        | Operator::BvUGe
-        | Operator::BvSLt
-        | Operator::BvSLe
-        | Operator::BvSGt
-        | Operator::BvSGe => OpCheck::Rule(Rule::arity(2, FirstThenAllEq(AnyBitVec))),
+        Operator::BvComp => OpCheck::Rule(Rule::arity(2, FirstThenAllEq(AnyBitVec))),
         Operator::BvIte => OpCheck::Custom,
         Operator::RareList => OpCheck::Rule(Rule::arity(.., Unconstrained)),
         Operator::SetInsert => OpCheck::Custom,

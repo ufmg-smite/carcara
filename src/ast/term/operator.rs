@@ -100,16 +100,7 @@ pub enum Operator {
     #[name("re.from_automaton")]
     ReFromAutomaton,
 
-    // BV operators (unary)
-    /// The `bvnot` operator.
-    #[name("bvnot")]
-    BvNot,
-
-    /// The `bvneg` operator.
-    #[name("bvneg")]
-    BvNeg,
-
-    // BV operators (binary, left-assoc)
+    // BV operators
     /// The `bvand` operator.
     #[name("bvand")]
     BvAnd,
@@ -126,106 +117,17 @@ pub enum Operator {
     #[name("bvmul")]
     BvMul,
 
-    // BV operators (binary)
-    /// The `bvudiv` operator.
-    #[name("bvudiv")]
-    BvUDiv,
-
-    /// The `bvurem` operator.
-    #[name("bvurem")]
-    BvURem,
-
-    /// The `bvshl` operator.
-    #[name("bvshl")]
-    BvShl,
-
-    /// The `bvlshr` operator.
-    #[name("bvlshr")]
-    BvLShr,
-
-    /// The `bvult` operator.
-    #[name("bvult")]
-    BvULt,
-
     /// The `concat` operator.
     #[name("concat")]
     BvConcat,
-
-    /// The `bvnand` operator.
-    #[name("bvnand")]
-    BvNAnd,
-
-    /// The `bvnor` operator.
-    #[name("bvnor")]
-    BvNOr,
 
     /// The `bvxor` operator.
     #[name("bvxor")]
     BvXor,
 
-    /// The `bvxnor` operator.
-    #[name("bvxnor")]
-    BvXNor,
-
     /// The `bvcomp` operator.
     #[name("bvcomp")]
     BvComp,
-
-    /// The `bvsub` operator.
-    #[name("bvsub")]
-    BvSub,
-
-    /// The `bvsdiv` operator.
-    #[name("bvsdiv")]
-    BvSDiv,
-
-    /// The `bvsrem` operator.
-    #[name("bvsrem")]
-    BvSRem,
-
-    /// The `bvsmod` operator.
-    #[name("bvsmod")]
-    BvSMod,
-
-    /// The `bvashr` operator.
-    #[name("bvashr")]
-    BvAShr,
-
-    /// The `bvule` operator.
-    #[name("bvule")]
-    BvULe,
-
-    /// The `bvugt` operator.
-    #[name("bvugt")]
-    BvUGt,
-
-    /// The `bvuge` operator.
-    #[name("bvuge")]
-    BvUGe,
-
-    /// The `bvslt` operator.
-    #[name("bvslt")]
-    BvSLt,
-
-    /// The `bvsle` operator.
-    #[name("bvsle")]
-    BvSLe,
-
-    /// The `bvsgt` operator.
-    #[name("bvsgt")]
-    BvSGt,
-
-    /// The `bvsge` operator.
-    #[name("bvsge")]
-    BvSGe,
-
-    /// The `ubv_to_int` operator.
-    #[name("ubv_to_int")]
-    UBvToInt,
-
-    /// The `sbv_to_int` operator.
-    #[name("sbv_to_int")]
-    SBvToInt,
 
     /// The `@pbbterm` operator.
     #[name("@pbbterm")]
@@ -238,10 +140,6 @@ pub enum Operator {
     /// The `@bv` operator.
     #[name("@bv")]
     BvConst,
-
-    /// The `@bvsize` operator.
-    #[name("@bvsize")]
-    BvSize,
 
     /// The `bvite` operator.
     ///
