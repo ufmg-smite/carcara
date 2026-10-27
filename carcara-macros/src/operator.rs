@@ -74,6 +74,7 @@ fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
         "String" => quote! { SortSig::String },
         "RegLan" => quote! { SortSig::RegLan },
         "UnitTuple" => quote! { SortSig::Tuple(&[]) },
+        "BitVec" => quote! { SortSig::BitVec },
         _ => return None,
     })
 }
@@ -172,9 +173,19 @@ fn load_operators(path: &Path) -> Operators {
             }
         }
 
+        // The shared bitvector width is an extra sort parameter, after the declared ones
+        let mut params = entry.params.clone();
+        if entry.arg_types.iter().any(|t| t.mentions("BitVec")) {
+            params.push("BitVec".to_owned());
+        } else if entry.return_type.mentions("BitVec") {
+            panic!(
+                "the bitvector width of operator `{name}` must occur in `arg_types`, otherwise it \
+                can't be inferred",
+            );
+        }
+
         let return_sort = sort_tokens(&entry.return_type, entry);
         let arg_sorts = entry.arg_types.iter().map(|t| sort_tokens(t, entry));
-        let params = &entry.params;
         let sig = quote! {
             OperatorSig {
                 name: #name,

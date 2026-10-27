@@ -9,8 +9,11 @@
 # `str.to_lower` becomes `StrToLower`). You can set the optional `variant` key to choose the variant
 # name explicitly.
 #
-# Supported sorts are: Bool, Int, Real, String, RegLan, UnitTuple, and applications of Array, Set
-# and Tuple, written as lists (e.g. `(Set Int)` is written as `["Set", "Int"]`).
+# Supported sorts are: Bool, Int, Real, String, RegLan, UnitTuple, BitVec, and applications of
+# Array, Set and Tuple, written as lists (e.g. `(Set Int)` is written as `["Set", "Int"]`).
+#
+# `BitVec` matches a bitvector of any width, but all occurrences of `BitVec` in an operator must
+# have the same width.
 #
 # Operators can also declare sort parameters in `params`, which can be used in the other sorts.
 

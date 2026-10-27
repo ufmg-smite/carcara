@@ -372,6 +372,9 @@ pub enum NaryCase {
 #[derive(Debug)]
 pub enum SortSig {
     Var(usize),
+    /// A bitvector of any width. All bitvectors in a signature must have the same width, so they
+    /// all share an extra sort parameter, always the last in the parameter list.
+    BitVec,
     Bool,
     Int,
     Real,
@@ -393,6 +396,19 @@ impl SortSig {
                     true
                 }
             },
+            (SortSig::BitVec, Sort::BitVec(_) | Sort::ParamBitVec) => {
+                let slot = params.last_mut().unwrap();
+                match slot {
+                    // A bitvector with a known width replaces one with an unknown width
+                    Some(existing) if existing.as_ref() != &Sort::ParamBitVec => {
+                        existing.is_compatible(sort)
+                    }
+                    _ => {
+                        *slot = Some(sort.clone());
+                        true
+                    }
+                }
+            }
             (SortSig::Bool, Sort::Bool)
             | (SortSig::Int, Sort::Int)
             | (SortSig::Real, Sort::Real)
@@ -424,6 +440,10 @@ impl SortSig {
             SortSig::Var(i) => match &params[*i] {
                 Some(s) => s.clone(),
                 None => pool.add_sort(Sort::Var(names[*i].to_owned())),
+            },
+            SortSig::BitVec => match params.last().unwrap() {
+                Some(s) => s.clone(),
+                None => pool.add_sort(Sort::ParamBitVec),
             },
             SortSig::Bool => pool.add_sort(Sort::Bool),
             SortSig::Int => pool.add_sort(Sort::Int),
@@ -485,6 +505,14 @@ mod tests {
             SortSig::Var(1),
         ],
         return_sort: SortSig::Array(&SortSig::Var(0), &SortSig::Var(1)),
+    };
+
+    /// The signature of `bvadd`, restricted to two arguments: `BitVec BitVec -> BitVec`.
+    static BVADD: OperatorSig = OperatorSig {
+        name: "bvadd",
+        params: &["BitVec"],
+        arg_sorts: &[SortSig::BitVec, SortSig::BitVec],
+        return_sort: SortSig::BitVec,
     };
 
     /// Matches every argument sort against the signature, failing on the first mismatch.
@@ -549,5 +577,51 @@ mod tests {
 
         let got = SortSig::Set(&SortSig::Var(0)).instantiate(&mut pool, &[None], &["X"]);
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn match_bitvectors() {
+        let mut pool = Pool::new();
+        let [bv4, bv8, param, int] = [
+            Sort::BitVec(4),
+            Sort::BitVec(8),
+            Sort::ParamBitVec,
+            Sort::Int,
+        ]
+        .map(|s| pool.add_sort(s));
+        let var = pool.add_sort(Sort::Var("@T0".into()));
+
+        // All bitvectors must have the same width
+        assert!(matches(&BVADD, &[bv8.clone(), bv8.clone()]));
+        assert_eq!(
+            BVADD.compute_sort(&mut pool, &[bv8.clone(), bv8.clone()]),
+            bv8
+        );
+        assert!(!matches(&BVADD, &[bv8.clone(), bv4]));
+        assert!(!matches(&BVADD, &[bv8.clone(), int]));
+
+        // Bitvectors with unknown widths, like in RARE rules, match any width. The result has the
+        // first known width, if there is one
+        assert!(matches(&BVADD, &[param.clone(), bv8.clone()]));
+        assert_eq!(
+            BVADD.compute_sort(&mut pool, &[param.clone(), bv8.clone()]),
+            bv8
+        );
+        assert_eq!(
+            BVADD.compute_sort(&mut pool, &[bv8.clone(), param.clone()]),
+            bv8
+        );
+        assert_eq!(
+            BVADD.compute_sort(&mut pool, &[param.clone(), param.clone()]),
+            param
+        );
+
+        // Sort variables match any bitvector, without binding its width
+        assert!(matches(&BVADD, &[var.clone(), bv8.clone()]));
+        assert_eq!(
+            BVADD.compute_sort(&mut pool, &[var.clone(), bv8.clone()]),
+            bv8
+        );
+        assert_eq!(BVADD.compute_sort(&mut pool, &[var.clone(), var]), param);
     }
 }
