@@ -118,23 +118,14 @@ impl Rule {
 /// The sorts `Int` and `Real`, used by several arithmetic operators.
 const INT_OR_REAL: &[Sort] = &[Sort::Int, Sort::Real];
 
-/// Builds the `ArgsCheck` shared by `+`, `-` and `*`, which depends on Int/Real subtyping.
-fn int_or_real_args(subtyping: bool) -> ArgsCheck {
-    if subtyping {
-        ArgsCheck::Each(ArgSort::OneOf(INT_OR_REAL))
-    } else {
-        ArgsCheck::FirstThenAllEq(ArgSort::OneOf(INT_OR_REAL))
-    }
-}
-
 /// Whether an operator's type checking is expressed declaratively or requires custom logic.
 enum OpCheck {
     Rule(Rule),
     Custom,
 }
 
-/// Returns the type-checking behavior for `op`, given whether Int/Real subtyping is allowed.
-fn op_check(op: Operator, subtyping: bool) -> OpCheck {
+/// Returns the type-checking behavior for `op`.
+fn op_check(op: Operator) -> OpCheck {
     use ArgSort::{AnyBitVec, Exact, OneOf, Predicate};
     use ArgsCheck::{Each, FirstThenAllEq, Unconstrained};
 
@@ -144,23 +135,11 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         Operator::Or | Operator::And | Operator::Xor => {
             OpCheck::Rule(Rule::strict_arity(2.., 1.., Each(Exact(Sort::Bool))))
         }
-        Operator::Add | Operator::Mult => {
-            OpCheck::Rule(Rule::arity(2.., int_or_real_args(subtyping)))
-        }
-        Operator::Sub => OpCheck::Rule(Rule::arity(1.., int_or_real_args(subtyping))),
-        Operator::RealDiv => OpCheck::Custom,
-        Operator::Abs => {
-            let args = if subtyping {
-                Each(OneOf(INT_OR_REAL))
-            } else {
-                Each(Exact(Sort::Int))
-            };
-            OpCheck::Rule(Rule::arity(1, args))
-        }
+        // These are defined in `operators.toml`, but mixing `Int` and `Real` arguments is allowed
+        // even without Int/Real subtyping, since some solvers (e.g. veriT) produce terms like that
         Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
             OpCheck::Rule(Rule::arity(2.., Each(OneOf(INT_OR_REAL))))
         }
-        Operator::ToReal => OpCheck::Rule(Rule::arity(1, Each(OneOf(INT_OR_REAL)))),
         Operator::ReFromAutomaton => OpCheck::Custom,
         Operator::BvBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Bool)))),
         Operator::BvPBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Int)))),
@@ -190,6 +169,9 @@ fn custom_check(
     sorts: &[Rc<Sort>],
 ) -> Result<Option<Rc<Term>>, ParserError> {
     match op {
+        // This is defined in `operators.toml`, but its sort checking depends on Int/Real subtyping
+        // in a way its signature can't express, and division of integer constants can be
+        // interpreted as a rational literal
         Operator::RealDiv => {
             // Normally, the `/` operator may only receive Real arguments, but if we are allowing
             // Int/Real subtyping, it may also receive Ints
@@ -263,7 +245,7 @@ pub(super) fn check_op_types(
     args: &[Rc<Term>],
     sorts: &[Rc<Sort>],
 ) -> Result<Option<Rc<Term>>, ParserError> {
-    match op_check(op, parser.config.allow_int_real_subtyping) {
+    match op_check(op) {
         OpCheck::Rule(rule) => {
             rule.check(parser, sorts)?;
             Ok(None)

@@ -192,11 +192,7 @@ impl Pool {
             }),
             Term::Var(_, sort) => sort.clone(),
             Term::Op(op, args) => match op {
-                Operator::LessThan
-                | Operator::GreaterThan
-                | Operator::LessEq
-                | Operator::GreaterEq
-                | Operator::Cl => self.add_sort(Sort::Bool),
+                Operator::Cl => self.add_sort(Sort::Bool),
 
                 Operator::BvBbTerm | Operator::BvPBbTerm => self.add_sort(Sort::BitVec(args.len())),
                 Operator::BvConst => {
@@ -220,19 +216,6 @@ impl Pool {
                     );
                     self.add_sort(s)
                 }
-                Operator::Abs => self.compute_sort(&args[0]).clone(),
-                Operator::Add | Operator::Sub | Operator::Mult => {
-                    let s = if args
-                        .iter()
-                        .any(|a| self.compute_sort(a).as_ref() == &Sort::Real)
-                    {
-                        Sort::Real
-                    } else {
-                        Sort::Int
-                    };
-                    self.add_sort(s)
-                }
-                Operator::RealDiv | Operator::ToReal => self.add_sort(Sort::Real),
                 Operator::ReFromAutomaton => self.add_sort(Sort::RegLan),
                 Operator::RareList => match args.as_slice() {
                     // For empty lists, we can't know the element sort, so we use a placeholder

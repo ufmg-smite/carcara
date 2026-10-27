@@ -23,8 +23,9 @@
 # Operators can also declare sort parameters in `params`, which can be used in the other sorts.
 #
 # Operators can be made n-ary by setting `nary` to one of the SMT-LIB attributes `left-assoc`,
-# `right-assoc`, `chainable` or `pairwise`. N-ary operators must have exactly two identical
-# `arg_types`, and accept two or more arguments of that sort.
+# `right-assoc`, `chainable` or `pairwise`. N-ary operators must have two identical `arg_types`, and
+# will accept two or more arguments of that sort. Left- and right-associative operators can instead
+# have a single `arg_types`, in which case they will also accept a single argument.
 
 # Core operators
 
@@ -88,6 +89,75 @@ return_type = "X"
 arg_types = ["Bool", "X", "X"]
 
 # Arithmetic operators
+
+[[operator]]
+name = "+"
+variant = "Add"
+return_type = "IntOrReal"
+arg_types = ["IntOrReal", "IntOrReal"]
+nary = "left-assoc"
+
+[[operator]]
+name = "-"
+variant = "Sub"
+return_type = "IntOrReal"
+# A single argument sort allows unary `-` terms (negation)
+arg_types = ["IntOrReal"]
+nary = "left-assoc"
+
+[[operator]]
+name = "*"
+variant = "Mult"
+return_type = "IntOrReal"
+arg_types = ["IntOrReal", "IntOrReal"]
+nary = "left-assoc"
+
+[[operator]]
+name = "/"
+variant = "RealDiv"
+return_type = "Real"
+# We define the arguments as `Real`, but with Int/Real subtyping the parser also accepts `Int`
+# arguments. This is handled manually in the parser.
+arg_types = ["Real", "Real"]
+nary = "left-assoc"
+
+[[operator]]
+name = "abs"
+return_type = "IntOrReal"
+arg_types = ["IntOrReal"]
+
+[[operator]]
+name = "<"
+variant = "LessThan"
+return_type = "Bool"
+arg_types = ["IntOrReal", "IntOrReal"]
+nary = "chainable"
+
+[[operator]]
+name = ">"
+variant = "GreaterThan"
+return_type = "Bool"
+arg_types = ["IntOrReal", "IntOrReal"]
+nary = "chainable"
+
+[[operator]]
+name = "<="
+variant = "LessEq"
+return_type = "Bool"
+arg_types = ["IntOrReal", "IntOrReal"]
+nary = "chainable"
+
+[[operator]]
+name = ">="
+variant = "GreaterEq"
+return_type = "Bool"
+arg_types = ["IntOrReal", "IntOrReal"]
+nary = "chainable"
+
+[[operator]]
+name = "to_real"
+return_type = "Real"
+arg_types = ["IntOrReal"]
 
 [[operator]]
 name = "div"

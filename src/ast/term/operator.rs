@@ -4,47 +4,6 @@ use crate::ast::{Rc, Sort, pool::Pool};
 #[carcara_macros::extend_operator_enum("operators.toml")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
-    // Arithmetic
-    /// The `+` operator.
-    #[name("+")]
-    Add,
-
-    /// The `-` operator.
-    #[name("-")]
-    Sub,
-
-    /// The `*` operator.
-    #[name("*")]
-    Mult,
-
-    /// The `/` operator.
-    #[name("/")]
-    RealDiv,
-
-    /// The `abs` operator.
-    #[name("abs")]
-    Abs,
-
-    /// The `<` operator.
-    #[name("<")]
-    LessThan,
-
-    /// The `>` operator.
-    #[name(">")]
-    GreaterThan,
-
-    /// The `<=` operator.
-    #[name("<=")]
-    LessEq,
-
-    /// The `>=` operator.
-    #[name(">=")]
-    GreaterEq,
-
-    /// The `to_real` operator.
-    #[name("to_real")]
-    ToReal,
-
     // Regular Expressions
     /// The `re.from_automaton` operator.
     #[name("re.from_automaton")]
@@ -117,14 +76,6 @@ impl Operator {
     /// `[NaryCase]` representing its behaviour in that situation. Otherwise, returns `None`.
     pub fn nary_case(&self) -> Option<NaryCase> {
         match self {
-            // Integers/Reals
-            Operator::Add | Operator::Sub | Operator::Mult | Operator::RealDiv => {
-                Some(NaryCase::LeftAssoc)
-            }
-            Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
-                Some(NaryCase::Chainable)
-            }
-
             // Clausal
             Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
 

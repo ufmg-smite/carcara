@@ -207,9 +207,13 @@ fn load_operators(path: &Path) -> Operators {
             panic!("operator `{name}` can't use both `BitVec` and `IntOrReal`");
         }
 
-        // N-ary operators accept any number of arguments of a single sort
-        if entry.nary.is_some() && !matches!(entry.arg_types.as_slice(), [a, b] if a == b) {
-            panic!("n-ary operator `{name}` must have exactly two identical `arg_types`");
+        // N-ary operators accept any number of arguments of a single sort. Associative operators
+        // can also have a single argument sort, in which case they accept unary application
+        match (entry.nary, entry.arg_types.as_slice()) {
+            (None, _) => (),
+            (Some(_), [a, b]) if a == b => (),
+            (Some(Nary::LeftAssoc | Nary::RightAssoc), [_]) => (),
+            (Some(_), _) => panic!("invalid n-ary arguments for operator `{name}`",),
         }
         let nary = match entry.nary {
             Some(Nary::LeftAssoc) => quote! { Some(NaryCase::LeftAssoc) },
