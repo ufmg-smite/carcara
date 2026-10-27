@@ -142,6 +142,8 @@ struct Operators {
     names: Vec<String>,
     idents: Vec<Ident>,
     sigs: Vec<TokenStream2>,
+    /// The largest number of sort parameters in a signature, and the operator that has them.
+    most_params: (usize, String),
 }
 
 fn load_operators(path: &Path) -> Operators {
@@ -151,6 +153,7 @@ fn load_operators(path: &Path) -> Operators {
         .unwrap_or_else(|e| panic!("failed to parse `{}`: {e}", path.display()));
     let mut seen_idents = std::collections::HashSet::new();
     let mut names = Vec::new();
+    let mut most_params = (0, String::new());
     let mut idents = Vec::new();
     let mut sigs = Vec::new();
 
@@ -219,12 +222,15 @@ fn load_operators(path: &Path) -> Operators {
                 nary: #nary,
             }
         };
+        if params.len() > most_params.0 {
+            most_params = (params.len(), name.clone());
+        }
         names.push(name.clone());
         idents.push(ident);
         sigs.push(sig.clone());
     }
 
-    Operators { names, idents, sigs }
+    Operators { names, idents, sigs, most_params }
 }
 
 fn get_variant_name_attr(variant: &syn::Variant) -> String {
@@ -272,6 +278,11 @@ pub fn extend_operator_enum(config_path: &Path, mut enum_item: syn::ItemEnum) ->
         variant.attrs.retain(|a| !a.path().is_ident("name"));
     }
 
+    // Sort parameters are bound in a stack-allocated array, so their number is limited
+    let (num_params, op_name) = &extra_operators.most_params;
+    let too_many_params =
+        format!("operator `{op_name}` has more than `MAX_SORT_PARAMS` sort parameters");
+
     for (name, ident) in extra_operators.names.iter().zip(&extra_idents) {
         let doc = format!(" The `{name}` operator.");
         enum_item.variants.push(syn::parse_quote! {
@@ -284,6 +295,8 @@ pub fn extend_operator_enum(config_path: &Path, mut enum_item: syn::ItemEnum) ->
         // `include_str!` registers the config as a tracked input, since `tracked_path` is unstable.
         #[doc(hidden)]
         const _OPERATORS_TOML: &str = include_str!(#path_str);
+
+        const _: () = assert!(#num_params <= OperatorSig::MAX_SORT_PARAMS, #too_many_params);
 
         #enum_item
 

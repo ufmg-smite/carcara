@@ -5,7 +5,7 @@ mod storage;
 mod tests;
 
 use super::{
-    Binder, Constant, Operator, ParamOperator, Rc, Sort, SortSubstitution, SortedVar, Term,
+    Binder, Constant, Operator, ParamOperator, Rc, Sort, SortSig, SortSubstitution, SortedVar, Term,
 };
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
@@ -323,8 +323,17 @@ impl Pool {
                 }
                 other => {
                     let sig = other.sig().unwrap();
-                    // Without sort parameters, the result sort doesn't depend on the arguments
-                    if sig.params.is_empty() {
+                    // Without sort parameters, or if the result sort is a constant sort, the result
+                    // sort doesn't depend on the arguments
+                    let is_constant = matches!(
+                        sig.return_sort,
+                        SortSig::Bool
+                            | SortSig::Int
+                            | SortSig::Real
+                            | SortSig::String
+                            | SortSig::RegLan
+                    );
+                    if sig.params.is_empty() || is_constant {
                         sig.return_sort.instantiate(self, &[], &[])
                     } else {
                         let sorts: Vec<_> =

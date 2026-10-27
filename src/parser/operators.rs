@@ -5,7 +5,7 @@ use super::{
     error::{ParserError, SortError, assert_num_args, check_relation_sort},
 };
 use crate::{
-    ast::{Constant, Operator, Rc, Sort, Term},
+    ast::{Constant, Operator, OperatorSig, Rc, Sort, Term},
     automata::parser::parse_automaton,
     utils::Range,
 };
@@ -259,10 +259,11 @@ fn custom_check(
                 sig.arg_sorts.len().into()
             };
             assert_num_args(sorts, arity)?;
-            let mut params = vec![None; sig.params.len()];
+            let mut params = [const { None }; OperatorSig::MAX_SORT_PARAMS];
+            let params = &mut params[..sig.params.len()];
             for (arg_sig, got) in sig.arg_sigs().zip(sorts) {
-                if !arg_sig.match_with(&mut params, got) {
-                    let expected = arg_sig.instantiate(parser.pool, &params, sig.params);
+                if !arg_sig.match_with(params, got) {
+                    let expected = arg_sig.instantiate(parser.pool, params, sig.params);
                     let expected = vec![expected].into_boxed_slice();
                     return Err(SortError { expected, got: got.clone() }.into());
                 }

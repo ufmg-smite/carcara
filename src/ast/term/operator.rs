@@ -378,6 +378,12 @@ pub struct OperatorSig {
 }
 
 impl OperatorSig {
+    /// The maximum number of sort parameters in an operator signature, counting the extra parameter
+    /// for the bitvector width.
+    ///
+    /// This allows the parameters to be stored in a stack-allocated array, for performance reasons.
+    pub const MAX_SORT_PARAMS: usize = 4;
+
     /// Returns the signature of each argument. For n-ary operators, the last one is repeated
     /// indefinitely.
     pub fn arg_sigs(&self) -> impl Iterator<Item = &SortSig> {
@@ -387,11 +393,12 @@ impl OperatorSig {
 
     /// Computes the sort of an application of this operator to arguments with sorts `arg_sorts`.
     pub fn compute_sort(&self, pool: &mut Pool, arg_sorts: &[Rc<Sort>]) -> Rc<Sort> {
-        let mut params = vec![None; self.params.len()];
+        let mut params = [const { None }; Self::MAX_SORT_PARAMS];
+        let params = &mut params[..self.params.len()];
         for (sig, sort) in self.arg_sigs().zip(arg_sorts) {
-            sig.match_with(&mut params, sort);
+            sig.match_with(params, sort);
         }
-        self.return_sort.instantiate(pool, &params, self.params)
+        self.return_sort.instantiate(pool, params, self.params)
     }
 }
 
