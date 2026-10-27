@@ -168,8 +168,6 @@ fn op_check(op: Operator, subtyping: bool) -> OpCheck {
         // Note: not all-equal here -- different bitvector widths are allowed in `concat`
         Operator::BvConcat => OpCheck::Rule(Rule::arity(2.., Each(AnyBitVec))),
         Operator::Cl => OpCheck::Rule(Rule::arity(.., Unconstrained)),
-        Operator::BvComp => OpCheck::Rule(Rule::arity(2, FirstThenAllEq(AnyBitVec))),
-        Operator::BvIte => OpCheck::Custom,
         Operator::RareList => OpCheck::Rule(Rule::arity(.., Unconstrained)),
         Operator::SetInsert => OpCheck::Custom,
         Operator::Tuple => OpCheck::Rule(Rule::arity(1.., Unconstrained)),
@@ -232,12 +230,6 @@ fn custom_check(
             parser.check_sort_all_eq(&sorts[..sorts.len() - 1])?;
             let expected = parser.pool.add_sort(Sort::Set(sorts[0].clone()));
             parser.check_sort_eq(&expected, sorts.last().unwrap())?;
-            Ok(None)
-        }
-        Operator::BvIte => {
-            assert_num_args(sorts, 3)?;
-            parser.check_sort_eq(&Sort::BitVec(1), &sorts[0])?;
-            parser.check_sort_all_eq(&sorts[1..])?;
             Ok(None)
         }
         other => {

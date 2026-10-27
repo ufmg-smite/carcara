@@ -87,6 +87,7 @@ fn builtin_sort_tokens(name: &str) -> Option<TokenStream2> {
         "RegLan" => quote! { SortSig::RegLan },
         "UnitTuple" => quote! { SortSig::Tuple(&[]) },
         "BitVec" => quote! { SortSig::BitVec },
+        "Bit" => quote! { SortSig::Bit },
         _ => return None,
     })
 }

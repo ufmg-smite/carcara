@@ -198,7 +198,6 @@ impl Pool {
                 | Operator::GreaterEq
                 | Operator::Cl => self.add_sort(Sort::Bool),
 
-                Operator::BvComp => self.add_sort(Sort::BitVec(1)),
                 Operator::BvBbTerm | Operator::BvPBbTerm => self.add_sort(Sort::BitVec(args.len())),
                 Operator::BvConst => {
                     let s = match &*args[1] {
@@ -221,7 +220,6 @@ impl Pool {
                     );
                     self.add_sort(s)
                 }
-                Operator::BvIte => self.compute_sort(&args[1]).clone(),
                 Operator::Abs => self.compute_sort(&args[0]).clone(),
                 Operator::Add | Operator::Sub | Operator::Mult => {
                     let s = if args
@@ -301,7 +299,8 @@ impl Pool {
                     // sort doesn't depend on the arguments
                     let is_constant = matches!(
                         sig.return_sort,
-                        SortSig::Bool
+                        SortSig::Bit
+                            | SortSig::Bool
                             | SortSig::Int
                             | SortSig::Real
                             | SortSig::String

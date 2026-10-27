@@ -55,10 +55,6 @@ pub enum Operator {
     #[name("concat")]
     BvConcat,
 
-    /// The `bvcomp` operator.
-    #[name("bvcomp")]
-    BvComp,
-
     /// The `@pbbterm` operator.
     #[name("@pbbterm")]
     BvPBbTerm,
@@ -70,13 +66,6 @@ pub enum Operator {
     /// The `@bv` operator.
     #[name("@bv")]
     BvConst,
-
-    /// The `bvite` operator.
-    ///
-    /// This operator is not standard SMT-LIB, but from an extension of the bit-vectors theory used
-    /// by cvc5. We have support for it to facilitate checking cvc5 proofs.
-    #[name("bvite")]
-    BvIte,
 
     // Misc.
     /// The `rare-list` operator, used to represent RARE lists.
@@ -182,6 +171,8 @@ pub enum SortSig {
     /// A bitvector of any width. All bitvectors in a signature must have the same width, so they
     /// all share an extra sort parameter, always the last in the parameter list.
     BitVec,
+    /// A bitvector of width 1. Its width is independent of the width shared by the `BitVec`s.
+    Bit,
     Bool,
     Int,
     Real,
@@ -216,6 +207,7 @@ impl SortSig {
                     }
                 }
             }
+            (SortSig::Bit, Sort::BitVec(1) | Sort::ParamBitVec) => true,
             (SortSig::Bool, Sort::Bool)
             | (SortSig::Int, Sort::Int)
             | (SortSig::Real, Sort::Real)
@@ -252,6 +244,7 @@ impl SortSig {
                 Some(s) => s.clone(),
                 None => pool.add_sort(Sort::ParamBitVec),
             },
+            SortSig::Bit => pool.add_sort(Sort::BitVec(1)),
             SortSig::Bool => pool.add_sort(Sort::Bool),
             SortSig::Int => pool.add_sort(Sort::Int),
             SortSig::Real => pool.add_sort(Sort::Real),
@@ -337,6 +330,15 @@ mod tests {
         arg_sorts: &[SortSig::BitVec, SortSig::BitVec],
         return_sort: SortSig::BitVec,
         nary: Some(NaryCase::LeftAssoc),
+    };
+
+    /// The signature of `bvcomp`: `BitVec BitVec -> Bit`.
+    static BVCOMP: OperatorSig = OperatorSig {
+        name: "bvcomp",
+        params: &["BitVec"],
+        arg_sorts: &[SortSig::BitVec, SortSig::BitVec],
+        return_sort: SortSig::Bit,
+        nary: None,
     };
 
     /// The signature of `and`: `Bool Bool -> Bool`, left-associative.
@@ -497,5 +499,23 @@ mod tests {
         assert!(matches(&BVADD, &bvs));
         assert_eq!(BVADD.compute_sort(&mut pool, &bvs), bv8);
         assert!(!matches(&BVADD, &[bv8.clone(), bv8, bv4]));
+    }
+
+    #[test]
+    fn match_bit() {
+        let mut pool = Pool::new();
+        let [bv1, bv8, param] =
+            [Sort::BitVec(1), Sort::BitVec(8), Sort::ParamBitVec].map(|s| pool.add_sort(s));
+        let var = pool.add_sort(Sort::Var("@T0".into()));
+
+        // `Bit` only matches bitvectors of width 1, or of unknown width
+        for sort in [&bv1, &param, &var] {
+            assert!(SortSig::Bit.match_with(&mut [], sort));
+        }
+        assert!(!SortSig::Bit.match_with(&mut [], &bv8));
+
+        // The width of `Bit` is independent of the width shared by the other bitvectors
+        assert!(matches(&BVCOMP, &[bv8.clone(), bv8.clone()]));
+        assert_eq!(BVCOMP.compute_sort(&mut pool, &[bv8.clone(), bv8]), bv1);
     }
 }
