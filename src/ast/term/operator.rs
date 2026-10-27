@@ -4,6 +4,16 @@ use crate::ast::{Rc, Sort, pool::Pool};
 #[carcara_macros::extend_operator_enum("operators.toml")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Operator {
+    // Most operators supported by Carcara are defined in the `operators.toml` file, and generated
+    // automatically using the `carcara_macros::extend_operator_enum` attribute. Type checking and
+    // type inference for these operators is done using a generated `OperatorSig`.
+    //
+    // Here, we manually declare the remaining operators, the ones which cannot be expressed with a
+    // fixed signature. These are operators whose type signature is not fixed (e.g. `set.insert`),
+    // whose return type depends on the number of arguments (e.g. `tuple`), that use bitvector width
+    // arithmetic (e.g. `concat`), or whose behavior is specially handled by the parser (e.g. `@bv`
+    // and `re.from_automaton`)
+
     // Regular Expressions
     /// The `re.from_automaton` operator.
     #[name("re.from_automaton")]
@@ -76,9 +86,7 @@ impl Operator {
     /// `[NaryCase]` representing its behaviour in that situation. Otherwise, returns `None`.
     pub fn nary_case(&self) -> Option<NaryCase> {
         match self {
-            // Clausal
             Operator::Cl | Operator::Delete => Some(NaryCase::LeftAssoc),
-
             _ => self.sig().and_then(|sig| sig.nary),
         }
     }
