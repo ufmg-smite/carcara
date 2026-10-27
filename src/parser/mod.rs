@@ -10,8 +10,8 @@ pub(crate) mod tests;
 use crate::{
     CarcaraResult, Error, Input,
     ast::{
-        AnchorArg, Binder, BindingList, Constant, Operator, ParamOperator, Problem, ProblemPrelude,
-        Proof, ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
+        AnchorArg, Binder, BindingList, Operator, ParamOperator, Problem, ProblemPrelude, Proof,
+        ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
         Subproof, Substitution, Term, build_sort, build_term,
         pool::Pool,
         rare_rules::{RareStatements, Rules},
@@ -19,10 +19,10 @@ use crate::{
     utils::{HashCache, HashMapStack},
 };
 use carcara_macros::GenerateSetters;
-use error::{assert_indexed_op_args_value, assert_num_args, check_set_sort};
+use error::{assert_indexed_op_args_value, assert_num_args};
 use indexmap::{IndexMap, IndexSet};
 use rapidhash::{HashMapExt, RapidHashMap};
-use rug::{Integer, Rational};
+use rug::Integer;
 use std::{
     borrow::Cow,
     iter::Iterator,
@@ -369,17 +369,6 @@ impl<'p, 's> Parser<'p, 's> {
         }
     }
 
-    /// Makes sure all terms in `sequence` are equal to each other, otherwise returns an error.
-    fn check_sort_all_eq(&mut self, sequence: &[Rc<Sort>]) -> Result<(), SortError> {
-        // TODO: we are just checking if each sort is compatible with the previous. We could be more
-        // strict here, and check that they are all collectively compatible. That would reject sort
-        // sequences like (Real, (par (x) x), Int), which is currently accepted.
-        for i in 1..sequence.len() {
-            self.check_sort_eq(&sequence[i - 1], &sequence[i])?;
-        }
-        Ok(())
-    }
-
     /// Returns a sort error if `got` is not one of `possibilities`.
     fn check_sort_one_of(
         &mut self,
@@ -399,6 +388,18 @@ impl<'p, 's> Parser<'p, 's> {
                 got: got.clone(),
             })
         }
+    }
+
+    /// Makes sure all sorts in `sequence` are one of `possibilities`.
+    fn check_sort_all(
+        &mut self,
+        possibilities: &[Sort],
+        sequence: &[Rc<Sort>],
+    ) -> Result<(), SortError> {
+        for s in sequence {
+            self.check_sort_one_of(possibilities, s)?;
+        }
+        Ok(())
     }
 
     /// Makes sure `got` is a valid `Array` sort, with the given key and value sorts.
@@ -451,36 +452,6 @@ impl<'p, 's> Parser<'p, 's> {
     /// are parsing the problem and not the proof, this will be true.
     fn interpret_ints_as_reals(&self) -> bool {
         self.is_real_only_logic && self.problem.is_some()
-    }
-
-    /// Constructs and sort checks an operation term.
-    fn make_op(&mut self, op: Operator, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
-        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
-        if let Some(term) = operators::check_op_types(self, op, &args, &sorts)? {
-            return Ok(term);
-        }
-        Ok(self.pool.add(Term::Op(op, args)))
-    }
-
-    fn interpret_div_as_real_lit(&mut self, a: &Rc<Term>, b: &Rc<Term>) -> Option<Rc<Term>> {
-        // If the term is a division between two positive integer constants, and their GCD is 1,
-        // then it should be interpreted as a rational literal. The only exception to this is the
-        // term '(/ 1 1)', which is still interpreted as a division term.
-
-        let [a, b] = [a, b].map(|t| match t.as_ref() {
-            Term::Const(Constant::Integer(i)) => Some(i),
-            Term::Const(Constant::Real(r)) if self.interpret_ints_as_reals() && r.is_integer() => {
-                Some(r.numer())
-            }
-            _ => None,
-        });
-        let [a, b] = [a?, b?];
-
-        if *a > 0 && *b > 0 && !(*a == 1 && *b == 1) && a.clone().gcd(b) == 1 {
-            Some(self.pool.add(Term::new_real(Rational::from((a, b)))))
-        } else {
-            None
-        }
     }
 
     /// Constructs and sort checks an application term.
@@ -1460,138 +1431,6 @@ impl<'p, 's> Parser<'p, 's> {
             result.push(self.pool.add(Term::new_int(i)));
         }
         Ok(result)
-    }
-
-    /// Constructs, check operation arguments and sort checks an indexed operation term.
-    fn make_indexed_op(
-        &mut self,
-        op: ParamOperator,
-        op_args: Vec<Rc<Term>>,
-        args: Vec<Rc<Term>>,
-    ) -> Result<Rc<Term>, ParserError> {
-        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
-        let op_sorts: Vec<_> = op_args.iter().map(|t| self.pool.sort(t)).collect();
-        match &op {
-            ParamOperator::BvConst => {
-                assert_num_args(&op_args, 2)?;
-                assert_num_args(&args, 0)?;
-                if let Some(arg) = op_args.iter().find(|a| a.as_integer().is_none()) {
-                    return Err(ParserError::ExpectedIntegerConstant(arg.clone()));
-                }
-                assert_indexed_op_args_value(&op_args[..1], 0..)?;
-                assert_indexed_op_args_value(&op_args[1..], 1..)?;
-                let value = op_args[0].as_integer().unwrap();
-                let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
-                return Ok(self.pool.add(Term::Const(Constant::BitVec(value, width))));
-            }
-            ParamOperator::BvExtract => {
-                /*
-                ((_ extract i j) (_ BitVec m) (_ BitVec n))
-
-                where
-                - i, j, m, n are numerals
-                - m > i ≥ j ≥ 0,
-                - n = i - j + 1
-                 */
-                assert_num_args(&op_args, 2)?;
-                assert_num_args(&args, 1)?;
-                if !sorts[0].is_bitvec() {
-                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
-                }
-
-                for s in &op_sorts {
-                    self.check_sort_eq(&Sort::Int, s)?;
-                }
-
-                assert_indexed_op_args_value(&op_args, 0..)?;
-                let i = op_args[0].as_integer().as_ref().and_then(Integer::to_usize);
-                let j = op_args[1].as_integer().as_ref().and_then(Integer::to_usize);
-
-                // j >= 0 is ensured by the parser. We need to ensure that m > i && i >= j, if they
-                // are all statically known
-                if let (Some(i), Some(j), Sort::BitVec(m)) = (i, j, sorts[0].as_ref())
-                    && !(*m > i && i >= j)
-                {
-                    return Err(ParserError::InvalidExtractArgs(i, j, *m));
-                }
-            }
-            ParamOperator::IntToBv => {
-                assert_num_args(&op_args, 1)?;
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
-                self.check_sort_eq(&Sort::Int, &sorts[0])?;
-            }
-            ParamOperator::BvBitOf
-            | ParamOperator::BvIntOf
-            | ParamOperator::ZeroExtend
-            | ParamOperator::SignExtend
-            | ParamOperator::RotateLeft
-            | ParamOperator::RotateRight
-            | ParamOperator::Repeat => {
-                assert_num_args(&op_args, 1)?;
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
-                if !sorts[0].is_bitvec() {
-                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
-                }
-                assert_indexed_op_args_value(&op_args, 0..)?;
-            }
-            ParamOperator::RePower => {
-                assert_num_args(&op_args, 1)?;
-                assert_num_args(&args, 1)?;
-                self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
-                self.check_sort_eq(&Sort::RegLan, &sorts[0])?;
-                assert_indexed_op_args_value(&op_args, 0..)?;
-            }
-            ParamOperator::ReLoop => {
-                assert_num_args(&op_args, 2)?;
-                assert_num_args(&args, 1)?;
-                for s in &op_sorts {
-                    self.check_sort_eq(&Sort::Int, s)?;
-                }
-                self.check_sort_eq(&Sort::RegLan, &sorts[0])?;
-                assert_indexed_op_args_value(&op_args, 0..)?;
-            }
-            ParamOperator::Tester => {} // TODO
-            ParamOperator::TupleSelect => {
-                assert_num_args(&op_args, 1)?;
-                assert_num_args(&args, 1)?;
-                if op_args[0]
-                    .as_integer()
-                    .as_ref()
-                    .and_then(Integer::to_usize)
-                    .is_none()
-                {
-                    return Err(ParserError::ExpectedIntegerConstant(op_args[0].clone()));
-                }
-                let Sort::Tuple(elems) = sorts[0].as_ref() else {
-                    return Err(ParserError::ExpectedTupleSort(sorts[0].clone()));
-                };
-                assert_indexed_op_args_value(&op_args, ..elems.len())?;
-            }
-        }
-        Ok(self.pool.add(Term::ParamOp { op, op_args, args }))
-    }
-
-    /// Constructs and sort checks a qualified operation term
-    fn make_qualified_op(
-        &mut self,
-        op: QualifiedOperator,
-        sort: Rc<Sort>,
-        args: Vec<Rc<Term>>,
-    ) -> Result<Rc<Term>, ParserError> {
-        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
-        match op {
-            QualifiedOperator::Const => {
-                assert_num_args(&args, 1)?;
-                self.check_array_sort(None, Some(&sorts[0]), &sort)?;
-            }
-            QualifiedOperator::SetEmpty | QualifiedOperator::SetUniverse => {
-                assert_num_args(&args, 0)?;
-                check_set_sort(&sort)?;
-            }
-        }
-        Ok(self.pool.add(Term::AsOp(op, sort, args)))
     }
 
     /// Parses any term that starts with `(`, that is, any term that is not a constant or a

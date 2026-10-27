@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::ast::{build_sort, pool::Pool};
+use rug::Rational;
 
 const ERROR_MESSAGE: &str = "parser error during test";
 

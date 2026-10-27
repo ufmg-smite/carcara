@@ -220,30 +220,6 @@ where
     Ok(())
 }
 
-/// Makes sure `got` is a valid `Set` sort.
-pub fn check_set_sort(got: &Rc<Sort>) -> Result<(), ParserError> {
-    if !matches!(got.as_ref(), Sort::Set(_)) {
-        return Err(ParserError::ExpectedSetSort(got.clone()));
-    }
-    Ok(())
-}
-
-/// Makes sure `got` is a valid `Tuple` sort.
-pub fn check_tuple_sort(got: &Rc<Sort>) -> Result<(), ParserError> {
-    if !matches!(got.as_ref(), Sort::Tuple(_)) {
-        return Err(ParserError::ExpectedTupleSort(got.clone()));
-    }
-    Ok(())
-}
-
-/// Makes sure `got` is a valid `(Set (Tuple ...))` sort.
-pub fn check_relation_sort(got: &Rc<Sort>) -> Result<(), ParserError> {
-    let Sort::Set(tuple) = got.as_ref() else {
-        return Err(ParserError::ExpectedSetSort(got.clone()));
-    };
-    check_tuple_sort(tuple)
-}
-
 /// An error in sort checking.
 #[derive(Debug, Error)]
 pub struct SortError {

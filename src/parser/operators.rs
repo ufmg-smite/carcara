@@ -1,255 +1,323 @@
-//! A declarative rule DSL for type-checking SMT-LIB operators, used by `Parser::make_op`.
+//! Type checking and term construction for SMT-LIB operators.
 
 use super::{
     Parser,
-    error::{ParserError, SortError, assert_num_args, check_relation_sort},
+    error::{ParserError, SortError, assert_indexed_op_args_value, assert_num_args},
 };
 use crate::{
-    ast::{Constant, Operator, OperatorSig, Rc, Sort, Term},
+    ast::{Constant, Operator, OperatorSig, ParamOperator, QualifiedOperator, Rc, Sort, Term},
     automata::parser::parse_automaton,
     utils::Range,
 };
+use rug::{Integer, Rational};
 
-/// The sorts a single operator argument is allowed to have.
-enum ArgSort {
-    /// The argument must have exactly this sort.
-    Exact(Sort),
-    /// The argument must have one of these sorts.
-    OneOf(&'static [Sort]),
-    /// The argument must have any bitvector sort.
-    AnyBitVec,
-    /// The argument's sort must satisfy this predicate.
-    Predicate(fn(&Rc<Sort>) -> Result<(), ParserError>),
-}
-
-impl ArgSort {
-    /// Checks that `sort` satisfies this constraint.
-    fn check(&self, parser: &mut Parser, sort: &Rc<Sort>) -> Result<(), ParserError> {
-        match self {
-            ArgSort::Exact(expected) => Ok(parser.check_sort_eq(expected, sort)?),
-            ArgSort::OneOf(possibilities) => Ok(parser.check_sort_one_of(possibilities, sort)?),
-            ArgSort::AnyBitVec if sort.is_bitvec() => Ok(()),
-            ArgSort::AnyBitVec => Err(ParserError::ExpectedBvSort(sort.clone())),
-            ArgSort::Predicate(f) => f(sort),
+impl<'p, 's> Parser<'p, 's> {
+    /// Constructs and type checks an operation term.
+    pub(super) fn make_op(
+        &mut self,
+        op: Operator,
+        args: Vec<Rc<Term>>,
+    ) -> Result<Rc<Term>, ParserError> {
+        if let Some(term) = self.type_check_op(op, &args)? {
+            return Ok(term);
         }
+        Ok(self.pool.add(Term::Op(op, args)))
     }
-}
 
-/// How the sorts of an operator's arguments, as a whole, should be checked.
-enum ArgsCheck {
-    /// No per-argument sort checks.
-    Unconstrained,
-    /// Every argument independently satisfies this constraint.
-    Each(ArgSort),
-    /// The first argument satisfies this constraint, then all arguments are pairwise equal.
-    FirstThenAllEq(ArgSort),
-}
+    /// Constructs and type checks an indexed operation term.
+    pub(super) fn make_indexed_op(
+        &mut self,
+        op: ParamOperator,
+        op_args: Vec<Rc<Term>>,
+        args: Vec<Rc<Term>>,
+    ) -> Result<Rc<Term>, ParserError> {
+        if let Some(term) = self.type_check_indexed_op(op, &op_args, &args)? {
+            return Ok(term);
+        }
+        Ok(self.pool.add(Term::ParamOp { op, op_args, args }))
+    }
 
-impl ArgsCheck {
-    /// Checks that `sorts` satisfies this constraint.
-    fn check(&self, parser: &mut Parser, sorts: &[Rc<Sort>]) -> Result<(), ParserError> {
-        match self {
-            ArgsCheck::Unconstrained => Ok(()),
-            ArgsCheck::Each(arg_sort) => {
-                for sort in sorts {
-                    arg_sort.check(parser, sort)?;
+    /// Constructs and type checks a qualified operation term.
+    pub(super) fn make_qualified_op(
+        &mut self,
+        op: QualifiedOperator,
+        sort: Rc<Sort>,
+        args: Vec<Rc<Term>>,
+    ) -> Result<Rc<Term>, ParserError> {
+        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
+        match op {
+            QualifiedOperator::Const => {
+                assert_num_args(&args, 1)?;
+                self.check_array_sort(None, Some(&sorts[0]), &sort)?;
+            }
+            QualifiedOperator::SetEmpty | QualifiedOperator::SetUniverse => {
+                assert_num_args(&args, 0)?;
+                if !matches!(sort.as_ref(), Sort::Set(_)) {
+                    return Err(ParserError::ExpectedSetSort(sort.clone()));
                 }
-                Ok(())
-            }
-            ArgsCheck::FirstThenAllEq(arg_sort) => {
-                arg_sort.check(parser, &sorts[0])?;
-                Ok(parser.check_sort_all_eq(sorts)?)
             }
         }
-    }
-}
-
-/// How an operator's arity should be checked.
-enum ArityRule {
-    /// A fixed arity range.
-    Fixed(Range),
-    /// The allowed arity range depends on whether the parser is in "strict" mode.
-    StrictDependent { strict: Range, lenient: Range },
-}
-
-/// A declarative type-checking rule for an operator.
-struct Rule {
-    arity: ArityRule,
-    args: ArgsCheck,
-}
-
-impl Rule {
-    /// Creates a rule with a fixed arity range.
-    fn arity(range: impl Into<Range>, args: ArgsCheck) -> Self {
-        Self {
-            arity: ArityRule::Fixed(range.into()),
-            args,
-        }
+        Ok(self.pool.add(Term::AsOp(op, sort, args)))
     }
 
-    /// Creates a rule whose arity range depends on the parser's "strict" mode setting.
-    fn strict_arity(strict: impl Into<Range>, lenient: impl Into<Range>, args: ArgsCheck) -> Self {
-        Self {
-            arity: ArityRule::StrictDependent {
-                strict: strict.into(),
-                lenient: lenient.into(),
-            },
-            args,
-        }
-    }
-
-    /// Checks that `sorts` satisfies this rule's arity and argument sort constraints.
-    fn check(self, parser: &mut Parser, sorts: &[Rc<Sort>]) -> Result<(), ParserError> {
-        let range = match self.arity {
-            ArityRule::Fixed(range) => range,
-            ArityRule::StrictDependent { strict, lenient } => {
-                if parser.config.strict {
-                    strict
+    /// Type checks the arguments of an operation term.
+    ///
+    /// Returns `None` if the caller should build the default `Term::Op(op, args)`, or `Some` term
+    /// if the operator has special term construction.
+    fn type_check_op(
+        &mut self,
+        op: Operator,
+        args: &[Rc<Term>],
+    ) -> Result<Option<Rc<Term>>, ParserError> {
+        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
+        match op {
+            // These are defined in `operators.toml`, but unary `and`, `or` and `xor` terms are
+            // allowed outside of strict mode
+            Operator::And | Operator::Or | Operator::Xor
+                if sorts.len() == 1 && !self.config.strict =>
+            {
+                self.check_sort_eq(&Sort::Bool, &sorts[0])?;
+            }
+            // These are defined in `operators.toml`, but mixing `Int` and `Real` arguments is
+            // allowed even without Int/Real subtyping, since some solvers (e.g. veriT) produce
+            // terms like that
+            Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
+                self.check_op_sig(op, &sorts, true)?;
+            }
+            // This is defined in `operators.toml`, but with Int/Real subtyping it also accepts
+            // `Int` arguments, which its signature can't express
+            Operator::RealDiv => {
+                if self.config.allow_int_real_subtyping {
+                    assert_num_args(&sorts, 2..)?;
+                    self.check_sort_all(&[Sort::Int, Sort::Real], &sorts)?;
                 } else {
-                    lenient
+                    self.check_op_sig(op, &sorts, false)?;
+                }
+                // Division of integer constants can be interpreted as a rational literal
+                if let [a, b] = args {
+                    return Ok(self.interpret_div_as_real_lit(a, b));
                 }
             }
-        };
-        assert_num_args(sorts, range)?;
-        self.args.check(parser, sorts)
-    }
-}
-
-/// The sorts `Int` and `Real`, used by several arithmetic operators.
-const INT_OR_REAL: &[Sort] = &[Sort::Int, Sort::Real];
-
-/// Whether an operator's type checking is expressed declaratively or requires custom logic.
-enum OpCheck {
-    Rule(Rule),
-    Custom,
-}
-
-/// Returns the type-checking behavior for `op`.
-fn op_check(op: Operator) -> OpCheck {
-    use ArgSort::{AnyBitVec, Exact, OneOf, Predicate};
-    use ArgsCheck::{Each, FirstThenAllEq, Unconstrained};
-
-    match op {
-        // These are defined in `operators.toml`, but unary `and`, `or` and `xor` terms are allowed
-        // outside of strict mode, which their signatures can't express
-        Operator::Or | Operator::And | Operator::Xor => {
-            OpCheck::Rule(Rule::strict_arity(2.., 1.., Each(Exact(Sort::Bool))))
-        }
-        // These are defined in `operators.toml`, but mixing `Int` and `Real` arguments is allowed
-        // even without Int/Real subtyping, since some solvers (e.g. veriT) produce terms like that
-        Operator::LessThan | Operator::GreaterThan | Operator::LessEq | Operator::GreaterEq => {
-            OpCheck::Rule(Rule::arity(2.., Each(OneOf(INT_OR_REAL))))
-        }
-        Operator::ReFromAutomaton => OpCheck::Custom,
-        Operator::BvBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Bool)))),
-        Operator::BvPBbTerm => OpCheck::Rule(Rule::arity(1.., FirstThenAllEq(Exact(Sort::Int)))),
-        Operator::BvConst => OpCheck::Rule(Rule::arity(2, Each(Exact(Sort::Int)))),
-        // Note: not all-equal here -- different bitvector widths are allowed in `concat`
-        Operator::BvConcat => OpCheck::Rule(Rule::arity(2.., Each(AnyBitVec))),
-        Operator::Cl => OpCheck::Rule(Rule::arity(.., Unconstrained)),
-        Operator::RareList => OpCheck::Rule(Rule::arity(.., Unconstrained)),
-        Operator::SetInsert => OpCheck::Custom,
-        Operator::Tuple => OpCheck::Rule(Rule::arity(1.., Unconstrained)),
-        Operator::RelTranspose => {
-            OpCheck::Rule(Rule::arity(1, Each(Predicate(check_relation_sort))))
-        }
-        // TODO: `rel.join`/`rel.product` sort checking could be more precise
-        Operator::RelJoin | Operator::RelProduct => {
-            OpCheck::Rule(Rule::arity(2, Each(Predicate(check_relation_sort))))
-        }
-        _ => OpCheck::Custom,
-    }
-}
-
-/// Handles type checking for the operators whose rules don't fit the declarative `Rule` DSL.
-fn custom_check(
-    parser: &mut Parser,
-    op: Operator,
-    args: &[Rc<Term>],
-    sorts: &[Rc<Sort>],
-) -> Result<Option<Rc<Term>>, ParserError> {
-    match op {
-        // This is defined in `operators.toml`, but its sort checking depends on Int/Real subtyping
-        // in a way its signature can't express, and division of integer constants can be
-        // interpreted as a rational literal
-        Operator::RealDiv => {
-            // Normally, the `/` operator may only receive Real arguments, but if we are allowing
-            // Int/Real subtyping, it may also receive Ints
-            let args_check = if parser.config.allow_int_real_subtyping {
-                ArgsCheck::Each(ArgSort::OneOf(INT_OR_REAL))
-            } else {
-                ArgsCheck::FirstThenAllEq(ArgSort::Exact(Sort::Real))
-            };
-            Rule::arity(2.., args_check).check(parser, sorts)?;
-            match args {
-                [a, b] => Ok(parser.interpret_div_as_real_lit(a, b)),
-                _ => Ok(None),
-            }
-        }
-        Operator::ReFromAutomaton => {
-            assert_num_args(sorts, 1)?;
-            parser.check_sort_eq(&Sort::String, &sorts[0])?;
-            if let Term::Const(Constant::String(s)) = args[0].as_ref() {
-                let automata = match parse_automaton(s.trim()) {
-                    Ok((remaining, automata)) => {
-                        if !remaining.is_empty() {
-                            return Err(ParserError::InvalidAutomatonDeclaration(s.clone()));
+            Operator::ReFromAutomaton => {
+                assert_num_args(&sorts, 1)?;
+                self.check_sort_eq(&Sort::String, &sorts[0])?;
+                if let Term::Const(Constant::String(s)) = args[0].as_ref() {
+                    let automata = match parse_automaton(s.trim()) {
+                        Ok((remaining, automata)) => {
+                            if !remaining.is_empty() {
+                                return Err(ParserError::InvalidAutomatonDeclaration(s.clone()));
+                            }
+                            Ok(automata)
                         }
-                        Ok(automata)
-                    }
-                    Err(_) => Err(ParserError::InvalidAutomatonDeclaration(s.clone())),
-                }?;
-                Ok(Some(parser.pool.add(Term::Const(Constant::RegLan(
-                    s.to_owned(),
-                    automata,
-                )))))
-            } else {
-                Err(ParserError::ExpectedAnAutomatonDeclaration(args[0].clone()))
-            }
-        }
-        Operator::SetInsert => {
-            assert_num_args(sorts, 2..)?;
-            parser.check_sort_all_eq(&sorts[..sorts.len() - 1])?;
-            let expected = parser.pool.add_sort(Sort::Set(sorts[0].clone()));
-            parser.check_sort_eq(&expected, sorts.last().unwrap())?;
-            Ok(None)
-        }
-        other => {
-            let sig = other.sig().unwrap();
-            let arity: Range = if sig.nary.is_some() {
-                (sig.arg_sorts.len()..).into()
-            } else {
-                sig.arg_sorts.len().into()
-            };
-            assert_num_args(sorts, arity)?;
-            let mut params = [const { None }; OperatorSig::MAX_SORT_PARAMS];
-            let params = &mut params[..sig.params.len()];
-            let subtyping = parser.config.allow_int_real_subtyping;
-            for (arg_sig, got) in sig.arg_sigs().zip(sorts) {
-                if !arg_sig.match_with(params, got, subtyping) {
-                    let expected = arg_sig.instantiate(parser.pool, params, sig.params);
-                    let expected = vec![expected].into_boxed_slice();
-                    return Err(SortError { expected, got: got.clone() }.into());
+                        Err(_) => Err(ParserError::InvalidAutomatonDeclaration(s.clone())),
+                    }?;
+                    return Ok(Some(
+                        self.pool
+                            .add(Term::Const(Constant::RegLan(s.to_owned(), automata))),
+                    ));
+                } else {
+                    return Err(ParserError::ExpectedAnAutomatonDeclaration(args[0].clone()));
                 }
             }
-            Ok(None)
+            Operator::SetInsert => {
+                assert_num_args(&sorts, 2..)?;
+                let first = sorts.first().unwrap().as_ref();
+                self.check_sort_all(std::slice::from_ref(first), &sorts[1..sorts.len() - 1])?;
+                let expected = self.pool.add_sort(Sort::Set(sorts[0].clone()));
+                self.check_sort_eq(&expected, sorts.last().unwrap())?;
+            }
+            Operator::BvBbTerm => {
+                assert_num_args(&sorts, 1..)?;
+                self.check_sort_all(&[Sort::Bool], &sorts)?;
+            }
+            Operator::BvPBbTerm => {
+                assert_num_args(&sorts, 1..)?;
+                self.check_sort_all(&[Sort::Int], &sorts)?;
+            }
+            Operator::BvConst => {
+                assert_num_args(&sorts, 2)?;
+                self.check_sort_all(&[Sort::Int], &sorts)?;
+            }
+            // Different bitvector widths are allowed in `concat`
+            Operator::BvConcat => {
+                assert_num_args(&sorts, 2..)?;
+                if let Some(sort) = sorts.iter().find(|s| !s.is_bitvec()) {
+                    return Err(ParserError::ExpectedBvSort(sort.clone()));
+                }
+            }
+            Operator::Cl | Operator::RareList => (),
+            Operator::Tuple => assert_num_args(&sorts, 1..)?,
+            // TODO: `rel.join`/`rel.product` sort checking could be more precise
+            Operator::RelTranspose | Operator::RelJoin | Operator::RelProduct => {
+                assert_num_args(&sorts, if op == Operator::RelTranspose { 1 } else { 2 })?;
+                for s in &sorts {
+                    let Sort::Set(tuple) = s.as_ref() else {
+                        return Err(ParserError::ExpectedSetSort(s.clone()));
+                    };
+                    if !matches!(tuple.as_ref(), Sort::Tuple(_)) {
+                        return Err(ParserError::ExpectedTupleSort(tuple.clone()));
+                    }
+                }
+            }
+            other => self.check_op_sig(other, &sorts, self.config.allow_int_real_subtyping)?,
+        }
+        Ok(None)
+    }
+
+    /// Checks `sorts` against the signature of `op`, which must be defined in `operators.toml`.
+    fn check_op_sig(
+        &mut self,
+        op: Operator,
+        sorts: &[Rc<Sort>],
+        subtyping: bool,
+    ) -> Result<(), ParserError> {
+        let sig = op.sig().unwrap();
+        let arity: Range = if sig.nary.is_some() {
+            (sig.arg_sorts.len()..).into()
+        } else {
+            sig.arg_sorts.len().into()
+        };
+        assert_num_args(sorts, arity)?;
+        let mut params = [const { None }; OperatorSig::MAX_SORT_PARAMS];
+        let params = &mut params[..sig.params.len()];
+        for (arg_sig, got) in sig.arg_sigs().zip(sorts) {
+            if !arg_sig.match_with(params, got, subtyping) {
+                let expected = arg_sig.instantiate(self.pool, params, sig.params);
+                let expected = vec![expected].into_boxed_slice();
+                return Err(SortError { expected, got: got.clone() }.into());
+            }
+        }
+        Ok(())
+    }
+
+    fn interpret_div_as_real_lit(&mut self, a: &Rc<Term>, b: &Rc<Term>) -> Option<Rc<Term>> {
+        // If the term is a division between two positive integer constants, and their GCD is 1,
+        // then it should be interpreted as a rational literal. The only exception to this is the
+        // term '(/ 1 1)', which is still interpreted as a division term.
+
+        let [a, b] = [a, b].map(|t| match t.as_ref() {
+            Term::Const(Constant::Integer(i)) => Some(i),
+            Term::Const(Constant::Real(r)) if self.interpret_ints_as_reals() && r.is_integer() => {
+                Some(r.numer())
+            }
+            _ => None,
+        });
+        let [a, b] = [a?, b?];
+
+        if *a > 0 && *b > 0 && !(*a == 1 && *b == 1) && a.clone().gcd(b) == 1 {
+            Some(self.pool.add(Term::new_real(Rational::from((a, b)))))
+        } else {
+            None
         }
     }
-}
 
-/// Type checks the arguments of an operator term, returning a replacement term if the operator
-/// builds one, or `None` if the caller should build the default `Term::Op(op, args)`.
-pub(super) fn check_op_types(
-    parser: &mut Parser,
-    op: Operator,
-    args: &[Rc<Term>],
-    sorts: &[Rc<Sort>],
-) -> Result<Option<Rc<Term>>, ParserError> {
-    match op_check(op) {
-        OpCheck::Rule(rule) => {
-            rule.check(parser, sorts)?;
-            Ok(None)
+    /// Type checks the regular arguments and operator arguments of an indexed operation term.
+    ///
+    /// Returns `None` if the caller should build the default `Term::ParamOp { .. }`, or `Some` term
+    /// if the operator has special term construction.
+    fn type_check_indexed_op(
+        &mut self,
+        op: ParamOperator,
+        op_args: &[Rc<Term>],
+        args: &[Rc<Term>],
+    ) -> Result<Option<Rc<Term>>, ParserError> {
+        let sorts: Vec<_> = args.iter().map(|t| self.pool.sort(t)).collect();
+        let op_sorts: Vec<_> = op_args.iter().map(|t| self.pool.sort(t)).collect();
+
+        match &op {
+            ParamOperator::BvConst => {
+                assert_num_args(op_args, 2)?;
+                assert_num_args(args, 0)?;
+                if let Some(arg) = op_args.iter().find(|a| a.as_integer().is_none()) {
+                    return Err(ParserError::ExpectedIntegerConstant(arg.clone()));
+                }
+                assert_indexed_op_args_value(&op_args[..1], 0..)?;
+                assert_indexed_op_args_value(&op_args[1..], 1..)?;
+                let value = op_args[0].as_integer().unwrap();
+                let width = op_args[1].as_integer().unwrap().to_usize().unwrap();
+                return Ok(Some(
+                    self.pool.add(Term::Const(Constant::BitVec(value, width))),
+                ));
+            }
+            ParamOperator::BvExtract => {
+                // ((_ extract i j) (_ BitVec m) (_ BitVec n))
+                // where
+                // - i, j, m, n are numerals
+                // - m > i ≥ j ≥ 0,
+                // - n = i - j + 1
+                assert_num_args(op_args, 2)?;
+                assert_num_args(args, 1)?;
+                if !sorts[0].is_bitvec() {
+                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
+                }
+
+                self.check_sort_all(&[Sort::Int], &op_sorts)?;
+
+                assert_indexed_op_args_value(op_args, 0..)?;
+                let i = op_args[0].as_integer().as_ref().and_then(Integer::to_usize);
+                let j = op_args[1].as_integer().as_ref().and_then(Integer::to_usize);
+
+                // j >= 0 is ensured by the parser. We need to ensure that m > i && i >= j, if they
+                // are all statically known
+                if let (Some(i), Some(j), Sort::BitVec(m)) = (i, j, sorts[0].as_ref())
+                    && !(*m > i && i >= j)
+                {
+                    return Err(ParserError::InvalidExtractArgs(i, j, *m));
+                }
+            }
+            ParamOperator::IntToBv => {
+                assert_num_args(op_args, 1)?;
+                assert_num_args(args, 1)?;
+                self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
+                self.check_sort_eq(&Sort::Int, &sorts[0])?;
+            }
+            ParamOperator::BvBitOf
+            | ParamOperator::BvIntOf
+            | ParamOperator::ZeroExtend
+            | ParamOperator::SignExtend
+            | ParamOperator::RotateLeft
+            | ParamOperator::RotateRight
+            | ParamOperator::Repeat => {
+                assert_num_args(op_args, 1)?;
+                assert_num_args(args, 1)?;
+                self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
+                if !sorts[0].is_bitvec() {
+                    return Err(ParserError::ExpectedBvSort(sorts[0].clone()));
+                }
+                assert_indexed_op_args_value(op_args, 0..)?;
+            }
+            ParamOperator::RePower => {
+                assert_num_args(op_args, 1)?;
+                assert_num_args(args, 1)?;
+                self.check_sort_eq(&Sort::Int, &op_sorts[0])?;
+                self.check_sort_eq(&Sort::RegLan, &sorts[0])?;
+                assert_indexed_op_args_value(op_args, 0..)?;
+            }
+            ParamOperator::ReLoop => {
+                assert_num_args(op_args, 2)?;
+                assert_num_args(args, 1)?;
+                self.check_sort_all(&[Sort::Int], &op_sorts)?;
+                self.check_sort_eq(&Sort::RegLan, &sorts[0])?;
+                assert_indexed_op_args_value(op_args, 0..)?;
+            }
+            ParamOperator::Tester => {} // TODO
+            ParamOperator::TupleSelect => {
+                assert_num_args(op_args, 1)?;
+                assert_num_args(args, 1)?;
+                if op_args[0]
+                    .as_integer()
+                    .as_ref()
+                    .and_then(Integer::to_usize)
+                    .is_none()
+                {
+                    return Err(ParserError::ExpectedIntegerConstant(op_args[0].clone()));
+                }
+                let Sort::Tuple(elems) = sorts[0].as_ref() else {
+                    return Err(ParserError::ExpectedTupleSort(sorts[0].clone()));
+                };
+                assert_indexed_op_args_value(op_args, ..elems.len())?;
+            }
         }
-        OpCheck::Custom => custom_check(parser, op, args, sorts),
+        Ok(None)
     }
 }
