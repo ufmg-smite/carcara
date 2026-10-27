@@ -514,9 +514,22 @@ impl<'p, 's> Parser<'p, 's> {
         }
     }
 
-    /// Consumes the current token if it is a keyword, and returns the inner `String`. Returns an
+    /// Returns `true` if the current token is the keyword `keyword`.
+    fn is_keyword(&self, keyword: &str) -> bool {
+        matches!(&self.current_token, Token::Keyword(k) if k == keyword)
+    }
+
+    /// Consumes the current token if it is the keyword `keyword`. Returns an error otherwise.
+    fn expect_keyword(&mut self, keyword: &str) -> CarcaraResult<()> {
+        match self.next_token()? {
+            (Token::Keyword(k), _) if k == keyword => Ok(()),
+            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
+        }
+    }
+
+    /// Consumes the current token if it is any keyword, and returns the inner `String`. Returns an
     /// error otherwise.
-    fn expect_keyword(&mut self) -> CarcaraResult<String> {
+    fn expect_any_keyword(&mut self) -> CarcaraResult<String> {
         match self.next_token()? {
             (Token::Keyword(s), _) => Ok(s),
             (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
@@ -896,7 +909,7 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_step_command(&mut self) -> CarcaraResult<ProofStep> {
         let id = self.expect_symbol()?;
         let clause = self.parse_clause()?;
-        self.expect_token(Token::Keyword("rule".into()))?;
+        self.expect_keyword("rule")?;
         let rule = match self.next_token()? {
             (Token::Symbol(s), _) => s,
             (Token::ReservedWord(r), _) => format!("{}", r),
@@ -905,7 +918,7 @@ impl<'p, 's> Parser<'p, 's> {
             }
         };
 
-        let premises = if self.current_token == Token::Keyword("premises".into()) {
+        let premises = if self.is_keyword("premises") {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
             self.parse_sequence(Self::parse_step_premise, true)?
@@ -913,7 +926,7 @@ impl<'p, 's> Parser<'p, 's> {
             Vec::new()
         };
 
-        let args = if self.current_token == Token::Keyword("args".into()) {
+        let args = if self.is_keyword("args") {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
 
@@ -932,7 +945,7 @@ impl<'p, 's> Parser<'p, 's> {
 
         // For some rules (notably the `subproof` rule), there is also a `:discharge` attribute that
         // takes a series of command ids, in addition to the regular premises
-        let discharge = if self.current_token == Token::Keyword("discharge".into()) {
+        let discharge = if self.is_keyword("discharge") {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
             self.parse_sequence(|p| p.parse_discharge_premise(&id), true)?
@@ -991,14 +1004,14 @@ impl<'p, 's> Parser<'p, 's> {
     /// In order to parse the subproof arguments, this method pushes a new scope into the symbol
     /// table which must be removed after parsing the subproof.
     fn parse_anchor_command(&mut self) -> CarcaraResult<(String, Vec<AnchorArg>)> {
-        self.expect_token(Token::Keyword("step".into()))?;
+        self.expect_keyword("step")?;
         let end_step_id = self.expect_symbol()?;
 
         // We have to push a new scope into the symbol table in order to parse the subproof
         // arguments
         self.state.symbol_table.push_scope();
 
-        let args = if self.current_token == Token::Keyword("args".into()) {
+        let args = if self.is_keyword("args") {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
             self.parse_sequence(Parser::parse_anchor_argument, true)?
@@ -1014,7 +1027,7 @@ impl<'p, 's> Parser<'p, 's> {
     /// the form `(<symbol> <sort>)` or an assignment, of the form `(:= (<symbol> <sort>) <term>)`.
     fn parse_anchor_argument(&mut self) -> CarcaraResult<AnchorArg> {
         self.expect_token(Token::OpenParen)?;
-        Ok(if self.current_token == Token::Keyword("=".into()) {
+        Ok(if self.is_keyword("=") {
             self.next_token()?;
 
             // To make Carcara more robust to recent changes in the Alethe format, we support
@@ -1350,7 +1363,7 @@ impl<'p, 's> Parser<'p, 's> {
         let inner = self.parse_term()?;
         self.parse_sequence(
             |p| {
-                let attribute = p.expect_keyword()?;
+                let attribute = p.expect_any_keyword()?;
                 match attribute.as_str() {
                     "named" => {
                         // If the term has a `:named` attribute, we introduce a new nullary function

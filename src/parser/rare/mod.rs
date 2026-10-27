@@ -22,7 +22,7 @@ impl<'p, 's> Parser<'p, 's> {
         let sort = self.parse_sort()?;
 
         let attribute = if let Token::Keyword(_) = self.current_token {
-            let attribute = self.expect_keyword()?;
+            let attribute = self.expect_any_keyword()?;
             if attribute == "list" {
                 Ok(AttributeParameters::List)
             } else {
@@ -42,7 +42,7 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     fn parse_body(&mut self) -> CarcaraResult<Body> {
-        let qualified_arg = self.expect_keyword()?;
+        let qualified_arg = self.expect_any_keyword()?;
         match qualified_arg.as_str() {
             "conclusion" => {
                 let rewrite_term = self.parse_term()?;
