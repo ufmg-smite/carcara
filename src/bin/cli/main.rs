@@ -95,22 +95,75 @@ fn main() {
     }
 }
 
-/// Reads the problem, proof and (optional) Rare rules sources given in the command-line input.
-fn get_input(options: &Input) -> CliResult<carcara::Input<'static>> {
+/// The names and contents of the problem, proof and (optional) Rare rules files given in the
+/// command-line input.
+struct InputFiles {
+    problem: (PathBuf, String),
+    proof: (PathBuf, String),
+    rare_rules: Option<(PathBuf, String)>,
+}
+
+impl InputFiles {
+    /// Returns a `carcara::Input` that borrows the contents of these files.
+    fn as_input(&self) -> carcara::Input<'_> {
+        fn source((name, contents): &(PathBuf, String)) -> Source<'_> {
+            Source::new(name, contents)
+        }
+        carcara::Input {
+            problem: source(&self.problem),
+            proof: source(&self.proof),
+            rare_rules: self.rare_rules.as_ref().map(source),
+        }
+    }
+}
+
+/// Reads the contents of a file.
+fn read_file(path: impl AsRef<Path>) -> carcara::CarcaraResult<String> {
+    let path = path.as_ref();
+    std::fs::read_to_string(path).map_err(|e| carcara::Error::Io { inner: e, file: path.into() })
+}
+
+/// Reads the contents of a file, or of stdin if `path` is "-". Returns the name of the source
+/// along with its contents.
+fn read_file_or_stdin(path: &Path) -> CliResult<(PathBuf, String)> {
+    use std::io::Read;
+
+    if path != "-" {
+        return Ok((path.to_owned(), read_file(path)?));
+    }
+
+    let mut contents = String::new();
+    std::io::stdin()
+        .read_to_string(&mut contents)
+        .map_err(|e| carcara::Error::Io { inner: e, file: "<stdin>".into() })?;
+    Ok(("<stdin>".into(), contents))
+}
+
+/// Reads the problem, proof and (optional) Rare rules files given in the command-line input.
+fn read_input(options: &Input) -> CliResult<InputFiles> {
     let problem_file = match &options.problem_file {
         Some(f) => f.clone(),
         None => infer_problem_path(&options.proof_file)?,
     };
-    let problem = Source::file(problem_file)?;
-    let proof = Source::file_or_stdin(&options.proof_file)?;
-    let rare_rules = options.rare_file.as_ref().map(Source::file).transpose()?;
-    Ok(carcara::Input { problem, proof, rare_rules })
+    let problem_contents = read_file(&problem_file)?;
+    let proof = read_file_or_stdin(&options.proof_file)?;
+    let rare_rules = (options.rare_file.as_ref())
+        .map(|f| read_file(f).map(|contents| (f.clone(), contents)))
+        .transpose()?;
+    Ok(InputFiles {
+        problem: (problem_file, problem_contents),
+        proof,
+        rare_rules,
+    })
 }
 
 fn parse_command(
     options: ParseCommandOptions,
 ) -> CliResult<(ast::Problem, ast::Proof, Rules, ast::pool::Pool)> {
-    let result = parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
+    let result = parser::parse(
+        read_input(&options.input)?.as_input(),
+        options.parsing.into_config(),
+    )?;
     Ok(result)
 }
 
@@ -129,7 +182,8 @@ fn check_command_impl<S: CollectStats + Send + Default>(
     options: CheckCommandOptions,
     stats: &mut S,
 ) -> CliResult<carcara::Status> {
-    let input = get_input(&options.input)?;
+    let files = read_input(&options.input)?;
+    let input = files.as_input();
     let parser_config = options.parsing.into_config();
     let checker_config = (options.checking, options.tools).into_config();
 
@@ -165,7 +219,8 @@ fn elaborate_command_impl<S: CollectStats>(
     options: ElaborateCommandOptions,
     stats: &mut S,
 ) -> CliResult<(carcara::Status, ast::Problem, ast::Proof, ast::pool::Pool)> {
-    let input = get_input(&options.input)?;
+    let files = read_input(&options.input)?;
+    let input = files.as_input();
 
     let checker_config = (options.checking, options.tools.clone()).into_config();
     let (elab_config, pipeline) = (options.elaboration, options.tools).into_config();
@@ -232,8 +287,10 @@ fn slice_command(
     options: SliceCommandOptions,
     no_print_with_sharing: bool,
 ) -> CliResult<(ast::Problem, ast::Proof, ast::pool::Pool)> {
-    let (problem, proof, _, mut pool) =
-        parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
+    let (problem, proof, _, mut pool) = parser::parse(
+        read_input(&options.input)?.as_input(),
+        options.parsing.into_config(),
+    )?;
 
     let sliced = {
         let (sliced_proof, sliced_asserts) = slice::slice(
@@ -288,7 +345,7 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 
     let root_file_name = options.input.proof_file.clone();
     let instances = generate_lia_smt_instances(
-        get_input(&options.input)?,
+        read_input(&options.input)?.as_input(),
         options.parsing.into_config(),
         use_sharing,
     )?;
@@ -306,8 +363,10 @@ fn generate_lia_problems_command(options: ParseCommandOptions, use_sharing: bool
 
 // Translation-related commands.
 fn translate_command(options: TranslateCommandOptions, use_sharing: bool) -> CliResult<()> {
-    let (alethe_problem, mut alethe_proof, _, _) =
-        parser::parse(get_input(&options.input)?, options.parsing.into_config())?;
+    let (alethe_problem, mut alethe_proof, _, _) = parser::parse(
+        read_input(&options.input)?.as_input(),
+        options.parsing.into_config(),
+    )?;
 
     // NOTE: currently supporting only translation into Eunoia.
     match &options.target {
@@ -364,10 +423,13 @@ fn diff_from_error(error: &CliError) -> Option<diff::TermDiff> {
 }
 
 fn diff_command(options: DiffCommandOptions) -> CliResult<diff::TermDiff> {
-    let problem = Source::file(&options.problem_file)?;
-    let terms = Source::file_or_stdin(&options.terms_file)?;
+    let mut problem = String::new();
+    let problem = Source::file(&options.problem_file, &mut problem)?;
+    let mut terms = String::new();
+    let terms = Source::file_or_stdin(&options.terms_file, &mut terms)?;
 
     let mut pool = ast::pool::Pool::new();
+
     let mut parser = parser::Parser::new(&mut pool, options.parsing.into_config(), problem)?;
     let _ = parser.parse_problem()?; // We only parse the problem to get the definitions
     parser.reset(terms)?;

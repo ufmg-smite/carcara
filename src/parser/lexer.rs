@@ -178,7 +178,7 @@ pub struct Lexer<'s> {
 }
 
 impl<'s> Lexer<'s> {
-    /// Constructs a new `Lexer` from a `Source`.
+    /// Constructs a new `Lexer` that reads from `source`.
     pub fn new(source: Source<'s>) -> Self {
         Self {
             source,
@@ -191,7 +191,7 @@ impl<'s> Lexer<'s> {
     /// Wraps a `ParserError` into a crate level error, by adding the current position and the
     /// current source name.
     fn err(&self, inner: impl Into<ParserError>) -> Error {
-        Error::Parser(inner.into(), self.position(), self.source.name().into())
+        Error::Parser(inner.into(), self.position(), self.source.name.into())
     }
 
     /// Advances the lexer by one character, and returns the previous `current_char`.
@@ -219,7 +219,7 @@ impl<'s> Lexer<'s> {
     ///
     /// If the lexer is at the end of the input, returns `None`.
     fn current(&self) -> Option<char> {
-        self.source.contents()[self.offset..].chars().next()
+        self.source.contents[self.offset..].chars().next()
     }
 
     /// Returns the position of the current character.
@@ -233,9 +233,9 @@ impl<'s> Lexer<'s> {
     ///
     /// At the end, all characters in the returned slice will satisfy the predicate, and
     /// `self.current()` will be the first character that didn't satisfy the predicate.
-    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> &str {
+    fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> &'s str {
         let start = self.offset;
-        let rest = &self.source.contents()[start..];
+        let rest = &self.source.contents[start..];
         let mut len = rest.len();
         let (mut lines_read, mut line_start) = (self.lines_read, self.line_start);
         for (i, c) in rest.char_indices() {
@@ -251,7 +251,7 @@ impl<'s> Lexer<'s> {
         self.lines_read = lines_read;
         self.line_start = line_start;
         self.offset += len;
-        &self.source.contents()[start..self.offset]
+        &self.source.contents[start..self.offset]
     }
 
     /// Reads and drops characters until a non-whitespace character is encountered.

@@ -9,8 +9,8 @@ fn run_parallel_checker_test(
 ) -> CarcaraResult<Status> {
     let (problem, proof, rare_rules, pool) = parser::parse(
         carcara::Input {
-            problem: parser::Source::file(problem_path)?,
-            proof: parser::Source::file(proof_path)?,
+            problem: parser::Source::file(problem_path, &mut String::new())?,
+            proof: parser::Source::file(proof_path, &mut String::new())?,
             rare_rules: None,
         },
         config.0,
@@ -33,8 +33,8 @@ fn run_test(
 ) -> CarcaraResult<()> {
     let (problem, proof, rare_rules, mut pool) = parser::parse(
         carcara::Input {
-            problem: parser::Source::file(problem_path)?,
-            proof: parser::Source::file(proof_path)?,
+            problem: parser::Source::file(problem_path, &mut String::new())?,
+            proof: parser::Source::file(proof_path, &mut String::new())?,
             rare_rules: None,
         },
         config.0,

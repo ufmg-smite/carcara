@@ -52,13 +52,15 @@ fn run_job<S: CollectStats>(
     let mut run = carcara::benchmarking::RunStats::new();
 
     // Parsing
-    let input = carcara::Input {
-        problem: parser::Source::file(job.problem_file)?,
-        proof: parser::Source::file(job.proof_file)?,
-        rare_rules: None,
-    };
     let parsing_time = Instant::now();
-    let (problem, proof, rules, mut pool) = parser::parse(input, parser_config)?;
+    let (problem, proof, rules, mut pool) = parser::parse(
+        carcara::Input {
+            problem: parser::Source::file(job.problem_file, &mut String::new())?,
+            proof: parser::Source::file(job.proof_file, &mut String::new())?,
+            rare_rules: None,
+        },
+        parser_config,
+    )?;
     run.parsing = parsing_time.elapsed();
 
     // Checking
