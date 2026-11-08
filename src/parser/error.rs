@@ -2,7 +2,6 @@
 
 use crate::{
     ast::{Constant, Rc, Sort, Term},
-    parser::Token,
     utils::Range,
 };
 use rug::Integer;
@@ -51,7 +50,7 @@ pub enum ParserError {
 
     /// The parser encountered an unexpected token.
     #[error("unexpected token: '{0}'")]
-    UnexpectedToken(Token),
+    UnexpectedToken(String),
 
     /// The parser encountered an empty sequence where only non-empty sequences are allowed.
     #[error("expected non-empty sequence")]

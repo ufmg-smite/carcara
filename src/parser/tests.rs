@@ -1015,25 +1015,25 @@ fn test_proofs_with_extra_parens() {
     // Extra set of parens
     assert!(matches!(
         parse_proof_err(&mut p, "(( (assume h1 true) ))"),
-        Error::Parser(ParserError::UnexpectedToken(Token::OpenParen), _, _)
+        Error::Parser(ParserError::UnexpectedToken(t), _, _) if t == "("
     ));
 
     // Stuff after final closing parens
     assert!(matches!(
         parse_proof_err(&mut p, "( (assume h1 true) ) (assume h2 false)"),
-        Error::Parser(ParserError::UnexpectedToken(Token::OpenParen), _, _)
+        Error::Parser(ParserError::UnexpectedToken(t), _, _) if t == "("
     ));
 
     // Missing closing parens
     assert!(matches!(
         parse_proof_err(&mut p, "( (assume h1 true)"),
-        Error::Parser(ParserError::UnexpectedToken(Token::Eof), _, _)
+        Error::Parser(ParserError::UnexpectedToken(t), _, _) if t == "EOF"
     ));
 
     // Missing opening parens
     assert!(matches!(
         parse_proof_err(&mut p, "(assume h1 true) )"),
-        Error::Parser(ParserError::UnexpectedToken(Token::CloseParen), _, _)
+        Error::Parser(ParserError::UnexpectedToken(t), _, _) if t == ")"
     ));
 }
 

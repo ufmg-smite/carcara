@@ -8,6 +8,29 @@ use crate::{
 };
 use indexmap::IndexMap;
 
+/// A datatype declaration, with constructor and selector symbols borrowed from the input source.
+struct DatatypeDecl<'s> {
+    params: Vec<String>,
+    constructors: IndexMap<&'s str, Vec<(&'s str, Rc<Sort>)>>,
+}
+
+impl DatatypeDecl<'_> {
+    fn into_datatype(self) -> Datatype {
+        let constructors = self
+            .constructors
+            .into_iter()
+            .map(|(name, selectors)| {
+                let selectors = selectors
+                    .into_iter()
+                    .map(|(name, sort)| (name.to_owned(), sort))
+                    .collect();
+                (name.to_owned(), DatatypeConstructor { selectors })
+            })
+            .collect();
+        Datatype { params: self.params, constructors }
+    }
+}
+
 impl<'p, 's> Parser<'p, 's> {
     /// Parses a `declare-datatype` command.
     ///
@@ -17,11 +40,11 @@ impl<'p, 's> Parser<'p, 's> {
 
         // To allow for recursive datatypes, we rely on `parse_datatype_declaration` to declare the
         // datatype, after having parsed the sort parameters
-        let dt = self.parse_datatype_declaration(Some(&name))?;
+        let dt = self.parse_datatype_declaration(Some(name))?;
 
         self.expect_token(Token::CloseParen)?;
-        self.register_constructors(&name, &dt);
-        self.pool.add_datatype(name, dt);
+        self.register_constructors(name, &dt);
+        self.pool.add_datatype(name, dt.into_datatype());
         Ok(())
     }
 
@@ -40,7 +63,7 @@ impl<'p, 's> Parser<'p, 's> {
                 let arity = arity
                     .to_usize()
                     .ok_or(p.err(ParserError::InvalidSortArity(arity), arity_pos))?;
-                p.state.datatype_declarations.insert(name.clone(), arity);
+                p.state.datatype_declarations.insert(name, arity);
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, arity))
             },
@@ -67,8 +90,8 @@ impl<'p, 's> Parser<'p, 's> {
                 let err = ParserError::WrongNumberOfDatatypeParams(arity, dt.params.len());
                 return Err(self.err(err, pos));
             }
-            self.register_constructors(&name, &dt);
-            self.pool.add_datatype(name, dt);
+            self.register_constructors(name, &dt);
+            self.pool.add_datatype(name, dt.into_datatype());
         }
         self.expect_token(Token::CloseParen)?;
         Ok(())
@@ -84,8 +107,8 @@ impl<'p, 's> Parser<'p, 's> {
     /// arity, which can only be done after parsing the sort parameters.
     fn parse_datatype_declaration(
         &mut self,
-        late_declare: Option<&str>,
-    ) -> CarcaraResult<Datatype> {
+        late_declare: Option<&'s str>,
+    ) -> CarcaraResult<DatatypeDecl<'s>> {
         self.expect_token(Token::OpenParen)?;
         let params = if self.current_token == Token::ReservedWord(Reserved::Par) {
             self.next_token()?;
@@ -95,8 +118,8 @@ impl<'p, 's> Parser<'p, 's> {
                 |p| {
                     let name = p.expect_symbol()?;
                     let sort = p.pool.add_sort(Sort::Type);
-                    p.declare_symbol(name.clone(), sort);
-                    Ok(name)
+                    p.declare_symbol(name, sort);
+                    Ok(name.to_owned())
                 },
                 true,
             )?;
@@ -108,9 +131,7 @@ impl<'p, 's> Parser<'p, 's> {
 
         // If `late_declare` is provided, declare the datatype after knowing its arity.
         if let Some(name) = late_declare {
-            self.state
-                .datatype_declarations
-                .insert(name.to_owned(), params.len());
+            self.state.datatype_declarations.insert(name, params.len());
         }
 
         let constructors: IndexMap<_, _> = self
@@ -121,7 +142,7 @@ impl<'p, 's> Parser<'p, 's> {
             self.expect_token(Token::CloseParen)?;
             self.state.symbol_table.pop_scope();
         }
-        Ok(Datatype { params, constructors })
+        Ok(DatatypeDecl { params, constructors })
     }
 
     /// Register each constructor from a datatype into the symbol table, with the appropriate type.
@@ -136,7 +157,7 @@ impl<'p, 's> Parser<'p, 's> {
     ///
     /// If there are no sort parameters, the `par` construction is omitted; if there are no
     /// selectors, the `->` construction is omitted.
-    fn register_constructors(&mut self, datatype_name: &str, datatype: &Datatype) {
+    fn register_constructors(&mut self, datatype_name: &str, datatype: &DatatypeDecl<'s>) {
         let return_sort = Sort::Datatype {
             name: datatype_name.to_owned().into_boxed_str(),
             args: datatype
@@ -146,12 +167,11 @@ impl<'p, 's> Parser<'p, 's> {
                 .collect(),
         };
         let return_sort = self.pool.add_sort(return_sort);
-        for (name, cons) in &datatype.constructors {
-            let inner_sort = if cons.selectors.is_empty() {
+        for (&name, selectors) in &datatype.constructors {
+            let inner_sort = if selectors.is_empty() {
                 return_sort.clone()
             } else {
-                let sorts: Vec<_> = cons
-                    .selectors
+                let sorts: Vec<_> = selectors
                     .iter()
                     .map(|(_, sort)| sort.clone())
                     .chain([return_sort.clone()])
@@ -164,16 +184,18 @@ impl<'p, 's> Parser<'p, 's> {
                 self.pool
                     .add_sort(Sort::Par(datatype.params.clone(), inner_sort))
             };
-            self.declare_symbol(name.clone(), sort);
+            self.declare_symbol(name, sort);
 
-            // If we are supporting legacy tester syntax, register a function symbol named
-            // `is-<cons>`, that serves the same purpose as the newer `(_ is <cons>)`.
+            // If we are supporting legacy tester syntax, register `is-<cons>` as a tester,
+            // equivalent to the newer `(_ is <cons>)`. Since `is-<cons>` doesn't appear in
+            // the input source we can't add it to the symbol table; instead, we add it to
+            // `legacy_testers`, which is handled manually in `make_var`.
             if self.config.allow_legacy_tester_syntax {
                 let sort = build_sort!(self.pool, (-> {return_sort.clone()} Bool));
-                self.declare_symbol(format!("is-{}", name), sort);
+                self.state.legacy_testers.insert(name, sort);
             }
 
-            self.register_selectors(cons, &return_sort, &datatype.params);
+            self.register_selectors(selectors, &return_sort, &datatype.params);
         }
     }
 
@@ -191,11 +213,11 @@ impl<'p, 's> Parser<'p, 's> {
     /// If there are no sort parameters, the `par` construction is omitted.
     fn register_selectors(
         &mut self,
-        constructor: &DatatypeConstructor,
+        selectors: &[(&'s str, Rc<Sort>)],
         datatype_sort: &Rc<Sort>,
         sort_params: &[String],
     ) {
-        for (name, selector_sort) in &constructor.selectors {
+        for &(name, ref selector_sort) in selectors {
             let inner_sort = build_sort!(
                 self.pool,
                 (-> {datatype_sort.clone()} {selector_sort.clone()})
@@ -206,16 +228,16 @@ impl<'p, 's> Parser<'p, 's> {
                 self.pool
                     .add_sort(Sort::Par(sort_params.to_vec(), inner_sort))
             };
-            self.declare_symbol(name.clone(), sort);
+            self.declare_symbol(name, sort);
         }
     }
 
     /// Parses a datatype constructor, of the form `(<symbol> (<symbol> <sort>)*)`.
-    fn parse_datatype_constructor(&mut self) -> CarcaraResult<(String, DatatypeConstructor)> {
+    fn parse_datatype_constructor(&mut self) -> CarcaraResult<(&'s str, Vec<(&'s str, Rc<Sort>)>)> {
         self.expect_token(Token::OpenParen)?;
         let name = self.expect_symbol()?;
         let selectors = self.parse_sequence(Self::parse_sorted_var, false)?;
-        Ok((name, DatatypeConstructor { selectors }))
+        Ok((name, selectors))
     }
 
     /// Parses a `match` term. This method assumes that the `(` and `match` tokens were already
@@ -274,9 +296,6 @@ impl<'p, 's> Parser<'p, 's> {
         self.state.symbol_table.push_scope();
 
         let pattern = self.parse_match_pattern(sort, constructors)?;
-        for (var, sort) in pattern.bindings() {
-            self.declare_symbol(var.clone(), sort.clone());
-        }
 
         let body = self.parse_term()?;
         self.state.symbol_table.pop_scope();
@@ -295,21 +314,24 @@ impl<'p, 's> Parser<'p, 's> {
             (Token::ReservedWord(Reserved::Underscore), _) => Ok(MatchPattern::Wildcard),
 
             // Nullary constructor
-            (Token::Symbol(s), _) if constructors.get(&s).is_some() => {
-                let n = constructors.get(&s).unwrap().selectors.len();
+            (Token::Symbol(s), _) if constructors.get(s).is_some() => {
+                let n = constructors.get(s).unwrap().selectors.len();
                 if n == 0 {
-                    Ok(MatchPattern::Cons(s.clone(), Vec::new()))
+                    Ok(MatchPattern::Cons(s.to_owned(), Vec::new()))
                 } else {
                     let e = ParserError::WrongNumberOfArgs(n.into(), 0);
                     Err(self.err(e, head_pos))
                 }
             }
             // Single variable
-            (Token::Symbol(s), _) => Ok(MatchPattern::Variable((s.clone(), sort.clone()))),
+            (Token::Symbol(s), _) => {
+                self.declare_symbol(s, sort.clone());
+                Ok(MatchPattern::Variable((s.to_owned(), sort.clone())))
+            }
 
             // n-ary constructor
             (Token::OpenParen, _) => {
-                let cons_name = self.expect_symbol()?;
+                let cons_name = self.expect_symbol()?.to_owned();
 
                 // Note: the SMT-LIB spec says that nullary constructors in patterns must not be
                 // parenthesised, such that any pattern that begins with the `(` token must have at
@@ -320,9 +342,12 @@ impl<'p, 's> Parser<'p, 's> {
                 match constructors.get(&cons_name) {
                     Some(cons) if cons.selectors.len() == args.len() => {
                         let args: Vec<_> = args
-                            .iter()
+                            .into_iter()
                             .zip(&cons.selectors)
-                            .map(|(var, (_, sort))| (var.clone(), sort.clone()))
+                            .map(|(var, (_, sort))| {
+                                self.declare_symbol(var, sort.clone());
+                                (var.to_owned(), sort.clone())
+                            })
                             .collect();
 
                         Ok(MatchPattern::Cons(cons_name, args))
@@ -334,7 +359,7 @@ impl<'p, 's> Parser<'p, 's> {
                     None => Err(self.err(ParserError::UnknownConstructor(cons_name), head_pos)),
                 }
             }
-            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos)),
         }
     }
 }

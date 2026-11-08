@@ -11,8 +11,8 @@ use crate::{
     CarcaraResult, Error, Input,
     ast::{
         AnchorArg, Binder, BindingList, Operator, ParamOperator, Problem, ProblemPrelude, Proof,
-        ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, SortedVar,
-        Subproof, Substitution, Term, build_sort, build_term,
+        ProofCommand, ProofStep, QualifiedOperator, Rc, Sort, SortSubstitution, Subproof,
+        Substitution, Term, build_sort, build_term,
         pool::Pool,
         rare_rules::{RareStatements, Rules},
     },
@@ -172,12 +172,12 @@ pub fn parse_with_pool<'s>(
 }
 
 /// A function definition, from a `define-fun` command.
-struct FunctionDef {
-    params: Vec<SortedVar>,
+struct FunctionDef<'s> {
+    params: Vec<(&'s str, Rc<Sort>)>,
     body: Rc<Term>,
 }
 
-impl FunctionDef {
+impl<'s> FunctionDef<'s> {
     fn apply(&self, p: &mut Pool, args: Vec<Rc<Term>>) -> Result<Rc<Term>, ParserError> {
         assert_num_args(&args, self.params.len())?;
         if args.is_empty() {
@@ -202,7 +202,7 @@ impl FunctionDef {
             .params
             .iter()
             .zip(args)
-            .map(|((n, s), arg)| (p.add(Term::new_var(n, s.clone())), arg))
+            .map(|((n, s), arg)| (p.add(Term::new_var(*n, s.clone())), arg))
             .collect();
 
         // Since we already checked the sorts of the arguments, creating this substitution
@@ -226,13 +226,17 @@ struct SortDef {
 /// This holds all the function, constant or sort declarations and definitions, as well as the term
 /// pool used by the parser.
 #[derive(Default)]
-struct ParserState {
-    symbol_table: HashMapStack<HashCache<String>, Rc<Sort>>,
-    function_defs: RapidHashMap<String, FunctionDef>,
-    sort_declarations: RapidHashMap<String, usize>,
-    datatype_declarations: HashMapStack<String, usize>,
-    sort_defs: RapidHashMap<String, SortDef>,
-    step_ids: HashMapStack<HashCache<String>, usize>,
+struct ParserState<'s> {
+    symbol_table: HashMapStack<HashCache<&'s str>, Rc<Sort>>,
+    function_defs: RapidHashMap<&'s str, FunctionDef<'s>>,
+    sort_declarations: RapidHashMap<&'s str, usize>,
+    datatype_declarations: HashMapStack<&'s str, usize>,
+    sort_defs: RapidHashMap<&'s str, SortDef>,
+    step_ids: HashMapStack<HashCache<&'s str>, usize>,
+
+    /// Maps each datatype constructor `<cons>` to the sort of its legacy tester `is-<cons>`. Only
+    /// populated if `allow_legacy_tester_syntax` is enabled.
+    legacy_testers: RapidHashMap<&'s str, Rc<Sort>>,
 }
 
 /// A parser for the Alethe proof format.
@@ -240,9 +244,9 @@ pub struct Parser<'p, 's> {
     pool: &'p mut Pool,
     config: Config,
     lexer: lexer::Lexer<'s>,
-    current_token: Token,
+    current_token: Token<'s>,
     current_position: Position,
-    state: ParserState,
+    state: ParserState<'s>,
     is_real_only_logic: bool,
     problem: Option<Problem>,
 }
@@ -289,7 +293,7 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
-    fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
+    fn next_token(&mut self) -> CarcaraResult<(Token<'s>, Position)> {
         use std::mem::replace;
 
         let (new_token, new_position) = self.lexer.next_token()?;
@@ -299,13 +303,13 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Inserts a new symbol into the parser symbol table, with the provided sort.
-    fn declare_symbol(&mut self, symbol: String, sort: Rc<Sort>) {
+    fn declare_symbol(&mut self, symbol: &'s str, sort: Rc<Sort>) {
         self.state.symbol_table.insert(HashCache::new(symbol), sort);
     }
 
     /// Searches the symbol table for a symbol, and, if found, returns its sort.
-    fn get_symbol(&self, symbol: &str) -> Option<&Rc<Sort>> {
-        let cached = HashCache::new(symbol.to_owned());
+    fn get_symbol<'a>(&'a self, symbol: &'a str) -> Option<&'a Rc<Sort>> {
+        let cached = HashCache::new(symbol);
         self.state.symbol_table.get(&cached)
     }
 
@@ -397,13 +401,22 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Constructs and sort checks a variable term.
-    fn make_var(&mut self, iden: String) -> Result<Rc<Term>, ParserError> {
+    fn make_var(&mut self, iden: &'s str) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
         let sort = match self.state.symbol_table.get(&cached) {
             Some(s) => s.clone(),
-            None => return Err(ParserError::UndefinedIden(cached.unwrap())),
+            None => {
+                // If legacy tester syntax is enabled, `is-<cons>` might be the tester for `<cons>`
+                let tester = iden
+                    .strip_prefix("is-")
+                    .and_then(|cons| self.state.legacy_testers.get(cons));
+                match tester {
+                    Some(s) => s.clone(),
+                    None => return Err(ParserError::UndefinedIden(cached.unwrap().to_owned())),
+                }
+            }
         };
-        Ok(self.pool.add(Term::Var(cached.unwrap(), sort)))
+        Ok(self.pool.add(Term::Var(cached.unwrap().to_owned(), sort)))
     }
 
     /// Return whether we should interpret integer constants as `Real`s.
@@ -461,38 +474,38 @@ impl<'p, 's> Parser<'p, 's> {
         if got == expected {
             Ok(())
         } else {
-            Err(self.err(ParserError::UnexpectedToken(got), pos))
+            Err(self.err(ParserError::UnexpectedToken(got.to_string()), pos))
         }
     }
 
-    /// Consumes the current token if it is a symbol, and returns the inner `String`. Returns an
-    /// error otherwise.
-    fn expect_symbol(&mut self) -> CarcaraResult<String> {
+    /// Consumes the current token if it is a symbol, and returns the inner `&str`. Returns an error
+    /// otherwise.
+    fn expect_symbol(&mut self) -> CarcaraResult<&'s str> {
         match self.next_token()? {
             (Token::Symbol(s), _) => Ok(s),
-            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos)),
         }
     }
 
     /// Returns `true` if the current token is the keyword `keyword`.
     fn is_keyword(&self, keyword: &str) -> bool {
-        matches!(&self.current_token, Token::Keyword(k) if k == keyword)
+        matches!(&self.current_token, Token::Keyword(k) if *k == keyword)
     }
 
     /// Consumes the current token if it is the keyword `keyword`. Returns an error otherwise.
     fn expect_keyword(&mut self, keyword: &str) -> CarcaraResult<()> {
         match self.next_token()? {
             (Token::Keyword(k), _) if k == keyword => Ok(()),
-            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos)),
         }
     }
 
-    /// Consumes the current token if it is any keyword, and returns the inner `String`. Returns an
+    /// Consumes the current token if it is any keyword, and returns the inner `&str`. Returns an
     /// error otherwise.
-    fn expect_any_keyword(&mut self) -> CarcaraResult<String> {
+    fn expect_any_keyword(&mut self) -> CarcaraResult<&'s str> {
         match self.next_token()? {
             (Token::Keyword(s), _) => Ok(s),
-            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos)),
         }
     }
 
@@ -501,7 +514,7 @@ impl<'p, 's> Parser<'p, 's> {
     fn expect_numeral(&mut self) -> CarcaraResult<Integer> {
         match self.next_token()? {
             (Token::Numeral(n), _) => Ok(n),
-            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other), pos)),
+            (other, pos) => Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos)),
         }
     }
 
@@ -526,7 +539,7 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Reads tokens until the matching closing parenthesis is reached.
-    fn read_until_close_parens(&mut self) -> CarcaraResult<Vec<Token>> {
+    fn read_until_close_parens(&mut self) -> CarcaraResult<Vec<Token<'s>>> {
         let mut result = Vec::new();
         let mut parens_depth = 1;
         while parens_depth > 0 {
@@ -535,7 +548,7 @@ impl<'p, 's> Parser<'p, 's> {
                 (Token::OpenParen, _) => 1,
                 (Token::CloseParen, _) => -1,
                 (Token::Eof, pos) => {
-                    return Err(self.err(ParserError::UnexpectedToken(Token::Eof), pos));
+                    return Err(self.err(ParserError::UnexpectedToken(Token::Eof.to_string()), pos));
                 }
                 _ => 0,
             };
@@ -606,20 +619,26 @@ impl<'p, 's> Parser<'p, 's> {
             match self.next_token()?.0 {
                 Token::ReservedWord(Reserved::DeclareFun) => {
                     let (name, sort) = self.parse_declare_fun()?;
-                    self.declare_symbol(name.clone(), sort.clone());
-                    self.prelude().function_declarations.push((name, sort));
+                    self.declare_symbol(name, sort.clone());
+                    self.prelude()
+                        .function_declarations
+                        .push((name.to_owned(), sort));
                 }
                 Token::ReservedWord(Reserved::DeclareConst) => {
                     let name = self.expect_symbol()?;
                     let sort = self.parse_sort()?;
                     self.expect_token(Token::CloseParen)?;
-                    self.declare_symbol(name.clone(), sort.clone());
-                    self.prelude().function_declarations.push((name, sort));
+                    self.declare_symbol(name, sort.clone());
+                    self.prelude()
+                        .function_declarations
+                        .push((name.to_owned(), sort));
                 }
                 Token::ReservedWord(Reserved::DeclareSort) => {
                     let (name, arity) = self.parse_declare_sort()?;
 
-                    self.prelude().sort_declarations.push((name.clone(), arity));
+                    self.prelude()
+                        .sort_declarations
+                        .push((name.to_owned(), arity));
 
                     // User declared sorts are represented with the `Atom` sort kind, and an
                     // argument which is a string terminal representing the sort name.
@@ -640,15 +659,20 @@ impl<'p, 's> Parser<'p, 's> {
                         let lambda_term = if func_def.params.is_empty() {
                             func_def.body
                         } else {
+                            let params = func_def
+                                .params
+                                .into_iter()
+                                .map(|(name, sort)| (name.to_owned(), sort))
+                                .collect();
                             self.pool.add(Term::Binder(
                                 Binder::Lambda,
-                                BindingList(func_def.params),
+                                BindingList(params),
                                 func_def.body,
                             ))
                         };
                         let sort = self.pool.sort(&lambda_term);
-                        self.declare_symbol(name.clone(), sort.clone());
-                        let var_term = self.pool.add((name, sort).into());
+                        self.declare_symbol(name, sort.clone());
+                        let var_term = self.pool.add(Term::new_var(name, sort));
                         let assertion_term = self
                             .pool
                             .add(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
@@ -675,7 +699,7 @@ impl<'p, 's> Parser<'p, 's> {
                 Token::ReservedWord(Reserved::SetLogic) => {
                     let logic = self.expect_symbol()?;
                     self.expect_token(Token::CloseParen)?;
-                    self.prelude().logic = Some(logic.clone());
+                    self.prelude().logic = Some(logic.to_owned());
 
                     // When the problem's logic contains real numbers but not integers, integer
                     // literals should be parsed as reals. For instance, `1` should be interpreted
@@ -719,7 +743,7 @@ impl<'p, 's> Parser<'p, 's> {
 
         // Some solvers print the satisfiability result (unsat) together with the proof. To save the
         // user from having to remove this, we consume this first "unsat" token if it exists
-        if self.current_token == Token::Symbol("unsat".into()) {
+        if self.current_token == Token::Symbol("unsat") {
             self.next_token()?;
         }
 
@@ -749,24 +773,25 @@ impl<'p, 's> Parser<'p, 's> {
                         }
                         // It is disallowed within subproofs.
                         else {
-                            return Err(
-                                self.err(ParserError::AssumeAfterStepInSubproof(id), position)
-                            );
+                            return Err(self.err(
+                                ParserError::AssumeAfterStepInSubproof(id.to_owned()),
+                                position,
+                            ));
                         }
                     }
 
-                    (id.clone(), ProofCommand::Assume { id, term })
+                    (id, ProofCommand::Assume { id: id.to_owned(), term })
                 }
                 Token::ReservedWord(Reserved::Step) => {
                     stack.last_mut().unwrap().2 = true;
-                    let step = self.parse_step_command()?;
-                    (step.id.clone(), ProofCommand::Step(step))
+                    let (id, step) = self.parse_step_command()?;
+                    (id, ProofCommand::Step(step))
                 }
                 Token::ReservedWord(Reserved::DefineFun) => {
                     let (name, func_def) = self.parse_define_fun()?;
                     if func_def.params.is_empty() {
                         let sort = self.pool.sort(&func_def.body);
-                        constant_definitions.push((name.clone(), func_def.body.clone(), sort));
+                        constant_definitions.push((name.to_owned(), func_def.body.clone(), sort));
                     }
                     self.state.function_defs.insert(name, func_def);
                     continue;
@@ -791,12 +816,15 @@ impl<'p, 's> Parser<'p, 's> {
                     continue;
                 }
                 _ => {
-                    return Err(self.err(ParserError::UnexpectedToken(token), position));
+                    return Err(self.err(ParserError::UnexpectedToken(token.to_string()), position));
                 }
             };
             let id = HashCache::new(id);
             if self.state.step_ids.get(&id).is_some() {
-                return Err(self.err(ParserError::RepeatedStepId(id.unwrap()), position));
+                return Err(self.err(
+                    ParserError::RepeatedStepId(id.unwrap().to_owned()),
+                    position,
+                ));
             }
 
             let (top_subproof, top_end_step, _) = stack.last_mut().unwrap();
@@ -811,13 +839,15 @@ impl<'p, 's> Parser<'p, 's> {
                 // The subproof must contain at least two commands: the end step and the previous
                 // command it implicitly references
                 if subproof.commands.len() < 2 {
-                    return Err(self.err(ParserError::EmptySubproof(id.unwrap()), position));
+                    return Err(
+                        self.err(ParserError::EmptySubproof(id.unwrap().to_owned()), position)
+                    );
                 }
 
                 // We also need to make sure that the last command is in fact a `step`
                 if !subproof.commands.last().unwrap().is_step() {
                     return Err(self.err(
-                        ParserError::LastSubproofStepIsNotStep(id.unwrap()),
+                        ParserError::LastSubproofStepIsNotStep(id.unwrap().to_owned()),
                         position,
                     ));
                 }
@@ -856,7 +886,7 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses an `assume` proof command. This method assumes that the `(` and `assume` tokens were
     /// already consumed.
-    fn parse_assume_command(&mut self) -> CarcaraResult<(String, Rc<Term>)> {
+    fn parse_assume_command(&mut self) -> CarcaraResult<(&'s str, Rc<Term>)> {
         let id = self.expect_symbol()?;
         let term = self.parse_term_expecting_sort(&Sort::Bool)?;
         self.ignore_remaining_attributes()?;
@@ -866,15 +896,15 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses a `step` proof command. This method assumes that the `(` and `step` tokens were
     /// already consumed.
-    fn parse_step_command(&mut self) -> CarcaraResult<ProofStep> {
+    fn parse_step_command(&mut self) -> CarcaraResult<(&'s str, ProofStep)> {
         let id = self.expect_symbol()?;
         let clause = self.parse_clause()?;
         self.expect_keyword("rule")?;
         let rule = match self.next_token()? {
-            (Token::Symbol(s), _) => s,
+            (Token::Symbol(s), _) => s.to_owned(),
             (Token::ReservedWord(r), _) => format!("{}", r),
             (other, pos) => {
-                return Err(self.err(ParserError::UnexpectedToken(other), pos));
+                return Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos));
             }
         };
 
@@ -908,7 +938,7 @@ impl<'p, 's> Parser<'p, 's> {
         let discharge = if self.is_keyword("discharge") {
             self.next_token()?;
             self.expect_token(Token::OpenParen)?;
-            self.parse_sequence(|p| p.parse_discharge_premise(&id), true)?
+            self.parse_sequence(|p| p.parse_discharge_premise(id), true)?
         } else {
             Vec::new()
         };
@@ -916,14 +946,15 @@ impl<'p, 's> Parser<'p, 's> {
         self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
 
-        Ok(ProofStep {
-            id,
+        let step = ProofStep {
+            id: id.to_owned(),
             clause,
             rule,
             premises,
             args,
             discharge,
-        })
+        };
+        Ok((id, step))
     }
 
     /// Parses a premise for a `step` command. This already converts it into the depth and command
@@ -935,7 +966,12 @@ impl<'p, 's> Parser<'p, 's> {
             .step_ids
             .get_with_depth(&id)
             .map(|(d, &i)| (d, i))
-            .ok_or_else(|| self.err(ParserError::UndefinedStepId(id.unwrap()), position))
+            .ok_or_else(|| {
+                self.err(
+                    ParserError::UndefinedStepId(id.unwrap().to_owned()),
+                    position,
+                )
+            })
     }
 
     /// Parses an argument for the `:discharge` attribute.
@@ -947,15 +983,20 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_discharge_premise(&mut self, root_id: &str) -> CarcaraResult<(usize, usize)> {
         let position = self.current_position;
         let id = self.expect_symbol()?;
-        let absolute_id = format!("{}.{}", root_id, &id);
+        let absolute_id = format!("{}.{}", root_id, id);
         let id = HashCache::new(id);
-        let absolute_id = HashCache::new(absolute_id);
+        let absolute_id = HashCache::new(absolute_id.as_str());
         self.state
             .step_ids
             .get_with_depth(&absolute_id)
             .or_else(|| self.state.step_ids.get_with_depth(&id))
             .map(|(d, &i)| (d, i))
-            .ok_or_else(|| self.err(ParserError::UndefinedStepId(id.unwrap()), position))
+            .ok_or_else(|| {
+                self.err(
+                    ParserError::UndefinedStepId(id.unwrap().to_owned()),
+                    position,
+                )
+            })
     }
 
     /// Parses an `anchor` proof command. This method assumes that the `(` and `anchor` tokens were
@@ -980,7 +1021,7 @@ impl<'p, 's> Parser<'p, 's> {
         };
         self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((end_step_id, args))
+        Ok((end_step_id.to_owned(), args))
     }
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
@@ -1006,21 +1047,21 @@ impl<'p, 's> Parser<'p, 's> {
                     let value = self.parse_term_expecting_sort(&sort)?;
                     (var, value, sort)
                 };
-            self.declare_symbol(var.clone(), sort.clone());
+            self.declare_symbol(var, sort.clone());
             self.expect_token(Token::CloseParen)?;
-            AnchorArg::Assign((var, sort), value)
+            AnchorArg::Assign((var.to_owned(), sort), value)
         } else {
             let symbol = self.expect_symbol()?;
             let sort = self.parse_sort()?;
-            self.declare_symbol(symbol.clone(), sort.clone());
+            self.declare_symbol(symbol, sort.clone());
             self.expect_token(Token::CloseParen)?;
-            AnchorArg::Variable((symbol, sort))
+            AnchorArg::Variable((symbol.to_owned(), sort))
         })
     }
 
     /// Parses a `declare-fun` proof command. Returns the function name and its sort. This method
     /// assumes that the `(` and `declare-fun` tokens were already consumed.
-    fn parse_declare_fun(&mut self) -> CarcaraResult<(String, Rc<Sort>)> {
+    fn parse_declare_fun(&mut self) -> CarcaraResult<(&'s str, Rc<Sort>)> {
         let name = self.expect_symbol()?;
         let sort = {
             self.expect_token(Token::OpenParen)?;
@@ -1038,7 +1079,7 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses a declare-sort proof command. Returns the sort name and its arity. This method
     /// assumes that the `(` and `declare-sort` tokens were already consumed.
-    fn parse_declare_sort(&mut self) -> CarcaraResult<(String, usize)> {
+    fn parse_declare_sort(&mut self) -> CarcaraResult<(&'s str, usize)> {
         let name = self.expect_symbol()?;
         let arity_pos = self.current_position;
         let arity = self.expect_numeral()?;
@@ -1054,7 +1095,7 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_function_dec(
         &mut self,
         consume_parens: bool,
-    ) -> CarcaraResult<(String, Vec<SortedVar>, Rc<Sort>)> {
+    ) -> CarcaraResult<(&'s str, Vec<(&'s str, Rc<Sort>)>, Rc<Sort>)> {
         if consume_parens {
             self.expect_token(Token::OpenParen)?;
         }
@@ -1070,14 +1111,14 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses a `define-fun` proof command. Returns the function name and its definition. This
     /// method assumes that the `(` and `define-fun` tokens were already consumed.
-    fn parse_define_fun(&mut self) -> CarcaraResult<(String, FunctionDef)> {
+    fn parse_define_fun(&mut self) -> CarcaraResult<(&'s str, FunctionDef<'s>)> {
         let (name, params, return_sort) = self.parse_function_dec(false)?;
 
         // In order to correctly parse the function body, we push a new scope to the symbol table
         // and add the functions arguments to it.
         self.state.symbol_table.push_scope();
         for (var, sort) in &params {
-            self.declare_symbol(var.clone(), sort.clone());
+            self.declare_symbol(var, sort.clone());
         }
         let body = self.parse_term_expecting_sort(&return_sort)?;
         self.state.symbol_table.pop_scope();
@@ -1088,18 +1129,23 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Adds the premise corresponding to a `define-fun-rec` function definition.
-    fn add_define_fun_rec_premise(&mut self, name: String, params: Vec<SortedVar>, body: Rc<Term>) {
+    fn add_define_fun_rec_premise(
+        &mut self,
+        name: &'s str,
+        params: Vec<(&'s str, Rc<Sort>)>,
+        body: Rc<Term>,
+    ) {
         let application = {
             let cached = HashCache::new(name);
             let func_sort = self.state.symbol_table.get(&cached).unwrap();
             let name = cached.unwrap();
-            let func_term = self.pool.add((name, func_sort.clone()).into());
+            let func_term = self.pool.add(Term::new_var(name, func_sort.clone()));
             if params.is_empty() {
                 func_term
             } else {
                 let args = params
                     .iter()
-                    .map(|var| self.pool.add(var.clone().into()))
+                    .map(|(name, sort)| self.pool.add(Term::new_var(*name, sort.clone())))
                     .collect();
                 self.pool.add(Term::App(func_term, args))
             }
@@ -1108,7 +1154,12 @@ impl<'p, 's> Parser<'p, 's> {
         let premise = if params.is_empty() {
             equality_term
         } else {
-            let bindings = BindingList(params);
+            let bindings = BindingList(
+                params
+                    .into_iter()
+                    .map(|(name, sort)| (name.to_owned(), sort))
+                    .collect(),
+            );
             self.pool
                 .add(Term::Binder(Binder::Forall, bindings, equality_term))
         };
@@ -1134,7 +1185,7 @@ impl<'p, 's> Parser<'p, 's> {
                 param_sorts.push(return_sort.clone());
                 self.pool.add_sort(Sort::Function(param_sorts))
             };
-            self.declare_symbol(name.clone(), sort);
+            self.declare_symbol(name, sort);
         }
 
         if is_multiple {
@@ -1143,7 +1194,7 @@ impl<'p, 's> Parser<'p, 's> {
         for (name, params, return_sort) in declarations {
             self.state.symbol_table.push_scope();
             for (var, sort) in &params {
-                self.declare_symbol(var.clone(), sort.clone());
+                self.declare_symbol(var, sort.clone());
             }
             let body = self.parse_term_expecting_sort(&return_sort)?;
             self.state.symbol_table.pop_scope();
@@ -1160,18 +1211,23 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Parses a `define-sort` proof command. Returns the sort name and its definition. This method
     /// assumes that the `(` and `define-sort` tokens were already consumed.
-    fn parse_define_sort(&mut self) -> CarcaraResult<(String, SortDef)> {
+    fn parse_define_sort(&mut self) -> CarcaraResult<(&'s str, SortDef)> {
         let name = self.expect_symbol()?;
         self.expect_token(Token::OpenParen)?;
-        let params = self.parse_sequence(Self::expect_symbol, false)?;
 
         // In order to correctly parse the sort definition, we push a new scope to the symbol table
         // and add the sort parameters to it.
         self.state.symbol_table.push_scope();
-        for s in &params {
-            let sort = self.pool.add_sort(Sort::Type);
-            self.declare_symbol(s.clone(), sort);
-        }
+        let params = self.parse_sequence(
+            |p| {
+                let name = p.expect_symbol()?;
+                let sort = p.pool.add_sort(Sort::Type);
+                p.declare_symbol(name, sort);
+                Ok(name.to_owned())
+            },
+            false,
+        )?;
+
         let body = self.parse_sort()?;
         self.state.symbol_table.pop_scope();
 
@@ -1188,7 +1244,7 @@ impl<'p, 's> Parser<'p, 's> {
     }
 
     /// Parses a sorted variable of the form `(<symbol> <sort>)`.
-    fn parse_sorted_var(&mut self) -> CarcaraResult<SortedVar> {
+    fn parse_sorted_var(&mut self) -> CarcaraResult<(&'s str, Rc<Sort>)> {
         self.expect_token(Token::OpenParen)?;
         let symbol = self.expect_symbol()?;
         let sort = self.parse_sort()?;
@@ -1206,23 +1262,22 @@ impl<'p, 's> Parser<'p, 's> {
             (Token::String(s), _) => Term::new_string(s),
             (Token::Symbol(s), pos) => {
                 // Check to see if there is a nullary function defined with this name
-                return if let Some(func) = self.state.function_defs.get(&s) {
+                return if let Some(func) = self.state.function_defs.get(s) {
                     func.apply(self.pool, Vec::new())
                         .map_err(|err| self.err(err, pos))
-                } else if let Ok(op) = Operator::from_str(&s)
+                } else if let Ok(op) = Operator::from_str(s)
                     // Declared symbols shadow built-in operators
-                    && self.get_symbol(&s).is_none()
+                    && self.get_symbol(s).is_none()
                 {
-                    let args = Vec::new();
-
-                    self.make_op(op, args).map_err(|err| self.err(err, pos))
+                    self.make_op(op, Vec::new())
+                        .map_err(|err| self.err(err, pos))
                 } else {
                     self.make_var(s).map_err(|err| self.err(err, pos))
                 };
             }
             (Token::OpenParen, _) => return self.parse_application(),
             (other, pos) => {
-                return Err(self.err(ParserError::UnexpectedToken(other), pos));
+                return Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos));
             }
         };
         Ok(self.pool.add(term))
@@ -1244,15 +1299,15 @@ impl<'p, 's> Parser<'p, 's> {
         self.state.symbol_table.push_scope();
         let bindings = if binder == Binder::Choice {
             let (var, sort) = self.parse_sorted_var()?;
-            self.declare_symbol(var.clone(), sort.clone());
+            self.declare_symbol(var, sort.clone());
             self.expect_token(Token::CloseParen)?;
-            BindingList(vec![(var, sort)])
+            BindingList(vec![(var.to_owned(), sort)])
         } else {
             BindingList(self.parse_sequence(
                 |p| {
                     let (var, sort) = p.parse_sorted_var()?;
-                    p.declare_symbol(var.clone(), sort.clone());
-                    Ok((var, sort))
+                    p.declare_symbol(var, sort.clone());
+                    Ok((var.to_owned(), sort))
                 },
                 true,
             )?)
@@ -1287,7 +1342,7 @@ impl<'p, 's> Parser<'p, 's> {
         self.state.symbol_table.push_scope();
         for (name, value) in &bindings {
             let sort = self.pool.sort(value);
-            self.declare_symbol(name.clone(), sort);
+            self.declare_symbol(name, sort);
         }
 
         let inner = self.parse_term()?;
@@ -1310,6 +1365,10 @@ impl<'p, 's> Parser<'p, 's> {
 
             Ok(result)
         } else {
+            let bindings = bindings
+                .into_iter()
+                .map(|(name, value)| (name.to_owned(), value))
+                .collect();
             Ok(self.pool.add(Term::Let(BindingList(bindings), inner)))
         }
     }
@@ -1324,7 +1383,7 @@ impl<'p, 's> Parser<'p, 's> {
         self.parse_sequence(
             |p| {
                 let attribute = p.expect_any_keyword()?;
-                match attribute.as_str() {
+                match attribute {
                     "named" => {
                         // If the term has a `:named` attribute, we introduce a new nullary function
                         // definition that maps the name to the term
@@ -1377,9 +1436,9 @@ impl<'p, 's> Parser<'p, 's> {
             return Ok((ParamOperator::BvConst, op_args));
         }
 
-        let op = ParamOperator::from_str(&op_symbol).map_err(|_| {
+        let op = ParamOperator::from_str(op_symbol).map_err(|_| {
             self.err(
-                ParserError::InvalidIndexedOp(op_symbol),
+                ParserError::InvalidIndexedOp(op_symbol.to_owned()),
                 self.current_position,
             )
         })?;
@@ -1421,14 +1480,14 @@ impl<'p, 's> Parser<'p, 's> {
                     }
                     Reserved::As => {
                         let op_symbol = self.expect_symbol()?;
-                        if let Ok(op) = QualifiedOperator::from_str(op_symbol.as_str()) {
+                        if let Ok(op) = QualifiedOperator::from_str(op_symbol) {
                             let sort = self.parse_sort()?;
                             self.expect_token(Token::CloseParen)?;
                             self.make_qualified_op(op, sort, Vec::new())
                                 .map_err(|err| self.err(err, head_pos))
                         } else {
                             let var = self
-                                .make_var(op_symbol.clone())
+                                .make_var(op_symbol)
                                 .map_err(|err| self.err(err, self.current_position))?;
                             let var_sort = self.pool.sort(&var);
                             if var_sort.is_par() {
@@ -1439,7 +1498,7 @@ impl<'p, 's> Parser<'p, 's> {
                                 Ok(self.pool.add(Term::new_var(op_symbol, sort)))
                             } else {
                                 Err(self.err(
-                                    ParserError::InvalidQualifiedOp(op_symbol),
+                                    ParserError::InvalidQualifiedOp(op_symbol.to_owned()),
                                     self.current_position,
                                 ))
                             }
@@ -1457,10 +1516,9 @@ impl<'p, 's> Parser<'p, 's> {
                         self.make_op(Operator::Cl, args)
                             .map_err(|err| self.err(err, head_pos))
                     }
-                    _ => Err(self.err(
-                        ParserError::UnexpectedToken(Token::ReservedWord(reserved)),
-                        head_pos,
-                    )),
+                    _ => {
+                        Err(self.err(ParserError::UnexpectedToken(reserved.to_string()), head_pos))
+                    }
                 }
             }
             Token::Symbol(s) if self.state.function_defs.contains_key(s) => {
@@ -1505,10 +1563,10 @@ impl<'p, 's> Parser<'p, 's> {
                 self.make_indexed_op(op, op_args, args)
                     .map_err(|err| self.err(err, head_pos))
             }
-            Token::Symbol(s) if s == "eo" => {
-                self.expect_token(Token::Symbol("eo".to_owned()))?;
-                self.expect_token(Token::Keyword("".to_owned()))?;
-                self.expect_token(Token::Keyword("define".to_owned()))?;
+            Token::Symbol(s) if *s == "eo" => {
+                self.expect_token(Token::Symbol("eo"))?;
+                self.expect_token(Token::Keyword(""))?;
+                self.expect_token(Token::Keyword("define"))?;
 
                 // `eo::define` is basically an alias to `let`, but always expands
                 self.parse_let_term(true)
@@ -1526,7 +1584,7 @@ impl<'p, 's> Parser<'p, 's> {
                     Token::ReservedWord(Reserved::As) => {
                         self.next_token()?;
                         let op_symbol = self.expect_symbol()?;
-                        if let Ok(op) = QualifiedOperator::from_str(op_symbol.as_str()) {
+                        if let Ok(op) = QualifiedOperator::from_str(op_symbol) {
                             let sort = self.parse_sort()?;
                             self.expect_token(Token::CloseParen)?;
                             let args = self.parse_sequence(Self::parse_term, true)?;
@@ -1534,7 +1592,7 @@ impl<'p, 's> Parser<'p, 's> {
                                 .map_err(|err| self.err(err, head_pos))
                         } else {
                             let var = self
-                                .make_var(op_symbol.clone())
+                                .make_var(op_symbol)
                                 .map_err(|err| self.err(err, self.current_position))?;
                             let var_sort = self.pool.sort(&var);
                             if let Sort::Par(vars, f_sort) = var_sort.as_ref()
@@ -1564,7 +1622,7 @@ impl<'p, 's> Parser<'p, 's> {
                                     .map_err(|err| self.err(err, head_pos));
                             }
                             Err(self.err(
-                                ParserError::InvalidQualifiedOp(op_symbol),
+                                ParserError::InvalidQualifiedOp(op_symbol.to_owned()),
                                 self.current_position,
                             ))
                         }
@@ -1586,12 +1644,12 @@ impl<'p, 's> Parser<'p, 's> {
         }
     }
 
-    fn make_sort(&mut self, name: String, args: Vec<Rc<Sort>>) -> Result<Rc<Sort>, ParserError> {
+    fn make_sort(&mut self, name: &'s str, args: Vec<Rc<Sort>>) -> Result<Rc<Sort>, ParserError> {
         // Declared sorts shadow built-in sorts from the sets and relations extension
         let is_declared = self.state.sort_declarations.contains_key(&name)
             || self.state.datatype_declarations.get(&name).is_some()
             || self.state.sort_defs.contains_key(&name);
-        let sort = match name.as_str() {
+        let sort = match name {
             "->" => Sort::Function(args),
             "Bool" | "Int" | "Real" | "String" | "RegLan" | "Type" if !args.is_empty() => {
                 return Err(ParserError::WrongNumberOfArgs(0.into(), args.len()));
@@ -1662,7 +1720,7 @@ impl<'p, 's> Parser<'p, 's> {
             other if self.state.datatype_declarations.get(other).is_some() => {
                 let arity = self.state.datatype_declarations.get(other).unwrap();
                 if *arity == args.len() {
-                    Sort::Datatype { name: name.into_boxed_str(), args }
+                    Sort::Datatype { name: name.into(), args }
                 } else {
                     return Err(ParserError::WrongNumberOfArgs((*arity).into(), args.len()));
                 }
@@ -1672,24 +1730,24 @@ impl<'p, 's> Parser<'p, 's> {
             other if self.state.sort_declarations.contains_key(other) => {
                 let arity = &self.state.sort_declarations[other];
                 if *arity == args.len() {
-                    Sort::Atom(name.into_boxed_str(), args.into_boxed_slice())
+                    Sort::Atom(name.into(), args.into_boxed_slice())
                 } else {
                     return Err(ParserError::WrongNumberOfArgs((*arity).into(), args.len()));
                 }
             }
 
             // Unknown
-            _ => return Err(ParserError::UndefinedSort(name)),
+            _ => return Err(ParserError::UndefinedSort(name.to_owned())),
         };
         Ok(self.pool.add_sort(sort))
     }
 
     fn make_indexed_sort(
         &mut self,
-        name: String,
+        name: &str,
         args: Vec<Rc<Term>>,
     ) -> Result<Rc<Sort>, ParserError> {
-        match name.as_str() {
+        match name {
             "BitVec" => {
                 if args.len() != 1 {
                     return Err(ParserError::WrongNumberOfArgs(1.into(), args.len()));
@@ -1703,7 +1761,7 @@ impl<'p, 's> Parser<'p, 's> {
                 };
                 Ok(self.pool.add_sort(sort))
             }
-            _ => Err(ParserError::UndefinedSort(name)),
+            _ => Err(ParserError::UndefinedSort(name.to_owned())),
         }
     }
 
@@ -1734,7 +1792,7 @@ impl<'p, 's> Parser<'p, 's> {
                 (name, args)
             }
             other => {
-                return Err(self.err(ParserError::UnexpectedToken(other), pos));
+                return Err(self.err(ParserError::UnexpectedToken(other.to_string()), pos));
             }
         };
         self.make_sort(name, args).map_err(|e| self.err(e, pos))

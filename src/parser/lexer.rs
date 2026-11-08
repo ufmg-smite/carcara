@@ -7,11 +7,11 @@ use crate::{
     utils::is_symbol_character,
 };
 use rug::{Integer, Rational, ops::Pow};
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 /// A token in the SMT-LIB and Alethe formats.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Token {
+pub enum Token<'a> {
     /// The `(` token.
     OpenParen,
 
@@ -24,11 +24,11 @@ pub enum Token {
     /// `-`, `/`, `*`, `=`, `%`, `?`, `!`, `.`, `$`, `_`, `~`, `&`, `^`, `<`, `>`, or `@`. A quoted
     /// symbol is any sequence of characters that starts and ends with `|`, and does not contain `|`
     /// or `\`.
-    Symbol(String),
+    Symbol(&'a str),
 
     /// A keyword, which is a simple symbol preceded by `:`. This has the leading `:` character
     /// removed.
-    Keyword(String),
+    Keyword(&'a str),
 
     /// An integer numeral literal.
     Numeral(Integer),
@@ -40,7 +40,7 @@ pub enum Token {
     Bitvector(Integer, usize),
 
     /// A string literal.
-    String(String),
+    String(Cow<'a, str>),
 
     /// A reserved word.
     ReservedWord(Reserved),
@@ -269,9 +269,10 @@ impl<'s> Lexer<'s> {
     }
 
     /// Reads a token from the input source.
-    pub fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
+    pub fn next_token(&mut self) -> CarcaraResult<(Token<'s>, Position)> {
         self.consume_whitespace();
         let start_position = self.position();
+        let start_offset = self.offset;
         let token = match self.current() {
             Some('(') => {
                 self.next_char();
@@ -294,8 +295,9 @@ impl<'s> Lexer<'s> {
                     self.read_number(true)?
                 } else {
                     // This assumes that the symbol is never a reserved a word.
-                    let symbol = self.read_chars_while(is_symbol_character);
-                    Token::Symbol(format!("-{symbol}"))
+                    self.read_chars_while(is_symbol_character);
+                    let slice = &self.source.contents[start_offset..self.offset];
+                    Token::Symbol(slice)
                 }
             }
             Some(c) if c.is_ascii_digit() => self.read_number(false)?,
@@ -307,19 +309,19 @@ impl<'s> Lexer<'s> {
     }
 
     /// Reads a simple symbol from the input source.
-    fn read_simple_symbol(&mut self) -> Token {
+    fn read_simple_symbol(&mut self) -> Token<'s> {
         let symbol = self.read_chars_while(is_symbol_character);
         if let Ok(reserved) = Reserved::from_str(symbol) {
             Token::ReservedWord(reserved)
         } else {
-            Token::Symbol(symbol.to_owned())
+            Token::Symbol(symbol)
         }
     }
 
     /// Reads a quoted symbol from the input source.
-    fn read_quoted_symbol(&mut self) -> CarcaraResult<Token> {
+    fn read_quoted_symbol(&mut self) -> CarcaraResult<Token<'s>> {
         self.next_char(); // Consume `|`
-        let symbol = self.read_chars_while(|c| c != '|' && c != '\\').to_owned();
+        let symbol = self.read_chars_while(|c| c != '|' && c != '\\');
         match self.current() {
             Some('\\') => Err(self.err(ParserError::BackslashInQuotedSymbol)),
             None => Err(self.err(ParserError::EofInQuotedSymbol)),
@@ -332,17 +334,17 @@ impl<'s> Lexer<'s> {
     }
 
     /// Reads a keyword from the input source.
-    fn read_keyword(&mut self) -> Token {
+    fn read_keyword(&mut self) -> Token<'s> {
         self.next_char(); // Consume `:`
         let symbol = self.read_chars_while(is_symbol_character);
-        Token::Keyword(symbol.to_owned())
+        Token::Keyword(symbol)
     }
 
     /// Reads a binary or hexadecimal bitvector literal, e.g. `#b0110` or `#x01Ab`.
     ///
     /// Returns an error if any character other than `b` or `x` is encountered after the `#`, or if
     /// no digits are provided.
-    fn read_bitvector(&mut self) -> CarcaraResult<Token> {
+    fn read_bitvector(&mut self) -> CarcaraResult<Token<'s>> {
         self.next_char(); // Consume `#`
         let (base, bits_per_char) = match self.next_char() {
             Some('b') => (2, 1),
@@ -361,7 +363,7 @@ impl<'s> Lexer<'s> {
     }
 
     /// Reads an integer or decimal numerical literal.
-    fn read_number(&mut self, negated: bool) -> CarcaraResult<Token> {
+    fn read_number(&mut self, negated: bool) -> CarcaraResult<Token<'s>> {
         let first_part = self.read_chars_while(|c| c.is_ascii_digit()).to_owned();
 
         if first_part.len() > 1 && first_part.starts_with('0') {
@@ -405,9 +407,27 @@ impl<'s> Lexer<'s> {
     }
 
     /// Reads a string literal from the input source.
-    fn read_string(&mut self) -> CarcaraResult<Token> {
+    fn read_string(&mut self) -> CarcaraResult<Token<'s>> {
         self.next_char(); // Consume `"`
-        let mut result = String::new();
+
+        // First, we check for the easy case, where the string does not have any escape sequences,
+        // and we can just return a string slice of the contents
+        let first_chunk = self.read_chars_while(|c| c != '"' && c != '\\');
+        let mut result = if self.current() == Some('"') {
+            self.next_char();
+            if self.current() == Some('"') {
+                // handle the use of `""` to mean a single `"`
+                self.next_char();
+                format!("{first_chunk}\"")
+            } else {
+                return Ok(Token::String(Cow::Borrowed(first_chunk)));
+            }
+        } else {
+            first_chunk.to_owned()
+        };
+
+        // If we didn't exit by now, we have either an escape sequence or an EOF in the string, so
+        // we do the general case where we return `Cow::Owned`
         loop {
             let Some(c) = self.current() else {
                 return Err(self.err(ParserError::EofInString));
@@ -433,7 +453,7 @@ impl<'s> Lexer<'s> {
                 self.next_char();
             }
         }
-        Ok(Token::String(result))
+        Ok(Token::String(Cow::Owned(result)))
     }
 
     /// Reads a unicode escape sequence encountered in a string literal, denoted by `\uXXXX` or
@@ -524,11 +544,11 @@ impl<'s> Lexer<'s> {
 mod tests {
     use super::*;
 
-    fn lex_one(input: &str) -> CarcaraResult<Token> {
+    fn lex_one<'s>(input: &'s str) -> CarcaraResult<Token<'s>> {
         Lexer::new(input.into()).next_token().map(|(tk, _)| tk)
     }
 
-    fn lex_all(input: &str) -> Vec<Token> {
+    fn lex_all(input: &str) -> Vec<Token<'_>> {
         let mut lex = Lexer::new(input.into());
         let mut result = Vec::new();
         loop {
@@ -552,14 +572,11 @@ mod tests {
     fn test_comments() {
         assert_eq!(
             lex_all("; comment\n symbol\n ; comment"),
-            vec![Token::Symbol("symbol".into())]
+            vec![Token::Symbol("symbol")]
         );
         assert_eq!(
             lex_all(";\n;\nsymbol ;\n symbol"),
-            vec![
-                Token::Symbol("symbol".into()),
-                Token::Symbol("symbol".into())
-            ]
+            vec![Token::Symbol("symbol"), Token::Symbol("symbol")]
         );
     }
 
@@ -567,13 +584,13 @@ mod tests {
     fn test_simple_symbols_and_keywords() {
         let input = "foo123 :foo123 :a:b +-/*=%?!.$_~&^<>@ -starts-with-dash --double-dash";
         let expected = vec![
-            Token::Symbol("foo123".into()),
-            Token::Keyword("foo123".into()),
-            Token::Keyword("a".into()),
-            Token::Keyword("b".into()),
-            Token::Symbol("+-/*=%?!.$_~&^<>@".into()),
-            Token::Symbol("-starts-with-dash".into()),
-            Token::Symbol("--double-dash".into()),
+            Token::Symbol("foo123"),
+            Token::Keyword("foo123"),
+            Token::Keyword("a"),
+            Token::Keyword("b"),
+            Token::Symbol("+-/*=%?!.$_~&^<>@"),
+            Token::Symbol("-starts-with-dash"),
+            Token::Symbol("--double-dash"),
         ];
         assert_eq!(expected, lex_all(input));
     }
@@ -582,11 +599,11 @@ mod tests {
     fn test_quoted_symbols() {
         let input = "|abc| abc |:abc| || |\n\t |";
         let expected = vec![
-            Token::Symbol("abc".into()),
-            Token::Symbol("abc".into()),
-            Token::Symbol(":abc".into()),
-            Token::Symbol("".into()),
-            Token::Symbol("\n\t ".into()),
+            Token::Symbol("abc"),
+            Token::Symbol("abc"),
+            Token::Symbol(":abc"),
+            Token::Symbol(""),
+            Token::Symbol("\n\t "),
         ];
         assert_eq!(expected, lex_all(input));
 
@@ -712,7 +729,7 @@ mod tests {
             "\\u{}",
             "\\u{30000}",
         ]
-        .map(str::to_owned)
+        .map(Cow::Borrowed)
         .map(Token::String);
         assert_eq!(expected.as_slice(), lex_all(input));
     }
@@ -726,11 +743,11 @@ mod tests {
             Token::ReservedWord(Reserved::As),
             Token::ReservedWord(Reserved::Let),
             Token::ReservedWord(Reserved::Exists),
-            Token::Symbol("_".into()),
-            Token::Symbol("!".into()),
-            Token::Symbol("as".into()),
-            Token::Symbol("let".into()),
-            Token::Symbol("exists".into()),
+            Token::Symbol("_"),
+            Token::Symbol("!"),
+            Token::Symbol("as"),
+            Token::Symbol("let"),
+            Token::Symbol("exists"),
         ];
         assert_eq!(expected, lex_all(input));
     }

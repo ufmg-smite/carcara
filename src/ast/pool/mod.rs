@@ -163,8 +163,8 @@ impl Pool {
     }
 
     /// Registers a user-defined datatype in the pool, under the given name.
-    pub fn add_datatype(&mut self, name: String, datatype: Datatype) {
-        self.datatypes.insert(name, datatype);
+    pub fn add_datatype(&mut self, name: &str, datatype: Datatype) {
+        self.datatypes.insert(name.to_owned(), datatype);
     }
 
     /// Searches the pool for a defined datatype with the given name. Panics if no datatype is

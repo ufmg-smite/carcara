@@ -106,7 +106,7 @@ fn test_datatypes() {
             DatatypeConstructor { selectors: Vec::new() },
         )]),
     };
-    pool.add_datatype("List".to_owned(), datatype);
+    pool.add_datatype("List", datatype);
     assert!(pool.get_datatype("List").constructors.contains_key("nil"));
 }
 
@@ -119,7 +119,7 @@ fn test_child_pool() {
         params: Vec::new(),
         constructors: IndexMap::new(),
     };
-    parent.add_datatype("D".to_owned(), datatype);
+    parent.add_datatype("D", datatype);
     let parent = Arc::new(parent);
 
     let mut child = Pool::with_parent(parent.clone());

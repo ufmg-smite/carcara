@@ -27,7 +27,7 @@ impl<'p, 's> Parser<'p, 's> {
                 Ok(AttributeParameters::List)
             } else {
                 Err(self.err(
-                    ParserError::InvalidRareArgAttribute(attribute),
+                    ParserError::InvalidRareArgAttribute(attribute.to_owned()),
                     self.current_position,
                 ))
             }
@@ -36,21 +36,20 @@ impl<'p, 's> Parser<'p, 's> {
         }?;
         self.expect_token(Token::CloseParen)?;
 
-        self.declare_symbol(name.clone(), sort.clone());
+        self.declare_symbol(name, sort.clone());
 
-        Ok((name, TypeParameter { sort, attribute }))
+        Ok((name.to_owned(), TypeParameter { sort, attribute }))
     }
 
     fn parse_body(&mut self) -> CarcaraResult<Body> {
-        let qualified_arg = self.expect_any_keyword()?;
-        match qualified_arg.as_str() {
+        match self.expect_any_keyword()? {
             "conclusion" => {
                 let rewrite_term = self.parse_term()?;
                 Ok(Body::Conclusion(rewrite_term))
             }
             "args" => {
                 self.expect_token(Token::OpenParen)?;
-                let args = self.parse_sequence(Parser::expect_symbol, false)?;
+                let args = self.parse_sequence(|p| Ok(p.expect_symbol()?.to_owned()), false)?;
                 Ok(Body::Args(args))
             }
             "premises" => {
@@ -64,8 +63,8 @@ impl<'p, 's> Parser<'p, 's> {
                 )?;
                 Ok(Body::Premise(terms))
             }
-            _ => Err(self.err(
-                ParserError::InvalidRareRuleAttribute(qualified_arg),
+            other => Err(self.err(
+                ParserError::InvalidRareRuleAttribute(other.to_owned()),
                 self.current_position,
             )),
         }
@@ -74,7 +73,7 @@ impl<'p, 's> Parser<'p, 's> {
     fn parse_rule(&mut self) -> CarcaraResult<RuleDefinition> {
         self.expect_token(Token::OpenParen)?;
         self.expect_token(Token::ReservedWord(Reserved::DeclareRareRule))?;
-        let name = self.expect_symbol()?;
+        let name = self.expect_symbol()?.to_owned();
         self.expect_token(Token::OpenParen)?;
         let parameters = self.parse_sequence(Self::parse_rare_parameters, false)?;
 
