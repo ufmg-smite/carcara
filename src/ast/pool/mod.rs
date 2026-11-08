@@ -72,6 +72,13 @@ impl Pool {
         pool
     }
 
+    /// Reserves capacity for at least `additional` more terms in the term storage and the sort
+    /// cache, to avoid reallocating them repeatedly while adding terms.
+    pub fn reserve(&mut self, additional: usize) {
+        self.terms.reserve(additional);
+        self.sorts_cache.reserve(additional);
+    }
+
     /// Takes a term and returns a possibly newly allocated `Rc` that references it.
     ///
     /// If the term was not originally in the term pool, it is added to it. Otherwise, this method

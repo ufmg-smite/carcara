@@ -158,6 +158,10 @@ pub fn parse_with_pool<'s>(
     config: Config,
     pool: &mut Pool,
 ) -> CarcaraResult<(Problem, Proof, Rules)> {
+    // Reserve space in the pool upfront, to avoid rehashing it repeatedly while parsing. In our
+    // benchmarks, each new term corresponds to roughly 80 bytes of input, so this overestimates the
+    // number of terms a bit
+    pool.reserve((input.problem.contents.len() + input.proof.contents.len()) / 64);
     let mut parser = Parser::new(pool, config, input.problem)?;
     let problem = parser.parse_problem()?;
     parser.reset(input.proof)?;

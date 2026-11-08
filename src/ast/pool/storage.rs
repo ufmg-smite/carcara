@@ -48,6 +48,13 @@ impl<T: Hash + Eq> Storage<T> {
         }
     }
 
+    /// Reserves capacity for at least `additional` more objects.
+    pub fn reserve(&mut self, additional: usize) {
+        let hasher = &self.hasher;
+        self.table
+            .reserve(additional, |o| hasher.hash_one(o.as_ref()));
+    }
+
     /// Returns a reference to the allocation of `object` stored in `self`, if it is present.
     pub fn get(&self, object: &T) -> Option<&Rc<T>> {
         let hash = self.hasher.hash_one(object);
