@@ -231,7 +231,7 @@ struct SortDef {
 /// pool used by the parser.
 #[derive(Default)]
 struct ParserState<'s> {
-    symbol_table: HashMapStack<HashCache<&'s str>, Rc<Sort>>,
+    symbol_table: HashMapStack<HashCache<&'s str>, (Rc<Sort>, Rc<Term>)>,
     function_defs: RapidHashMap<&'s str, FunctionDef<'s>>,
     sort_declarations: RapidHashMap<&'s str, usize>,
     datatype_declarations: HashMapStack<&'s str, usize>,
@@ -306,15 +306,20 @@ impl<'p, 's> Parser<'p, 's> {
         Ok((old_token, old_position))
     }
 
-    /// Inserts a new symbol into the parser symbol table, with the provided sort.
-    fn declare_symbol(&mut self, symbol: &'s str, sort: Rc<Sort>) {
-        self.state.symbol_table.insert(HashCache::new(symbol), sort);
+    /// Inserts a new symbol into the parser symbol table, with the provided sort, and returns the
+    /// constructed variable term.
+    fn declare_symbol(&mut self, symbol: &'s str, sort: Rc<Sort>) -> Rc<Term> {
+        let var = self.pool.add(Term::Var(symbol.to_owned(), sort.clone()));
+        self.state
+            .symbol_table
+            .insert(HashCache::new(symbol), (sort, var.clone()));
+        var
     }
 
     /// Searches the symbol table for a symbol, and, if found, returns its sort.
     fn get_symbol<'a>(&'a self, symbol: &'a str) -> Option<&'a Rc<Sort>> {
         let cached = HashCache::new(symbol);
-        self.state.symbol_table.get(&cached)
+        self.state.symbol_table.get(&cached).map(|(sort, _)| sort)
     }
 
     /// Returns `true` if the symbol table has a symbol with that name, and its sort is
@@ -408,7 +413,7 @@ impl<'p, 's> Parser<'p, 's> {
     fn make_var(&mut self, iden: &'s str) -> Result<Rc<Term>, ParserError> {
         let cached = HashCache::new(iden);
         let sort = match self.state.symbol_table.get(&cached) {
-            Some(s) => s.clone(),
+            Some((_, var)) => return Ok(var.clone()),
             None => {
                 // If legacy tester syntax is enabled, `is-<cons>` might be the tester for `<cons>`
                 let tester = iden
@@ -675,8 +680,7 @@ impl<'p, 's> Parser<'p, 's> {
                             ))
                         };
                         let sort = self.pool.sort(&lambda_term);
-                        self.declare_symbol(name, sort.clone());
-                        let var_term = self.pool.add(Term::new_var(name, sort));
+                        let var_term = self.declare_symbol(name, sort.clone());
                         let assertion_term = self
                             .pool
                             .add(Term::Op(Operator::Equals, vec![var_term, lambda_term]));
@@ -1141,9 +1145,7 @@ impl<'p, 's> Parser<'p, 's> {
     ) {
         let application = {
             let cached = HashCache::new(name);
-            let func_sort = self.state.symbol_table.get(&cached).unwrap();
-            let name = cached.unwrap();
-            let func_term = self.pool.add(Term::new_var(name, func_sort.clone()));
+            let func_term = self.state.symbol_table.get(&cached).unwrap().1.clone();
             if params.is_empty() {
                 func_term
             } else {
