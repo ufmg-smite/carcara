@@ -233,7 +233,10 @@ struct SortDef {
 struct ParserState<'s> {
     symbol_table: HashMapStack<HashCache<&'s str>, (Rc<Sort>, Rc<Term>)>,
     function_defs: RapidHashMap<&'s str, FunctionDef<'s>>,
-    sort_declarations: RapidHashMap<&'s str, usize>,
+
+    /// Maps each declared sort to its arity. If the arity is 0, also stores a cached copy of the
+    /// constructed `Sort::Atom`.
+    sort_declarations: RapidHashMap<&'s str, (usize, Option<Rc<Sort>>)>,
     datatype_declarations: HashMapStack<&'s str, usize>,
     sort_defs: RapidHashMap<&'s str, SortDef>,
     step_ids: HashMapStack<HashCache<&'s str>, usize>,
@@ -551,9 +554,8 @@ impl<'p, 's> Parser<'p, 's> {
         }
     }
 
-    /// Reads tokens until the matching closing parenthesis is reached.
-    fn read_until_close_parens(&mut self) -> CarcaraResult<Vec<Token<'s>>> {
-        let mut result = Vec::new();
+    /// Consumes and drops tokens until the matching closing parenthesis is reached.
+    fn ignore_until_close_parens(&mut self) -> CarcaraResult<()> {
         let mut parens_depth = 1;
         while parens_depth > 0 {
             let token = self.next_token()?;
@@ -565,14 +567,7 @@ impl<'p, 's> Parser<'p, 's> {
                 }
                 _ => 0,
             };
-            result.push(token.0);
         }
-        Ok(result)
-    }
-
-    /// Consumes and drops tokens until the matching closing parenthesis is reached.
-    fn ignore_until_close_parens(&mut self) -> CarcaraResult<()> {
-        self.read_until_close_parens()?;
         Ok(())
     }
 
@@ -653,9 +648,14 @@ impl<'p, 's> Parser<'p, 's> {
                         .sort_declarations
                         .push((name.to_owned(), arity));
 
-                    // User declared sorts are represented with the `Atom` sort kind, and an
-                    // argument which is a string terminal representing the sort name.
-                    self.state.sort_declarations.insert(name, arity);
+                    // For 0-arity sorts, we store a cached version of the constructed `Sort`, to
+                    // avoid constructing it and calling the pool on every reference.
+                    let cached = if arity == 0 {
+                        Some(self.pool.add_sort(Sort::Atom(name.into(), [].into())))
+                    } else {
+                        None
+                    };
+                    self.state.sort_declarations.insert(name, (arity, cached));
                 }
                 Token::ReservedWord(Reserved::DeclareDatatype) => self.parse_declare_datatype()?,
                 Token::ReservedWord(Reserved::DeclareDatatypes) => {
@@ -742,8 +742,7 @@ impl<'p, 's> Parser<'p, 's> {
         // step that will end it, and a bool representing whether a `step` has been issued yet.
         // The first frame of the stack represents the root proof, so every
         // field except for the subproof commands is irrelevant.
-        let mut stack: Vec<(Subproof, String, bool)> =
-            vec![(Subproof::default(), String::new(), false)];
+        let mut stack: Vec<(Subproof, &'s str, bool)> = vec![(Subproof::default(), "", false)];
 
         let mut next_subproof_context_id = 0;
 
@@ -884,7 +883,7 @@ impl<'p, 's> Parser<'p, 's> {
             // closed before the outer proof is finished
             _ => {
                 return Err(self.err(
-                    ParserError::UnclosedSubproof(stack.pop().unwrap().1),
+                    ParserError::UnclosedSubproof(stack.pop().unwrap().1.to_owned()),
                     self.current_position,
                 ));
             }
@@ -1016,7 +1015,7 @@ impl<'p, 's> Parser<'p, 's> {
     ///
     /// In order to parse the subproof arguments, this method pushes a new scope into the symbol
     /// table which must be removed after parsing the subproof.
-    fn parse_anchor_command(&mut self) -> CarcaraResult<(String, Vec<AnchorArg>)> {
+    fn parse_anchor_command(&mut self) -> CarcaraResult<(&'s str, Vec<AnchorArg>)> {
         self.expect_keyword("step")?;
         let end_step_id = self.expect_symbol()?;
 
@@ -1033,7 +1032,7 @@ impl<'p, 's> Parser<'p, 's> {
         };
         self.ignore_remaining_attributes()?;
         self.expect_token(Token::CloseParen)?;
-        Ok((end_step_id.to_owned(), args))
+        Ok((end_step_id, args))
     }
 
     /// Parses an argument for an `anchor` proof command. This can be either a variable binding of
@@ -1738,8 +1737,11 @@ impl<'p, 's> Parser<'p, 's> {
 
             // Sort declaration, from `declare-sort`
             other if self.state.sort_declarations.contains_key(other) => {
-                let arity = &self.state.sort_declarations[other];
+                let (arity, cached) = &self.state.sort_declarations[other];
                 if *arity == args.len() {
+                    if let Some(cached) = cached {
+                        return Ok(cached.clone());
+                    }
                     Sort::Atom(name.into(), args.into_boxed_slice())
                 } else {
                     return Err(ParserError::WrongNumberOfArgs((*arity).into(), args.len()));

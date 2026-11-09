@@ -357,15 +357,15 @@ impl<'s> Lexer<'s> {
 
     /// Reads an integer or decimal numerical literal.
     fn read_number(&mut self, negated: bool) -> CarcaraResult<Token<'s>> {
-        let first_part = self.read_chars_while(|c| c.is_ascii_digit()).to_owned();
+        let first_part = self.read_chars_while(|c| c.is_ascii_digit());
 
         if first_part.len() > 1 && first_part.starts_with('0') {
-            return Err(self.err(ParserError::LeadingZero(first_part)));
+            return Err(self.err(ParserError::LeadingZero(first_part.to_owned())));
         }
 
         if let Some(delimiter @ ('/' | '.')) = self.current() {
             self.next_char();
-            let second_part = self.read_chars_while(|c| c.is_ascii_digit()).to_owned();
+            let second_part = self.read_chars_while(|c| c.is_ascii_digit());
             if let Some('/' | '.') = self.current() {
                 // A number can have only one delimiter
                 let e = ParserError::UnexpectedChar(self.current().unwrap());
@@ -374,7 +374,7 @@ impl<'s> Lexer<'s> {
             let r = match delimiter {
                 '/' => {
                     if second_part.is_empty() {
-                        let e = ParserError::MissingDenominatorInLiteral(first_part);
+                        let e = ParserError::MissingDenominatorInLiteral(first_part.to_owned());
                         return Err(self.err(e));
                     }
                     let [numer, denom] =
@@ -387,7 +387,9 @@ impl<'s> Lexer<'s> {
                 }
                 '.' => {
                     let denom = Integer::from(10u32).pow(second_part.len() as u32);
-                    let numer = (first_part + &second_part).parse::<Integer>().unwrap();
+                    let numer = (first_part.to_owned() + second_part)
+                        .parse::<Integer>()
+                        .unwrap();
                     Rational::from((numer, denom))
                 }
                 _ => unreachable!(),
