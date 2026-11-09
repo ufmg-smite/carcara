@@ -30,6 +30,9 @@ pub trait PolyeqComparable {
 ///
 /// This function records how long it takes to run, and adds that duration to the `time` argument.
 pub fn polyeq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
+    if a == b {
+        return true;
+    }
     Polyeq::new().mod_reordering(true).eq_with_time(a, b, time)
 }
 
@@ -42,6 +45,9 @@ pub fn polyeq(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
 ///
 /// This function records how long it takes to run, and adds that duration to the `time` argument.
 pub fn alpha_equiv(a: &Rc<Term>, b: &Rc<Term>, time: &mut Duration) -> bool {
+    if a == b {
+        return true;
+    }
     Polyeq::new()
         .mod_reordering(true)
         .alpha_equiv(true)
