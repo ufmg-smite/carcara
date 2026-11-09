@@ -171,14 +171,19 @@ pub type Position = (usize, usize);
 pub struct Lexer<'s> {
     pub source: Source<'s>,
 
-    /// The byte offset of the current character in the source contents.
-    offset: usize,
+    /// The remaining contents of the source, starting at the current character.
+    rest: &'s str,
 }
 
 impl<'s> Lexer<'s> {
     /// Constructs a new `Lexer` that reads from `source`.
     pub fn new(source: Source<'s>) -> Self {
-        Self { source, offset: 0 }
+        Self { source, rest: source.contents }
+    }
+
+    /// Returns the byte offset of the current character in the source contents.
+    fn offset(&self) -> usize {
+        self.source.contents.len() - self.rest.len()
     }
 
     /// Wraps a `ParserError` into a crate level error, by adding the current position and the
@@ -186,15 +191,16 @@ impl<'s> Lexer<'s> {
     fn err(&self, inner: impl Into<ParserError>) -> Error {
         Error::Parser(
             inner.into(),
-            self.offset_to_position(self.offset),
+            self.offset_to_position(self.offset()),
             self.source.name.into(),
         )
     }
 
     /// Advances the lexer by one character, and returns the previous `current_char`.
     fn next_char(&mut self) -> Option<char> {
-        let got = self.current()?;
-        self.offset += got.len_utf8();
+        let mut chars = self.rest.chars();
+        let got = chars.next()?;
+        self.rest = chars.as_str();
         Some(got)
     }
 
@@ -212,7 +218,7 @@ impl<'s> Lexer<'s> {
     ///
     /// If the lexer is at the end of the input, returns `None`.
     fn current(&self) -> Option<char> {
-        self.source.contents[self.offset..].chars().next()
+        self.rest.chars().next()
     }
 
     /// Converts a byte offset into a `Position` in the source.
@@ -230,17 +236,16 @@ impl<'s> Lexer<'s> {
     /// At the end, all characters in the returned slice will satisfy the predicate, and
     /// `self.current()` will be the first character that didn't satisfy the predicate.
     fn read_chars_while<P: Fn(char) -> bool>(&mut self, predicate: P) -> &'s str {
-        let start = self.offset;
-        let rest = &self.source.contents[start..];
-        let mut len = rest.len();
-        for (i, c) in rest.char_indices() {
+        let mut len = self.rest.len();
+        for (i, c) in self.rest.char_indices() {
             if !predicate(c) {
                 len = i;
                 break;
             }
         }
-        self.offset += len;
-        &self.source.contents[start..self.offset]
+        let (read, rest) = self.rest.split_at(len);
+        self.rest = rest;
+        read
     }
 
     /// Reads and drops characters until a non-whitespace character is encountered.
@@ -260,7 +265,7 @@ impl<'s> Lexer<'s> {
     /// Reads a token from the input source.
     pub fn next_token(&mut self) -> CarcaraResult<(Token<'s>, usize)> {
         self.consume_whitespace();
-        let start_offset = self.offset;
+        let start_offset = self.offset();
         let token = match self.current() {
             Some('(') => {
                 self.next_char();
@@ -284,7 +289,7 @@ impl<'s> Lexer<'s> {
                 } else {
                     // This assumes that the symbol is never a reserved a word.
                     self.read_chars_while(is_symbol_character);
-                    let slice = &self.source.contents[start_offset..self.offset];
+                    let slice = &self.source.contents[start_offset..self.offset()];
                     Token::Symbol(slice)
                 }
             }
