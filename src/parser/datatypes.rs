@@ -62,7 +62,7 @@ impl<'p, 's> Parser<'p, 's> {
                 let arity = p.expect_numeral()?;
                 let arity = arity
                     .to_usize()
-                    .ok_or(p.err(ParserError::InvalidSortArity(arity), arity_pos))?;
+                    .ok_or_else(|| p.err(ParserError::InvalidSortArity(arity), arity_pos))?;
                 p.state.datatype_declarations.insert(name, arity);
                 p.expect_token(Token::CloseParen)?;
                 Ok((name, arity))

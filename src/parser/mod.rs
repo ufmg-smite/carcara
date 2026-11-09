@@ -249,7 +249,7 @@ pub struct Parser<'p, 's> {
     config: Config,
     lexer: lexer::Lexer<'s>,
     current_token: Token<'s>,
-    current_position: Position,
+    current_position: usize,
     state: ParserState<'s>,
     is_real_only_logic: bool,
     problem: Option<Problem>,
@@ -292,12 +292,16 @@ impl<'p, 's> Parser<'p, 's> {
 
     /// Wraps a `ParserError` into a crate level error, by adding the given position and the current
     /// source name.
-    fn err(&self, inner: impl Into<ParserError>, pos: Position) -> Error {
-        Error::Parser(inner.into(), pos, self.source_name().into())
+    fn err(&self, inner: impl Into<ParserError>, pos: usize) -> Error {
+        Error::Parser(
+            inner.into(),
+            self.lexer.offset_to_position(pos),
+            self.source_name().into(),
+        )
     }
 
     /// Advances the parser one token, and returns the previous `current_token`.
-    fn next_token(&mut self) -> CarcaraResult<(Token<'s>, Position)> {
+    fn next_token(&mut self) -> CarcaraResult<(Token<'s>, usize)> {
         use std::mem::replace;
 
         let (new_token, new_position) = self.lexer.next_token()?;
@@ -1094,7 +1098,7 @@ impl<'p, 's> Parser<'p, 's> {
         self.expect_token(Token::CloseParen)?;
         let arity = arity
             .to_usize()
-            .ok_or(self.err(ParserError::InvalidSortArity(arity), arity_pos))?;
+            .ok_or_else(|| self.err(ParserError::InvalidSortArity(arity), arity_pos))?;
         Ok((name, arity))
     }
 

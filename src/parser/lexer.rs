@@ -173,35 +173,28 @@ pub struct Lexer<'s> {
 
     /// The byte offset of the current character in the source contents.
     offset: usize,
-    line_start: usize,
-    lines_read: usize,
 }
 
 impl<'s> Lexer<'s> {
     /// Constructs a new `Lexer` that reads from `source`.
     pub fn new(source: Source<'s>) -> Self {
-        Self {
-            source,
-            offset: 0,
-            line_start: 0,
-            lines_read: 0,
-        }
+        Self { source, offset: 0 }
     }
 
     /// Wraps a `ParserError` into a crate level error, by adding the current position and the
     /// current source name.
     fn err(&self, inner: impl Into<ParserError>) -> Error {
-        Error::Parser(inner.into(), self.position(), self.source.name.into())
+        Error::Parser(
+            inner.into(),
+            self.offset_to_position(self.offset),
+            self.source.name.into(),
+        )
     }
 
     /// Advances the lexer by one character, and returns the previous `current_char`.
     fn next_char(&mut self) -> Option<char> {
         let got = self.current()?;
         self.offset += got.len_utf8();
-        if got == '\n' {
-            self.lines_read += 1;
-            self.line_start = self.offset;
-        }
         Some(got)
     }
 
@@ -222,10 +215,13 @@ impl<'s> Lexer<'s> {
         self.source.contents[self.offset..].chars().next()
     }
 
-    /// Returns the position of the current character.
-    fn position(&self) -> Position {
-        // + 1 because lines and columns are usually counted starting from 1
-        (self.lines_read + 1, self.offset - self.line_start + 1)
+    /// Converts a byte offset into a `Position` in the source.
+    ///
+    /// This must scan the entire source contents upto the given offset, so should be avoided.
+    pub fn offset_to_position(&self, offset: usize) -> Position {
+        let before = &self.source.contents[..offset];
+        let line_start = before.rfind('\n').map(|n| n + 1).unwrap_or_default();
+        (before.matches('\n').count() + 1, offset - line_start + 1)
     }
 
     /// Reads characters while the given predicate returns `true`, and returns them as a slice of
@@ -237,19 +233,12 @@ impl<'s> Lexer<'s> {
         let start = self.offset;
         let rest = &self.source.contents[start..];
         let mut len = rest.len();
-        let (mut lines_read, mut line_start) = (self.lines_read, self.line_start);
         for (i, c) in rest.char_indices() {
             if !predicate(c) {
                 len = i;
                 break;
             }
-            if c == '\n' {
-                lines_read += 1;
-                line_start = start + i + 1;
-            }
         }
-        self.lines_read = lines_read;
-        self.line_start = line_start;
         self.offset += len;
         &self.source.contents[start..self.offset]
     }
@@ -269,9 +258,8 @@ impl<'s> Lexer<'s> {
     }
 
     /// Reads a token from the input source.
-    pub fn next_token(&mut self) -> CarcaraResult<(Token<'s>, Position)> {
+    pub fn next_token(&mut self) -> CarcaraResult<(Token<'s>, usize)> {
         self.consume_whitespace();
-        let start_position = self.position();
         let start_offset = self.offset;
         let token = match self.current() {
             Some('(') => {
@@ -305,7 +293,7 @@ impl<'s> Lexer<'s> {
             None => Token::Eof,
             Some(other) => return Err(self.err(ParserError::UnexpectedChar(other))),
         };
-        Ok((token, start_position))
+        Ok((token, start_offset))
     }
 
     /// Reads a simple symbol from the input source.
