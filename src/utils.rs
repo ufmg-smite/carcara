@@ -237,7 +237,7 @@ impl<K: Eq + Hash, V> std::iter::Extend<(K, V)> for HashMapStack<K, V> {
 
 /// A multiset (or bag): a collection that counts how many times each element occurs.
 #[derive(Debug, Clone)]
-pub struct MultiSet<T>(pub IndexMap<T, usize>);
+pub struct MultiSet<T>(pub IndexMap<T, usize, rapidhash::fast::RandomState>);
 
 impl<T> Default for MultiSet<T> {
     fn default() -> Self {
@@ -248,7 +248,7 @@ impl<T> Default for MultiSet<T> {
 impl<T> MultiSet<T> {
     /// Creates a new, empty `MultiSet`.
     pub fn new() -> Self {
-        MultiSet(IndexMap::new())
+        MultiSet(IndexMap::default())
     }
 
     /// Returns the number of distinct elements in the multiset.

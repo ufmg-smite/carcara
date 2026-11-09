@@ -19,7 +19,6 @@ use error::{CheckerError, err};
 use indexmap::{IndexMap, IndexSet};
 use rules::{Premise, RuleArgs, RuleResult, get_rule};
 use std::{
-    collections::HashSet,
     path::Path,
     time::{Duration, Instant},
 };
@@ -104,7 +103,7 @@ pub struct Config {
     ///
     /// Steps that use these rules do not make the proof holey.
     #[skip_setter]
-    allowed_rules: HashSet<String>,
+    allowed_rules: rapidhash::RapidHashSet<String>,
 
     /// A map from rule names to external checkers, which are called to check the steps that use
     /// those rules.
