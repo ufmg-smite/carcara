@@ -92,8 +92,10 @@ impl Pool {
         {
             return in_parent;
         }
-        let term = self.terms.add(term);
-        self.compute_sort(&term);
+        let (term, is_novel) = self.terms.add_is_novel(term);
+        if is_novel {
+            self.compute_sort(&term);
+        }
         term
     }
 

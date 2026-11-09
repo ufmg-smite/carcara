@@ -33,17 +33,23 @@ impl<T: Hash + Eq> Storage<T> {
     /// If the object was not originally in the storage, it is added to it. Otherwise, this method
     /// just returns an `Rc` pointing to the existing allocation.
     pub fn add(&mut self, object: T) -> Rc<T> {
+        self.add_is_novel(object).0
+    }
+
+    /// Like [`Self::add`], but also returns a boolean indicating whether the object was newly
+    /// inserted.
+    pub(super) fn add_is_novel(&mut self, object: T) -> (Rc<T>, bool) {
         let hasher = &self.hasher;
         let hash = hasher.hash_one(&object);
         let eq = |o: &Rc<T>| o.as_ref() == &object;
         match self.table.entry(hash, eq, |o| hasher.hash_one(o.as_ref())) {
-            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Occupied(entry) => (entry.get().clone(), false),
             Entry::Vacant(entry) => {
                 // SAFETY: We have just checked that the object does not exist in the pool, so we can
                 // create a new allocation.
                 let result = unsafe { Rc::new_raw(object) };
                 entry.insert(result.clone());
-                result
+                (result, true)
             }
         }
     }
