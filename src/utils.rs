@@ -10,7 +10,7 @@ use std::{
 };
 
 /// Returns `true` if the character is a valid symbol character in the SMT-LIB and Alethe formats.
-#[inline]
+#[inline(always)]
 pub fn is_symbol_character(ch: char) -> bool {
     match ch {
         ch if ch.is_ascii_alphanumeric() => true,
