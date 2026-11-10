@@ -4,7 +4,7 @@ use crate::{
         build_term, match_term, match_term_err, pool::Pool, printer,
     },
     checker::{
-        SatRefConfig, check_external,
+        SatRefConfig,
         error::{CheckerError, err},
         rules::{RuleResult, assert_clause_len},
     },
@@ -87,14 +87,30 @@ fn sat_refutation_external_check(
     write!(lemmas_file, "{}", lemmas_str).map_err(ExternalError::FailedWriteToTempFile)?;
     log::info!("[sat_refutation check] Invoke oracle");
 
-    check_external(
-        &[
-            cnf_path.display(),
-            prelude_file.path().display(),
-            lemmas_file.path().display(),
-        ],
-        checker,
-    )
+    call_external_checker(checker, [cnf_path, prelude_file.path(), lemmas_file.path()])
+}
+
+fn call_external_checker(
+    checker: &external::ExternalTool,
+    paths: [&Path; 3],
+) -> Result<(), ExternalError> {
+    let [cnf, prelude, lemmas] = paths.map(Path::display);
+    let input = format!("(\n{cnf}\n{prelude}\n{lemmas}\n)");
+    let output = checker.call(input.as_bytes())?;
+
+    if !output.status.success() {
+        if let Ok(s) = std::str::from_utf8(&output.stderr)
+            && s.contains("interrupted by timeout.")
+        {
+            return Err(ExternalError::Timeout);
+        }
+        return Err(ExternalError::FailedExit(output.status));
+    }
+    let res = output.stdout.as_slice().trim_ascii();
+    if res == b"true" {
+        return Ok(());
+    }
+    Err(ExternalError::StepNotValidated(checker.clone()))
 }
 
 pub fn sat_refutation(

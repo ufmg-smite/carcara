@@ -3,6 +3,7 @@
 - [Installation](./installation.md)
 - [Checking proofs with Carcara](./checking.md)
   - [Checking Rare rewrites](./checking/rare.md)
+  - [Using external checking tools](./checking/external.md)
 - [Proof elaboration](./elaboration.md)
   - [Polyequality elaboration](./elaboration/polyeq.md)
   - [Hole elaboration]()

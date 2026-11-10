@@ -365,6 +365,11 @@ impl<'c> Checker<'c> {
             .map(|&i| iter.get_premise(i))
             .collect();
 
+        if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
+            check_external(custom_checker, &step.clause, &step.args, &premises)?;
+            return Ok(());
+        }
+
         // The sat refutation checking needs the actual premise steps, so we have some special
         // casing here
         if step.rule == "sat_refutation" {
@@ -392,12 +397,6 @@ impl<'c> Checker<'c> {
             polyeq_time: &mut polyeq_time,
             rare_rules: self.rare_rules,
         };
-        // TODO: only passing args, not conclusion?
-        if let Some(custom_checker) = self.config.rule_checkers.get(&step.rule) {
-            check_external(rule_args.args, custom_checker)?;
-            return Ok(());
-        }
-
         let rule = match get_rule(
             &step.rule,
             self.config.elaborated,
@@ -517,13 +516,37 @@ fn check_outbound_capture(
 }
 
 fn check_external(
-    args: &[impl std::fmt::Display],
     checker: &ExternalTool,
+    conclusion: &[Rc<Term>],
+    args: &[Rc<Term>],
+    premises: &[Premise],
 ) -> Result<(), ExternalError> {
-    let args_str: Vec<String> = args.iter().map(|t| format!("{}", t)).collect();
-    let string = format!("(\n{}\n)", args_str.join("\n"));
+    use std::io::Write;
 
-    let output = checker.call(string.as_bytes())?;
+    fn write_clause(out: &mut Vec<u8>, clause: &[Rc<Term>]) -> std::io::Result<()> {
+        match clause {
+            [] => writeln!(out, "()"),
+            [hd, tl @ ..] => {
+                // we use the # flag to disable sharing
+                write!(out, "({hd:#}")?;
+                for t in tl {
+                    write!(out, " {t:#}")?;
+                }
+                writeln!(out, ")")
+            }
+        }
+    }
+
+    let mut input = Vec::new();
+    write_clause(&mut input, conclusion).unwrap();
+    write_clause(&mut input, args).unwrap();
+    writeln!(input, "(").unwrap();
+    for p in premises {
+        write_clause(&mut input, p.clause).unwrap();
+    }
+    writeln!(input, ")").unwrap();
+
+    let output = checker.call(&input)?;
 
     if !output.status.success() {
         if let Ok(s) = std::str::from_utf8(&output.stderr)
@@ -533,8 +556,8 @@ fn check_external(
         }
         return Err(ExternalError::FailedExit(output.status));
     }
-    let res = output.stdout.as_slice();
-    if res == b"true\n" {
+    let res = output.stdout.as_slice().trim_ascii();
+    if res == b"true" {
         return Ok(());
     }
     Err(ExternalError::StepNotValidated(checker.clone()))
