@@ -175,6 +175,10 @@ pub enum CheckerError {
     #[error("expected term '{0}' to be a string constant of length one")]
     ExpectedStringConstantOfLengthOne(Rc<Term>),
 
+    /// A term was expected to be a string constant.
+    #[error("expected term '{0}' to be a string constant")]
+    ExpectedAnyStringConstant(Rc<Term>),
+
     /// A term was expected to be a specific numeric constant.
     #[error("expected term '{}' to be numerical constant {:?}", .1, .0.to_f64())]
     ExpectedNumber(Rational, Rc<Term>),

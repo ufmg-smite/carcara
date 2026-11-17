@@ -495,23 +495,13 @@ fn re_unfold_pos_concat(
                         }
                         _ => {
                             let k = re_unfold_pos_component(pool, t, n, previous_ks, previous_rs);
-                            if args.len() == 1 {
-                                Ok((
-                                    build_term!(pool, (strconcat {k.clone()} {c.clone()})),
-                                    build_term!(
-                                        pool,
-                                        (and (strinre {k.clone()} {r_1.clone()}) {m.clone()})
-                                    ),
-                                ))
-                            } else {
-                                Ok((
-                                    build_term!(pool, (strconcat {k.clone()} {c.clone()})),
-                                    build_term!(
-                                        pool,
-                                        (and (strinre {k.clone()} {r.clone()}) {m.clone()})
-                                    ),
-                                ))
-                            }
+                            Ok((
+                                build_term!(pool, (strconcat {k.clone()} {c.clone()})),
+                                build_term!(
+                                    pool,
+                                    (and (strinre {k.clone()} {r_1.clone()}) {m.clone()})
+                                ),
+                            ))
                         }
                     }
                 } else {
@@ -1072,6 +1062,9 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
         _ => return Err(CheckerError::TermOfWrongForm("(str.++ s1 s2)", s.clone())),
     };
 
+    for w in [&args_t[1], &ss[0]] {
+        w.as_string_err()?;
+    }
     let sc = string_concat_flatten(pool, ss[0].clone());
     if sc.is_empty() {
         return Err(CheckerError::ExpectedToNotBeEmpty(ss[0].clone()));
@@ -1122,6 +1115,9 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
     };
 
     let w_2 = &ss[ss.len() - 1];
+    for w in [&args_t[1], w_2] {
+        w.as_string_err()?;
+    }
     let mut sc = string_concat_flatten(pool, w_2.clone());
     if sc.is_empty() {
         return Err(CheckerError::ExpectedToNotBeEmpty(w_2.clone()));
@@ -1173,8 +1169,13 @@ pub fn string_decompose(
         ) = &conclusion[0]
     )?;
 
-    let w_1 = build_skolem_prefix(pool, t.clone(), n.clone());
-    let w_2 = build_skolem_suffix_rem(pool, t.clone(), n.clone());
+    let split = if rev {
+        build_term!(pool, (- (strlen {t.clone()}) {n.clone()}))
+    } else {
+        n.clone()
+    };
+    let w_1 = build_skolem_prefix(pool, t.clone(), split.clone());
+    let w_2 = build_skolem_suffix_rem(pool, t.clone(), split);
     let len_term = if rev { w_2.clone() } else { w_1.clone() };
 
     let expanded = build_term!(

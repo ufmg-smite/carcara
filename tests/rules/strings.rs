@@ -820,6 +820,14 @@ fn concat_cprop_prefix() {
                (assume h2 (not (= (str.len d) 0)))
                (step t1 (cl (= a (str.substr d (str.len (str.substr "acda" 0 3)) (- (str.len d) (str.len (str.substr "acda" 0 3)))))) :rule concat_cprop_prefix :premises (h1 h2))"#: false,
         }
+        "Middle component of t and first component of s must be constants" {
+            r#"(assume h1 (= (str.++ a b d) (str.++ "aabc" e)))
+               (assume h2 (not (= (str.len a) 0)))
+               (step t1 (cl (= a (str.++ (str.substr "aabc" 0 3) (str.substr a (str.len (str.substr "aabc" 0 3)) (- (str.len a) (str.len (str.substr "aabc" 0 3))))))) :rule concat_cprop_prefix :premises (h1 h2))"#: false,
+            r#"(assume h1 (= (str.++ a "bc" d) (str.++ c e)))
+               (assume h2 (not (= (str.len a) 0)))
+               (step t1 (cl (= a (str.++ (str.substr c 0 1) (str.substr a (str.len (str.substr c 0 1)) (- (str.len a) (str.len (str.substr c 0 1))))))) :rule concat_cprop_prefix :premises (h1 h2))"#: false,
+        }
         "First component of s is empty" {
             r#"(assume h1 (= (str.++ a "bc" d) (str.++ "" e)))
                (assume h2 (not (= (str.len a) 0)))
@@ -919,6 +927,14 @@ fn concat_cprop_suffix() {
                (assume h2 (not (= (str.len d) 0)))
                (step t1 (cl (= d (str.++ (str.substr d 0 (- (str.len d) (str.len (str.substr "aabc" (- (str.len "aabc") 3) 3)))) (str.substr "aabc" (- (str.len "aabc") 3) 3)))) :rule concat_cprop_suffix :premises (h1 h2))"#: false,
         }
+        "Middle component of t and last component of s must be constants" {
+            r#"(assume h1 (= (str.++ a b d) (str.++ e "aabc")))
+               (assume h2 (not (= (str.len d) 0)))
+               (step t1 (cl (= d (str.++ (str.substr d 0 (- (str.len d) (str.len (str.substr "aabc" (- (str.len "aabc") 3) 3)))) (str.substr "aabc" (- (str.len "aabc") 3) 3)))) :rule concat_cprop_suffix :premises (h1 h2))"#: false,
+            r#"(assume h1 (= (str.++ a "bc" d) (str.++ e c)))
+               (assume h2 (not (= (str.len d) 0)))
+               (step t1 (cl (= d (str.++ (str.substr d 0 (- (str.len d) (str.len (str.substr c (- (str.len c) 1) 1)))) (str.substr c (- (str.len c) 1) 1)))) :rule concat_cprop_suffix :premises (h1 h2))"#: false,
+        }
         "Last component of s is empty" {
             r#"(assume h1 (= (str.++ a "bc" d) (str.++ e "")))
                (assume h2 (not (= (str.len d) 0)))
@@ -956,14 +972,21 @@ fn string_decompose() {
         "Reverse argument set to true" {
             r#"(assume h0 (>= 2 0))
                (assume h1 (>= (str.len "ab") 2))
-               (define-fun w_1 () String (str.substr "ab" 0 2))
-               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (define-fun w_1 () String (str.substr "ab" 0 (- (str.len "ab") 2)))
+               (define-fun w_2 () String (str.substr "ab" (- (str.len "ab") 2) (- (str.len "ab") (- (str.len "ab") 2))))
                (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h0 h1) :args (true))"#: true,
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.len (str.++ "d" "c")) 1))
+               (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 (- (str.len (str.++ "d" "c")) 1)))
+               (define-fun w_2 () String (str.substr (str.++ "d" "c") (- (str.len (str.++ "d" "c")) 1) (- (str.len (str.++ "d" "c")) (- (str.len (str.++ "d" "c")) 1))))
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (true))"#: true,
+        }
+        "Reverse form must split at (- (str.len t) n)" {
             r#"(assume h0 (>= 1 0))
                (assume h1 (>= (str.len (str.++ "d" "c")) 1))
                (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
                (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (true))"#: true,
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
         }
         "Invalid argument type" {
             r#"(assume h0 (>= 2 0))
@@ -1543,37 +1566,37 @@ fn re_kleene_star_unfold_pos() {
                (define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 x kk_2)) (str.in_re k_0 R_0) (str.in_re x R_1) (str.in_re kk_2 R_2)))))
                (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ x kk_1 kk_2)) (str.in_re x R_0) (str.in_re kk_1 R_1) (str.in_re kk_2 R_2)))))
                (assume h1 (str.in_re x (re.* a)))
-               (step t1 (cl (or (= x "") (str.in_re x a) (and (and (= x (str.++ kk_0 kk_1 kk_2)) (str.in_re kk_0 (re.++ a (re.* a) a)) (and (str.in_re kk_1 (re.++ (re.* a) a)) (and (str.in_re kk_2 a) true))) (not (= kk_0 "")) (not (= kk_2 ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: true,
+               (step t1 (cl (or (= x "") (str.in_re x a) (and (and (= x (str.++ kk_0 kk_1 kk_2)) (str.in_re kk_0 a) (and (str.in_re kk_1 (re.* a)) (and (str.in_re kk_2 a) true))) (not (= kk_0 "")) (not (= kk_2 ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: true,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: true,
+               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: true,
         }
         "Premise is not of the form (str.in_re t R)" {
             r#"(define-fun kk_2 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (k_1 String) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 k_1 x)) (str.in_re k_0 R_0) (str.in_re k_1 R_1) (str.in_re x R_2)))))
                (define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ k_0 x kk_2)) (str.in_re k_0 R_0) (str.in_re x R_1) (str.in_re kk_2 R_2)))))
                (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan) (R_2 RegLan)) (and (= x (str.++ x kk_1 kk_2)) (str.in_re x R_0) (str.in_re kk_1 R_1) (str.in_re kk_2 R_2)))))
                (assume h1 (not (str.in_re x (re.* a))))
-               (step t1 (cl (or (= x "") (str.in_re x a) (and (and (= x (str.++ kk_0 kk_1 kk_2)) (str.in_re kk_0 (re.++ a (re.* a) a)) (and (str.in_re kk_1 (re.++ (re.* a) a)) (and (str.in_re kk_2 a) true))) (not (= kk_0 "")) (not (= kk_2 ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (= x "") (str.in_re x a) (and (and (= x (str.++ kk_0 kk_1 kk_2)) (str.in_re kk_0 a) (and (str.in_re kk_1 (re.* a)) (and (str.in_re kk_2 a) true))) (not (= kk_0 "")) (not (= kk_2 ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
         }
         "Conclusion is not of the form (or (= t_1 \"\") (str.in_re t_2 t_3) (and t_4 (not (= t_5 \"\")) (not (= t_6 \"\"))))" {
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (and (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (and (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (or (not (= y "")) (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (not (= y "")) (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (or (= y "") (not (str.in_re y (str.to_re "abc"))) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (= y "") (not (str.in_re y (str.to_re "abc"))) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (or (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (or (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (not (= "abc" "")) (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (= "abc" "") (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (= "abc" "") (not (= "abc" ""))))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.* (str.to_re "abc"))))
-               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.++ (re.* (str.to_re "abc")) (str.to_re "abc"))) true) (not (= "abc" "")) (= "abc" "")))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (= y "") (str.in_re y (str.to_re "abc")) (and (and (= y (str.++ "abc" choice_term "abc")) (str.in_re choice_term (re.* (str.to_re "abc"))) true) (not (= "abc" "")) (= "abc" "")))) :rule re_kleene_star_unfold_pos :premises (h1))"#: false,
         }
     }
 }
@@ -1594,15 +1617,21 @@ fn re_concat_unfold_pos() {
                (step t1 (cl (= x (str.++ "a" "b" "c"))) :rule re_concat_unfold_pos :premises (h1))"#: true,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
-               (step t1 (cl (and (= y (str.++ "a" choice_term "c")) (and (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: true,
+               (step t1 (cl (and (= y (str.++ "a" choice_term "c")) (and (str.in_re choice_term b) true))) :rule re_concat_unfold_pos :premises (h1))"#: true,
             r#"(define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= z (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan)) (and (= z (str.++ x kk_1)) (str.in_re x R_0) (str.in_re kk_1 R_1)))))
                (assume h1 (str.in_re z (re.++ a b)))
-               (step t1 (cl (and (= z (str.++ kk_0 kk_1)) (and (str.in_re kk_0 (re.++ a b)) (and (str.in_re kk_1 b) true)))) :rule re_concat_unfold_pos :premises (h1))"#: true,
+               (step t1 (cl (and (= z (str.++ kk_0 kk_1)) (and (str.in_re kk_0 a) (and (str.in_re kk_1 b) true)))) :rule re_concat_unfold_pos :premises (h1))"#: true,
         }
         "Premise is not of the form (str.in_re t R)" {
             r#"(assume h1 (not (str.in_re x (re.++ (str.to_re "a") (str.to_re "b") (str.to_re "c")))))
                (step t1 (cl (= x (str.++ "a" "b" "c"))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+        }
+        "Each skolem is constrained by its own component" {
+            r#"(define-fun kk_1 () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= z (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
+               (define-fun kk_0 () String (choice ((x String)) (exists ((R_0 RegLan) (R_1 RegLan)) (and (= z (str.++ x kk_1)) (str.in_re x R_0) (str.in_re kk_1 R_1)))))
+               (assume h1 (str.in_re z (re.++ a b)))
+               (step t1 (cl (and (= z (str.++ kk_0 kk_1)) (and (str.in_re kk_0 (re.++ a b)) (and (str.in_re kk_1 b) true)))) :rule re_concat_unfold_pos :premises (h1))"#: false,
         }
         "Conclusion is not of the form " {
             r#"(assume h1 (str.in_re x (re.++ (str.to_re "a") (str.to_re "b") (str.to_re "c"))))
@@ -1611,13 +1640,13 @@ fn re_concat_unfold_pos() {
                (step t1 (cl (= x "a")) :rule re_concat_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
-               (step t1 (cl (or (= y (str.++ "a" choice_term "c")) (and (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (or (= y (str.++ "a" choice_term "c")) (and (str.in_re choice_term b) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
-               (step t1 (cl (and (not (= y (str.++ "a" choice_term "c"))) (and (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (and (not (= y (str.++ "a" choice_term "c"))) (and (str.in_re choice_term b) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
             r#"(define-fun choice_term () String (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= y (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))))
                (assume h1 (str.in_re y (re.++ (str.to_re "a") b (str.to_re "c"))))
-               (step t1 (cl (and (= y (str.++ "a" choice_term "c")) (or (str.in_re choice_term (re.++ b (str.to_re "c"))) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
+               (step t1 (cl (and (= y (str.++ "a" choice_term "c")) (or (str.in_re choice_term b) true))) :rule re_concat_unfold_pos :premises (h1))"#: false,
         }
     }
 }

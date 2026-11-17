@@ -608,6 +608,12 @@ impl Rc<Term> {
             .ok_or_else(|| CheckerError::ExpectedAnyBoolConstant(self.clone()))
     }
 
+    /// Similar to `Term::as_string`, but returns a `CheckerError` on failure.
+    pub fn as_string_err(&self) -> Result<String, CheckerError> {
+        self.as_string()
+            .ok_or_else(|| CheckerError::ExpectedAnyStringConstant(self.clone()))
+    }
+
     /// Tries to unwrap an operation term, returning the `Operator` and the arguments. Returns a
     /// `CheckerError` if the term is not an operation term.
     pub fn as_op_err(&self) -> Result<(Operator, &[Rc<Term>]), CheckerError> {
