@@ -160,6 +160,10 @@ pub fn greedy_resolution(
     // be true for all pivots
     let mut pivots: IndexMap<_, _, rapidhash::fast::RandomState> = IndexMap::default();
 
+    // The pivots introduced by the current clause. They are only added to `pivots` after the whole
+    // clause is processed, so a term can't eliminate a pivot from its own clause
+    let mut new_pivots = Vec::new();
+
     for &premise in premises {
         // Only one pivot may be eliminated per clause. This restriction is required so logically
         // unsound proofs like this one are not considered valid:
@@ -219,11 +223,15 @@ pub fn greedy_resolution(
             } else if conclusion.contains(&(n, inner)) {
                 working_clause.insert((n, inner));
             } else {
-                // If the term is not in the conclusion clause, it must be a pivot. If it was
-                // not already in the pivots set, we insert `false`, to indicate that it was
-                // not yet eliminated
-                pivots.entry((n, inner)).or_insert(false);
+                // If the term is not in the conclusion clause, it must be a pivot
+                new_pivots.push((n, inner));
             }
+        }
+
+        // We insert `false` to indicate that the pivot was not yet eliminated. If the pivot was
+        // already eliminated by an earlier clause, this clause introduces it again
+        for pivot in new_pivots.drain(..) {
+            pivots.insert(pivot, false);
         }
     }
 

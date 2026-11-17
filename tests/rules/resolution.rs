@@ -111,6 +111,23 @@ fn resolution() {
             (step t2 (cl (not q) (not r)) :rule hole)
             (step t3 (cl p) :rule resolution :premises (t1 t2))": false,
         }
+        "A term can't eliminate a pivot from its own clause" {
+            "(step t1 (cl (not (= p p)) p (not p)) :rule hole)
+            (step t2 (cl (= p p)) :rule hole)
+            (step t3 (cl) :rule resolution :premises (t1 t2))": false,
+        }
+        "A pivot introduced again by a later clause must be eliminated again" {
+            "(assume h1 p)
+            (step t2 (cl (not p) q) :rule hole)
+            (step t3 (cl (not q) p) :rule hole)
+            (step t4 (cl) :rule resolution :premises (h1 t2 t3))": false,
+
+            "(assume h1 p)
+            (step t2 (cl (not p) q) :rule hole)
+            (step t3 (cl (not q) p) :rule hole)
+            (step t4 (cl (not p)) :rule hole)
+            (step t5 (cl) :rule resolution :premises (h1 t2 t3 t4))": true,
+        }
         "`th_resolution` may receive premises in wrong order" {
             "(step t1 (cl (not p) (not q) (not r)) :rule hole)
             (step t2 (cl p) :rule hole)
