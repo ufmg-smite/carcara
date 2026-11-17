@@ -523,5 +523,10 @@ fn bfun_elim() {
                 (ite a (g true true true) (g true false true))
             )) :rule bfun_elim :premises (h1))": true,
         }
+        "`let` values are also rewritten" {
+            "(assume h1 (let ((y (forall ((x Bool)) (f x)))) (and y a)))
+            (step t1 (cl (let ((y (and (f false) (f true)))) (and y a)))
+                :rule bfun_elim :premises (h1))": true,
+        }
     }
 }

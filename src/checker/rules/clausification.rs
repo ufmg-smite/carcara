@@ -373,8 +373,12 @@ pub fn apply_bfun_elim(
             }
         }
         Term::Let(bindings, inner) => {
+            let bindings = bindings
+                .iter()
+                .map(|(x, v)| Ok((x.clone(), apply_bfun_elim(pool, v, cache)?)))
+                .collect::<Result<_, _>>()?;
             let inner = apply_bfun_elim(pool, inner, cache)?;
-            pool.add(Term::Let(bindings.clone(), inner))
+            pool.add(Term::Let(BindingList(bindings), inner))
         }
         _ => term.clone(),
     };
