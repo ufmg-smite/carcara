@@ -362,9 +362,9 @@ pub fn slice(
     let mut asserts = Vec::new();
 
     for command in &new_proof.commands {
-        match command {
-            ProofCommand::Assume { term, .. } => asserts.push(term.clone()),
-            _ => break,
+        // `assume` commands may appear after steps, so we can't stop at the first step
+        if let ProofCommand::Assume { term, .. } = command {
+            asserts.push(term.clone());
         }
     }
 
@@ -544,5 +544,29 @@ mod tests {
                 ProofNodeForest::from_commands(slice(&proof, id, &mut pool, d).unwrap().0.commands);
             assert!(compare_forests(&expected, &actual));
         }
+    }
+
+    #[test]
+    fn test_slice_late_assume() {
+        let proof = "
+            (assume a0 a)
+            (step t0 (cl (not a) b) :rule hole)
+            (assume a1 b)
+            (step t1 (cl) :rule hole :premises (a0 t0 a1))
+        ";
+        let (problem, proof, _, mut pool) = parse(
+            crate::Input {
+                problem: PROBLEM_STRING.into(),
+                proof: proof.into(),
+                rare_rules: None,
+            },
+            parser::Config::new(),
+        )
+        .unwrap();
+
+        // `a1` comes after a step, but must still become an assertion of the sliced problem
+        let (_, asserts) = slice(&proof, "t1", &mut pool, 1).unwrap();
+        let expected: Vec<_> = problem.premises.into_iter().collect();
+        assert_eq!(asserts, expected);
     }
 }
