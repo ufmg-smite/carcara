@@ -444,9 +444,16 @@ impl Pool {
                 }
                 set
             }
-            Term::Op(_, args) | Term::ParamOp { args, .. } | Term::AsOp(_, _, args) => {
+            Term::Op(_, args) | Term::AsOp(_, _, args) => {
                 let mut set = TermSet::default();
                 for a in args {
+                    set.extend(self.compute_free_vars(a).iter().cloned());
+                }
+                set
+            }
+            Term::ParamOp { op_args, args, .. } => {
+                let mut set = TermSet::default();
+                for a in op_args.iter().chain(args) {
                     set.extend(self.compute_free_vars(a).iter().cloned());
                 }
                 set
