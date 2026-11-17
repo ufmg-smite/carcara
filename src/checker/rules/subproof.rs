@@ -75,6 +75,7 @@ pub fn bind(
     let (phi, phi_prime) = match_term_err!((= p q) = get_premise_term(&previous_command)?)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    assert_no_assigned_vars(pool, &context.last().unwrap().args, right)?;
 
     let (l_binder, l_bindings, left) = left.as_binder_err()?;
     let (r_binder, r_bindings, right) = right.as_binder_err()?;
@@ -109,6 +110,19 @@ pub fn bind(
 
     let args = &context.last().unwrap().args;
     check_renaming_anchor(pool, args, &l_bindings, &r_bindings)
+}
+
+/// Checks that no variable assigned by the innermost anchor is free in `term`, the right-hand side
+/// of the step that closes it. Inside the anchor, those variables stand for their values, but in
+/// the conclusion they are free again.
+fn assert_no_assigned_vars(pool: &mut Pool, args: &[AnchorArg], term: &Rc<Term>) -> RuleResult {
+    for (name, value) in args.iter().filter_map(AnchorArg::as_assign) {
+        let var = pool.add(Term::new_var(name, pool.sort(value)));
+        if var != *value && pool.free_vars(term).contains(&var) {
+            return err!("variable '{name}' is assigned by the anchor, but is free in '{term}'");
+        }
+    }
+    Ok(())
 }
 
 /// Checks that the arguments of the anchor closed by a `bind` or `bind_let` step rename each
@@ -205,6 +219,7 @@ pub fn r#let(
     let (previous_u, previous_u_prime) = match_term_err!((= u u_prime) = previous_term)?;
     assert_eq(u, previous_u)?;
     assert_eq(u_prime, previous_u_prime)?;
+    assert_no_assigned_vars(pool, args, u_prime)?;
 
     rassert!(
         let_bindings.len() == mappings.len(),
@@ -337,6 +352,7 @@ pub fn onepoint(
     assert_clause_len(conclusion, 1)?;
 
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
+    assert_no_assigned_vars(pool, &context.last().unwrap().args, right)?;
     let (quant, l_bindings, left) = left.as_quant_err()?;
     let (r_bindings, right) = match right.as_quant() {
         Some((q, b, t)) => {
@@ -469,6 +485,7 @@ fn generic_skolemization_rule(
     }
 
     let args = &context.last().unwrap().args;
+    assert_no_assigned_vars(pool, args, psi)?;
 
     // The anchor must only assign the quantified variables. Since we check below that each of them
     // has an assignment, it's enough to check the number of arguments

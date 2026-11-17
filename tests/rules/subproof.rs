@@ -158,6 +158,17 @@ fn bind() {
             (step t1.t1 (cl (= p q)) :rule hole)
             (step t1 (cl (= (forall ((y Real)) p) (forall ((y Real)) q))) :rule bind)": false,
         }
+        "Right-hand side can't mention assigned variables" {
+            "(anchor :step t1 :args ((y Real) (:= (x Real) y)))
+            (step t1.t1 (cl (= (= x x) (= x y))) :rule hole)
+            (step t1 (cl (= (forall ((x Real)) (= x x)) (forall ((y Real)) (= x y)))) :rule bind)": false,
+
+            // Assigned variables can appear if they are bound by the right-hand quantifier
+            "(anchor :step t1 :args ((y Real) (z Real) (:= (x Real) y) (:= (y Real) z)))
+            (step t1.t1 (cl (= (= x y) (= y z))) :rule hole)
+            (step t1 (cl (= (forall ((x Real) (y Real)) (= x y)) (forall ((y Real) (z Real)) (= y z))))
+                :rule bind)": true,
+        }
     }
 }
 
@@ -217,6 +228,15 @@ fn r#let() {
             (anchor :step t2 :args ((x Int) (:= (a Int) x)))
             (step t2.t1 (cl (= p (= i j))) :rule hole)
             (step t2 (cl (= (let ((a i)) p) q)) :rule let :premises (t1))": false,
+        }
+        "u' can't mention assigned variables" {
+            "(anchor :step t1 :args ((:= (x Int) 5)))
+            (step t1.t1 (cl (= (+ x 1) 6)) :rule hole)
+            (step t1 (cl (= (let ((x 5)) (+ x 1)) 6)) :rule let)": true,
+
+            "(anchor :step t1 :args ((:= (x Int) 5)))
+            (step t1.t1 (cl (= x x)) :rule hole)
+            (step t1 (cl (= (let ((x 5)) x) x)) :rule let)": false,
         }
     }
 }
@@ -357,6 +377,12 @@ fn onepoint() {
                 (or (P u) (forall ((z Int)) (or (not (= u z)) (Q z))))
             )) :rule onepoint)": false,
         }
+        "Right-hand side can't mention eliminated variables" {
+            "(anchor :step t1 :args ((:= (x Int) t)))
+            (step t1.t1 (cl (= (=> (= x t) (P x)) (=> (= t t) (P x)))) :rule hole)
+            (step t1 (cl (= (forall ((x Int)) (=> (= x t) (P x))) (=> (= t t) (P x))))
+                :rule onepoint)": false,
+        }
         "Points that depend on eliminated variables" {
             "(anchor :step t1 :args ((:= (x Int) t) (:= (y Int) (+ t 1))))
             (step t1.t1 (cl (= (=> (= x t) (=> (= y (+ x 1)) (P y)))
@@ -409,6 +435,11 @@ fn sko_ex() {
                 (= (choice ((x Int)) (exists ((y Int)) (= x y)))
                    (choice ((y Int)) (= (choice ((x Int)) (exists ((y Int)) (= x y))) y)))
             )) :rule sko_ex)": true,
+        }
+        "Right-hand side can't mention skolemized variables" {
+            "(anchor :step t1 :args ((:= (x Int) (choice ((x Int)) (p x)))))
+            (step t1.t1 (cl (= (p x) (p x))) :rule hole)
+            (step t1 (cl (= (exists ((x Int)) (p x)) (p x))) :rule sko_ex)": false,
         }
         "Extra anchor arguments" {
             "(anchor :step t1 :args ((:= (x Int) (choice ((x Int)) (p x))) (:= (z Int) 5)))
