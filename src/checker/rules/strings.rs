@@ -1073,6 +1073,9 @@ pub fn concat_cprop_prefix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
     };
 
     let sc = string_concat_flatten(pool, ss[0].clone());
+    if sc.is_empty() {
+        return Err(CheckerError::ExpectedToNotBeEmpty(ss[0].clone()));
+    }
     let sc_tail = sc[1..].to_vec();
 
     let t_2_flat = string_concat_flatten(pool, args_t[1].clone());
@@ -1118,7 +1121,11 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
         _ => return Err(CheckerError::TermOfWrongForm("(str.++ s1 s2)", s.clone())),
     };
 
-    let mut sc = string_concat_flatten(pool, ss[1].clone());
+    let w_2 = &ss[ss.len() - 1];
+    let mut sc = string_concat_flatten(pool, w_2.clone());
+    if sc.is_empty() {
+        return Err(CheckerError::ExpectedToNotBeEmpty(w_2.clone()));
+    }
     sc.reverse();
     let sc_tail = &sc[1..];
 
@@ -1127,7 +1134,7 @@ pub fn concat_cprop_suffix(RuleArgs { premises, conclusion, pool, .. }: RuleArgs
 
     let v = 1 + overlap(sc_tail, &t_2_flat);
     let v = pool.add(Term::new_int(v));
-    let oc = build_str_suffix_len(pool, ss[1].clone(), v);
+    let oc = build_str_suffix_len(pool, w_2.clone(), v);
 
     let rhs = build_term!(pool, (- (strlen {t_2.clone()}) (strlen {oc.clone()})));
     let r = build_skolem_prefix(pool, t_2.clone(), rhs.clone());
@@ -1149,13 +1156,15 @@ pub fn string_decompose(
         ..
     }: RuleArgs,
 ) -> RuleResult {
-    assert_num_premises(premises, 1)?;
+    assert_num_premises(premises, 2)?;
     assert_num_args(args, 1)?;
     assert_clause_len(conclusion, 1)?;
 
-    let term = get_premise_term(&premises[0])?;
+    let nonneg = get_premise_term(&premises[0])?;
+    let term = get_premise_term(&premises[1])?;
     let rev = args[0].as_bool_err()?;
     let (t, n) = match_term_err!((>= (strlen t) n) = term)?;
+    assert_eq(match_term_err!((>= n 0) = nonneg)?, n)?;
 
     match_term_err!(
         (and

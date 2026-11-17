@@ -820,6 +820,11 @@ fn concat_cprop_prefix() {
                (assume h2 (not (= (str.len d) 0)))
                (step t1 (cl (= a (str.substr d (str.len (str.substr "acda" 0 3)) (- (str.len d) (str.len (str.substr "acda" 0 3)))))) :rule concat_cprop_prefix :premises (h1 h2))"#: false,
         }
+        "First component of s is empty" {
+            r#"(assume h1 (= (str.++ a "bc" d) (str.++ "" e)))
+               (assume h2 (not (= (str.len a) 0)))
+               (step t1 (cl (= a (str.++ a a))) :rule concat_cprop_prefix :premises (h1 h2))"#: false,
+        }
     }
 }
 
@@ -906,6 +911,19 @@ fn concat_cprop_suffix() {
                (assume h2 (not (= (str.len d) 0)))
                (step t1 (cl (= d (str.substr "aabc" (- (str.len "aabc") 3) 3))) :rule concat_cprop_suffix :premises (h1 h2))"#: false,
         }
+        "Constant is the last component of s" {
+            r#"(assume h1 (= (str.++ a "bc" d) (str.++ e "xy" "aabc")))
+               (assume h2 (not (= (str.len d) 0)))
+               (step t1 (cl (= d (str.++ (str.substr d 0 (- (str.len d) (str.len (str.substr "aabc" (- (str.len "aabc") 3) 3)))) (str.substr "aabc" (- (str.len "aabc") 3) 3)))) :rule concat_cprop_suffix :premises (h1 h2))"#: true,
+            r#"(assume h1 (= (str.++ a "bc" d) (str.++ e "aabc" "x")))
+               (assume h2 (not (= (str.len d) 0)))
+               (step t1 (cl (= d (str.++ (str.substr d 0 (- (str.len d) (str.len (str.substr "aabc" (- (str.len "aabc") 3) 3)))) (str.substr "aabc" (- (str.len "aabc") 3) 3)))) :rule concat_cprop_suffix :premises (h1 h2))"#: false,
+        }
+        "Last component of s is empty" {
+            r#"(assume h1 (= (str.++ a "bc" d) (str.++ e "")))
+               (assume h2 (not (= (str.len d) 0)))
+               (step t1 (cl (= d (str.++ d d))) :rule concat_cprop_suffix :premises (h1 h2))"#: false,
+        }
     }
 }
 
@@ -919,109 +937,152 @@ fn string_decompose() {
             (declare-fun d () String)
         ",
         "Simple working examples" {
-            r#"(assume h1 (>= (str.len "ab") 2))
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: true,
-            r#"(assume h1 (>= (str.len (str.++ "d" "c")) 1))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (false))"#: true,
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.len (str.++ "d" "c")) 1))
                (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
                (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_1) 1))) :rule string_decompose :premises (h1) :args (false))"#: true,
-            r#"(assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_1) 1))) :rule string_decompose :premises (h0 h1) :args (false))"#: true,
+            r#"(assume h0 (>= 0 0))
+               (assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
                (define-fun w_1 () String (str.substr (str.++ a (str.++ "b" c)) 0 0))
                (define-fun w_2 () String (str.substr (str.++ a (str.++ "b" c)) 0 (- (str.len (str.++ a (str.++ "b" c))) 0)))
-               (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.len w_1) 0))) :rule string_decompose :premises (h1) :args (false))"#: true,
+               (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.len w_1) 0))) :rule string_decompose :premises (h0 h1) :args (false))"#: true,
         }
         "Reverse argument set to true" {
-            r#"(assume h1 (>= (str.len "ab") 2))
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h1) :args (true))"#: true,
-            r#"(assume h1 (>= (str.len (str.++ "d" "c")) 1))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h0 h1) :args (true))"#: true,
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.len (str.++ "d" "c")) 1))
                (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
                (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h1) :args (true))"#: true,
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (true))"#: true,
         }
         "Invalid argument type" {
-            r#"(assume h1 (>= (str.len "ab") 2))
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (1))"#: false,
-            r#"(assume h1 (>= (str.len "ab") 2))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (1))"#: false,
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (1.5))"#: false,
-            r#"(assume h1 (>= (str.len "ab") 2))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (1.5))"#: false,
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args ((- 1)))"#: false,
-            r#"(assume h1 (>= (str.len "ab") 2))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args ((- 1)))"#: false,
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args ("teste"))"#: false,
-            r#"(assume h1 (>= (str.len "ab") 2))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args ("teste"))"#: false,
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (d))"#: false,
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (d))"#: false,
         }
         "Premise term \"t\" is not the same in the conclusion" {
-            r#"(assume h1 (>= (str.len "ab") 2))
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ba" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h1) :args (true))"#: false,
-            r#"(assume h1 (>= (str.len "ba") 2))
+               (step t1 (cl (and (= "ba" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ba") 2))
                (define-fun w_1 () String (str.substr "ba" 0 2))
                (define-fun w_2 () String (str.substr "ba" 2 (- (str.len "ba") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h1) :args (true))"#: false,
-            r#"(assume h1 (>= (str.len (str.++ "a" (str.++ b "c"))) 2))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len (str.++ "a" (str.++ b "c"))) 2))
                (define-fun w_1 () String (str.substr (str.++ "a" (str.++ b "c")) 0 2))
                (define-fun w_2 () String (str.substr (str.++ "a" (str.++ b "c")) 2 (- (str.len (str.++ "a" (str.++ b "c"))) 2)))
-               (step t1 (cl (and (= (str.++ a (str.++ b "c")) (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h1) :args (true))"#: false,
+               (step t1 (cl (and (= (str.++ a (str.++ b "c")) (str.++ w_1 w_2)) (= (str.len w_2) 2))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
         }
         "Switched skolems in the conclusion" {
-            r#"(assume h1 (>= (str.len (str.++ "d" "c")) 1))
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.len (str.++ "d" "c")) 1))
                (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
                (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_2 w_1)) (= (str.len w_1) 1))) :rule string_decompose :premises (h1) :args (false))"#: false,
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_2 w_1)) (= (str.len w_1) 1))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
         }
         "" {}
         "Premise is not of the form (>= (str.len t) n)" {
-            r#"(assume h1 (< (str.len (str.++ "d" "c")) 1))
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (< (str.len (str.++ "d" "c")) 1))
                (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
                (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h1) :args (true))"#: false,
-            r#"(assume h1 (>= (str.to_code (str.++ "d" "c")) 1))
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.to_code (str.++ "d" "c")) 1))
                (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
                (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h1) :args (true))"#: false,
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
         }
         "Conclusion term is not of the form (and (= t x) (= (str.len y) 0))" {
-            r#"(assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
+            r#"(assume h0 (>= 0 0))
+               (assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
                (define-fun w_1 () String (str.substr (str.++ a (str.++ "b" c)) 0 0))
                (define-fun w_2 () String (str.substr (str.++ a (str.++ "b" c)) 0 (- (str.len (str.++ a (str.++ "b" c))) 0)))
-               (step t1 (cl (or (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.len w_1) 0))) :rule string_decompose :premises (h1) :args (false))"#: false,
-            r#"(assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
+               (step t1 (cl (or (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.len w_1) 0))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
+            r#"(assume h0 (>= 0 0))
+               (assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
                (define-fun w_1 () String (str.substr (str.++ a (str.++ "b" c)) 0 0))
                (define-fun w_2 () String (str.substr (str.++ a (str.++ "b" c)) 0 (- (str.len (str.++ a (str.++ "b" c))) 0)))
-               (step t1 (cl (and (not (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2))) (= (str.len w_1) 0))) :rule string_decompose :premises (h1) :args (false))"#: false,
-            r#"(assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
+               (step t1 (cl (and (not (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2))) (= (str.len w_1) 0))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
+            r#"(assume h0 (>= 0 0))
+               (assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
                (define-fun w_1 () String (str.substr (str.++ a (str.++ "b" c)) 0 0))
                (define-fun w_2 () String (str.substr (str.++ a (str.++ "b" c)) 0 (- (str.len (str.++ a (str.++ "b" c))) 0)))
-               (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (not (= (str.len w_1) 0)))) :rule string_decompose :premises (h1) :args (false))"#: false,
-            r#"(assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
+               (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (not (= (str.len w_1) 0)))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
+            r#"(assume h0 (>= 0 0))
+               (assume h1 (>= (str.len (str.++ a (str.++ "b" c))) 0))
                (define-fun w_1 () String (str.substr (str.++ a (str.++ "b" c)) 0 0))
                (define-fun w_2 () String (str.substr (str.++ a (str.++ "b" c)) 0 (- (str.len (str.++ a (str.++ "b" c))) 0)))
-               (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.to_code w_1) 0))) :rule string_decompose :premises (h1) :args (false))"#: false,
+               (step t1 (cl (and (= (str.++ a (str.++ "b" c)) (str.++ w_1 w_2)) (= (str.to_code w_1) 0))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
         }
         "Inverted argument value" {
+            r#"(assume h0 (>= 2 0))
+               (assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (true))"#: false,
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.len (str.++ "d" "c")) 1))
+               (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
+               (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
+               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
+        }
+        "Premise (>= n 0) is missing or wrong" {
             r#"(assume h1 (>= (str.len "ab") 2))
                (define-fun w_1 () String (str.substr "ab" 0 2))
                (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
-               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (true))"#: false,
-            r#"(assume h1 (>= (str.len (str.++ "d" "c")) 1))
-               (define-fun w_1 () String (str.substr (str.++ "d" "c") 0 1))
-               (define-fun w_2 () String (str.substr (str.++ "d" "c") 1 (- (str.len (str.++ "d" "c")) 1)))
-               (step t1 (cl (and (= (str.++ "d" "c") (str.++ w_1 w_2)) (= (str.len w_2) 1))) :rule string_decompose :premises (h1) :args (false))"#: false,
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1) :args (false))"#: false,
+            r#"(assume h0 (>= 1 0))
+               (assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
+            r#"(assume h0 (> 2 0))
+               (assume h1 (>= (str.len "ab") 2))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h0 h1) :args (false))"#: false,
+            r#"(assume h1 (>= (str.len "ab") 2))
+               (assume h0 (>= 2 0))
+               (define-fun w_1 () String (str.substr "ab" 0 2))
+               (define-fun w_2 () String (str.substr "ab" 2 (- (str.len "ab") 2)))
+               (step t1 (cl (and (= "ab" (str.++ w_1 w_2)) (= (str.len w_1) 2))) :rule string_decompose :premises (h1 h0) :args (false))"#: false,
         }
     }
 }
