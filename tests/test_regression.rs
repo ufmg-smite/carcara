@@ -1,9 +1,6 @@
 //! Runs the regression cases in `tests/regression`. Cases in `valid/` must be accepted, and cases
 //! in `invalid/` must be rejected. No case may panic.
 //!
-//! These tests are ignored by default, since many cases still fail. To run them, use
-//! `cargo test --test test_regression -- --ignored`.
-//!
 //! A case can change how it is run with directives in the comments at the start of its proof file:
 //!
 //! - `; carcara-command: <check | elaborate>`: which command to run. Defaults to `check`.
@@ -200,14 +197,26 @@ fn test_file(proof_path: &Path, expect_valid: bool) {
     }
 }
 
-#[test_generator::from_dir(path = "tests/regression/valid", ignore)]
+#[test_generator::from_dir(path = "tests/regression/valid")]
 #[allow(dead_code)]
 fn regression_valid(proof_path: &Path) {
     test_file(proof_path, true);
 }
 
-#[test_generator::from_dir(path = "tests/regression/invalid", ignore)]
+#[test_generator::from_dir(path = "tests/regression/valid", extension = "known-bug", ignore)]
+#[allow(dead_code)]
+fn regression_valid_known_bug(proof_path: &Path) {
+    test_file(proof_path, true);
+}
+
+#[test_generator::from_dir(path = "tests/regression/invalid")]
 #[allow(dead_code)]
 fn regression_invalid(proof_path: &Path) {
+    test_file(proof_path, false);
+}
+
+#[test_generator::from_dir(path = "tests/regression/invalid", extension = "known-bug", ignore)]
+#[allow(dead_code)]
+fn regression_invalid_known_bug(proof_path: &Path) {
     test_file(proof_path, false);
 }

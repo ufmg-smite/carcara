@@ -9,10 +9,14 @@ pub fn from_dir(args: TokenStream, input: TokenStream) -> TokenStream {
     let original_input = input.clone();
 
     let mut arg: Option<syn::LitStr> = None;
+    let mut ext = "alethe".to_owned();
     let mut is_ignore = false;
     let parser = syn::meta::parser(|meta| {
         if meta.path.is_ident("path") {
             arg = Some(meta.value()?.parse()?);
+            Ok(())
+        } else if meta.path.is_ident("extension") {
+            ext = meta.value()?.parse::<syn::LitStr>()?.value();
             Ok(())
         } else if meta.path.is_ident("ignore") {
             is_ignore = true;
@@ -39,11 +43,11 @@ pub fn from_dir(args: TokenStream, input: TokenStream) -> TokenStream {
     for entry in walkdir::WalkDir::new(&arg) {
         let Ok(entry) = entry else { continue };
 
-        if entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("alethe")) {
+        if entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new(&ext)) {
             let path = entry.path().to_str().unwrap();
             let new_ident = {
                 let path = path.strip_prefix(&arg).unwrap().strip_prefix('/').unwrap();
-                let path = path.strip_suffix(".alethe").unwrap();
+                let path = path.strip_suffix(&ext).unwrap().strip_suffix(".").unwrap();
                 let path = path.replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
                 syn::Ident::new(&format!("{}_{}", func_ident, path), func_ident.span())
             };
