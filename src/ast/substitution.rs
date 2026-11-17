@@ -370,7 +370,7 @@ impl Substitution {
             return None;
         }
 
-        let (new_bindings, mut renaming) = self.rename_binding_list(pool, binding_list);
+        let (new_bindings, mut renaming) = self.rename_binding_list(pool, binding_list, inner);
         let new_term = if renaming.is_empty() {
             self.apply_impl(pool, inner, use_cache)
         } else {
@@ -398,6 +398,7 @@ impl Substitution {
         &mut self,
         pool: &mut Pool,
         binding_list: &[(String, V)],
+        inner: &Rc<Term>,
     ) -> (BindingList<V>, Self) {
         if !self.avoid_capture {
             return (BindingList(binding_list.to_vec()), Self::empty());
@@ -406,7 +407,8 @@ impl Substitution {
         let mut new_vars = RapidHashSet::new();
         let new_binding_list = binding_list
             .iter()
-            .map(|(var, value)| {
+            .enumerate()
+            .map(|(i, (var, value))| {
                 let sort = value.get_sort(pool);
 
                 let mut changed = false;
@@ -414,8 +416,21 @@ impl Substitution {
 
                 // We keep adding `_renamed`s to the variable name as long as it is necessary
                 loop {
+                    // A new name also can't clash with an earlier variable in the binding list, or
+                    // capture a free variable of the body
+                    let mut clashes_with_free_var = || {
+                        !binding_list[i + 1..].iter().any(|(v, _)| *v == new_var)
+                            && pool
+                                .free_vars(inner)
+                                .iter()
+                                .any(|v| v.as_var() == Some(&new_var))
+                    };
+                    let clashes = changed
+                        && (binding_list[..i].iter().any(|(v, _)| *v == new_var)
+                            || clashes_with_free_var());
                     if !new_vars.contains(&new_var)
                         && !self.should_be_renamed.as_ref().unwrap().contains(&new_var)
+                        && !clashes
                     {
                         break;
                     }
@@ -633,6 +648,25 @@ mod tests {
             "(choice ((z Int)) (> z x))" [x -> y] => "(choice ((z Int)) (> z y))",
             "(lambda ((y Int)) (+ y x))" [x -> y] => "(lambda ((y_renamed Int)) (+ y_renamed y))",
             "((lambda ((x Int)) (+ x 1)) x)" [x -> y] => "((lambda ((x Int)) (+ x 1)) y)",
+        }
+    }
+
+    #[test]
+    fn test_renaming_collisions() {
+        run_tests! {
+            definitions = "
+                (declare-fun x () Int)
+                (declare-fun y () Int)
+                (declare-fun y_renamed () Int)
+            ",
+            // The new name can't capture a free variable of the body
+            "(forall ((y Int)) (= y (+ x y_renamed)))" [x -> y] =>
+                "(forall ((y_renamed_renamed Int)) (= y_renamed_renamed (+ y y_renamed)))",
+
+            // It also can't clash with an earlier variable in the binding list
+            "(exists ((y_renamed Int) (y Int)) (= y (+ x y_renamed)))" [x -> y] =>
+                "(exists ((y_renamed Int) (y_renamed_renamed Int))
+                    (= y_renamed_renamed (+ y y_renamed)))",
         }
     }
 
