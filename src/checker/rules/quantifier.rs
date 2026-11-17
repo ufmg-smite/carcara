@@ -280,6 +280,8 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
 
     let r_bindings = r_bindings.iter().cloned().collect::<IndexSet<_>>();
     let mut new_bindings = l_bindings.iter().cloned().collect::<IndexSet<_>>();
+    // This can be less than `l_bindings.len()`, if a variable is bound more than once
+    let num_original_bindings = new_bindings.len();
     let clauses: Vec<_> = {
         let nnf = negation_normal_form(pool, phi, true, &mut IndexMap::new());
         let prenexed = prenex_forall(pool, &mut new_bindings, &nnf);
@@ -297,7 +299,7 @@ pub fn qnt_cnf(RuleArgs { conclusion, pool, .. }: RuleArgs) -> RuleResult {
     // We detect this be seeing if any of the newly introduced bindings are in the free variables
     // of `A`.
     let l_free_vars = pool.free_vars(l).clone();
-    for var in new_bindings.iter().skip(l_bindings.len()) {
+    for var in new_bindings.iter().skip(num_original_bindings) {
         if l_free_vars.contains(&pool.add(var.clone().into())) {
             return err!("prenexing would capture the free variable '{}'", var.0);
         }

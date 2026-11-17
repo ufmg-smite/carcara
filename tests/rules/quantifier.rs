@@ -240,6 +240,11 @@ fn qnt_cnf() {
                 (not (forall ((x U)) (or (P y) (forall ((y U)) (Q y)))))
                 (forall ((y U)) (or (P y) (Q y)))
             )) :rule qnt_cnf)": false,
+
+            "(step t1 (cl (or
+                (not (forall ((x U) (x U)) (or (P y) (forall ((y U)) (Q y)))))
+                (forall ((y U)) (or (P y) (Q y)))
+            )) :rule qnt_cnf)": false,
         }
     }
 }
