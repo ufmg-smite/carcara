@@ -15,7 +15,6 @@ for proof in "$1.verit.alethe" "$1.cvc5.alethe"; do
     if [ -f $proof ]; then
         if ! grep -q -F '(cl)' $proof; then
             rm $proof
-            exit
         fi
     fi
 done
