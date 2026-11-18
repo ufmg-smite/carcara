@@ -22,25 +22,32 @@ fn parse_rule_checkers(
 #[clap(
     name = "carcara",
     version = VERSION_STRING,
+    max_term_width = 120,
 )]
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Command,
 
     /// Sets the maximum logging level.
-    #[clap(value_enum, global = true, long = "log", default_value_t = LogLevel::Warn)]
+    #[clap(
+        value_enum,
+        global = true,
+        long = "log",
+        default_value_t = LogLevel::Warn,
+        help_heading = "Global options"
+    )]
     pub log_level: LogLevel,
 
     /// Disables output coloring.
-    #[clap(global = true, long)]
+    #[clap(global = true, long, help_heading = "Global options")]
     pub no_color: bool,
 
     /// Don't use sharing when printing terms.
-    #[clap(global = true, short = 'v', long)]
+    #[clap(global = true, short = 'v', long, help_heading = "Global options")]
     pub no_print_with_sharing: bool,
 
     /// Print term diffs on error.
-    #[clap(global = true, long = "diff")]
+    #[clap(global = true, long = "diff", help_heading = "Global options")]
     pub print_diffs: bool,
 }
 
@@ -62,9 +69,11 @@ pub enum Command {
     Slice(SliceCommandOptions),
 
     /// Generates the equivalent SMT instance for every `lia_generic` step in a proof.
+    ///
+    /// Each instance is written to a file named `<PROOF_FILE>-<step id>.lia_smt2`.
     GenerateLiaProblems(ParseCommandOptions),
 
-    /// Translates an Alethe proof into different formats (Eunoia, TSTP).
+    /// Translates an Alethe proof into Eunoia.
     Translate(TranslateCommandOptions),
 
     /// Compares two terms and prints a readable diff.
@@ -73,13 +82,15 @@ pub enum Command {
 
 #[derive(Args)]
 pub struct Input {
-    /// The proof file to be checked
+    /// The Alethe proof file. If this is `-`, the proof is read from stdin.
     pub proof_file: PathBuf,
 
-    /// The original problem file. If this argument is not present, it will be inferred from the
-    /// proof file.
+    /// The original SMT-LIB problem file. If this argument is not present, it will be inferred from
+    /// the proof file.
     pub problem_file: Option<PathBuf>,
 
+    /// A file containing a set of Rare rewrite rules, that will be used when checking or
+    /// elaborating the proof.
     #[clap(long)]
     pub rare_file: Option<PathBuf>,
 }
@@ -104,15 +115,15 @@ pub struct StackOptions {
 #[derive(Args, Clone)]
 pub struct ToolOptions {
     /// SAT solver that can be used when checking or elaborating proofs.
-    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    #[clap(long, help_heading = "External tool options")]
     pub sat_solver: Option<ExternalTool>,
 
     /// DRAT checker and trimmer that can be used when checking or elaborating proofs.
-    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    #[clap(long, help_heading = "External tool options")]
     pub drat_checker: Option<ExternalTool>,
 
     /// SMT solver that can be used when checking or elaborating proof steps.
-    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    #[clap(long, help_heading = "External tool options")]
     pub smt_solver: Option<ExternalTool>,
 }
 
@@ -145,13 +156,12 @@ pub struct ParsingOptions {
     ///
     /// When this flag is enabled:
     /// - unary `and`, `or` and `xor` terms are not allowed
-    /// - anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed;
-    ///   the new syntax (`(:= (<symbol> <sort>) <term>)`) must be used instead
+    /// - anchor arguments using the old syntax (i.e., `(:= <symbol> <term>)`) are not allowed; the new syntax (`(:= (<symbol> <sort>) <term>)`) must be used instead
     #[clap(short, long = "strict-parsing", verbatim_doc_comment)]
     pub strict: bool,
 
-    /// If `true`, Carcara will parse arguments to the `hole` rule, expecting them to be valid
-    /// terms. In the future, this will be the default behaviour.
+    /// If this flag is present, Carcara will parse arguments to the `hole` rule, expecting them to
+    /// be valid terms.
     #[clap(long)]
     pub parse_hole_args: bool,
 
@@ -184,28 +194,33 @@ pub struct CheckingOptions {
     #[clap(long)]
     pub rup_resolution: bool,
 
+    // This help message uses a markdown list, which requires `verbatim_doc_comment` to render
+    // properly. In turn, this messes up Clap's automatic line wrapping, since it considers the line
+    // breaks in the comment verbatim. Because of that, we don't wrap the paragraph text and have a
+    // super long line instead. It's stupid, but it's the best way I found to resolve this.
     /// Enforce restrictions on the granularity of the proof.
     ///
-    /// If this is "normal", the proof is checked normally, with no extra restrictions. If this
-    /// is "elaborated", the checker will expect the proof to have previously been elaborated by
-    /// Carcara, and will enforce extra restrictions. In particular:
+    /// If this is "normal", the proof is checked normally, with no extra restrictions. If this is "elaborated", the checker will expect the proof to have previously been elaborated by Carcara, and will enforce extra restrictions. In particular:
     /// - the implicit reordering of equalities is not allowed
     /// - the pivots for `resolution` steps must be given as arguments
     #[clap(value_enum, long, default_value = "normal", verbatim_doc_comment)]
     pub check_granularity: CheckGranularity,
 
-    // TODO: add help messages for remaining options
-    // number_of_values = 1 forces the user to repeat the -D option for each key-value pair:
-    // my_program -D a=1 -D b=2
-    // Without number_of_values = 1 you can do:
-    // my_program -D a=1 b=2
-    // but this makes adding an argument after the values impossible:
-    // my_program -D a=1 -D b=2 my_input_file
-    // becomes invalid.
-    #[clap(short = 'x', value_parser = parse_rule_checkers, help_heading = "EXTERNAL TOOL OPTIONS")]
+    /// Defines an external checker for a given rule.
+    ///
+    /// For example, when given `-x frobnicate=frobnicator.sh`, Carcara will use the external
+    /// `frobnicator.sh` script to check every occurrence of the `frobnicate` rule. For more
+    /// details, see https://ufmg-smite.github.io/carcara/checking/external.html
+    #[clap(
+        short = 'x',
+        value_parser = parse_rule_checkers,
+        help_heading = "External tool options",
+        value_names = ["RULE=CHECKER"])
+    ]
     pub rule_checkers: Vec<(String, ExternalTool)>,
 
-    #[clap(long, help_heading = "EXTERNAL TOOL OPTIONS")]
+    /// Defines an external checker for the `sat_refutation` rule.
+    #[clap(long, help_heading = "External tool options")]
     pub sat_ref_checker: Option<ExternalTool>,
 }
 
@@ -221,7 +236,7 @@ pub enum ElaborationPass {
 
 #[derive(Args, Clone)]
 pub struct ElaborationOptions {
-    /// When uncrowding resolutions steps, also reorder premises to further minimize the number of
+    /// When uncrowding resolution steps, also reorder premises to further minimize the number of
     /// `contraction` steps added.
     #[clap(long)]
     pub uncrowd_rotate: bool,
@@ -259,7 +274,7 @@ pub struct CheckCommandOptions {
     #[clap(flatten)]
     pub tools: ToolOptions,
 
-    /// Defines the number of cores for proof checking.
+    /// Defines the number of threads for proof checking.
     #[clap(short = 'u', long, required = false, default_value = "1")]
     pub num_threads: NonZero<usize>,
 
@@ -321,7 +336,8 @@ pub struct BenchCommandOptions {
     #[clap(short = 't', long)]
     pub sort_by_total: bool,
 
-    /// Dump results to csv files instead of printing to screen.
+    /// Dump results to the `runs.csv` and `steps.csv` files in the current directory, instead of
+    /// printing to screen.
     #[clap(long = "dump-to-csv")]
     pub dump_to_csv: bool,
 
@@ -354,7 +370,7 @@ pub struct SliceCommandOptions {
 
     // To make slice more convenient to use, we accept (and ignore!) some options from the `check`
     // subcommand
-    #[clap(short, long)]
+    #[clap(short, long, hide = true)]
     ignore_unknown_rules: bool,
     #[clap(long, num_args = 1.., hide = true)]
     allowed_rules: Option<Vec<String>>,
@@ -404,7 +420,7 @@ pub struct TranslateCommandOptions {
 
 #[derive(Args)]
 pub struct DiffCommandOptions {
-    /// The original problem file.
+    /// The original SMT-LIB problem file.
     pub problem_file: PathBuf,
 
     /// A file containing two terms to be diffed.
