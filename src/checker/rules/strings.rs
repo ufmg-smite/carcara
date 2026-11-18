@@ -1366,8 +1366,26 @@ pub fn re_unfold_neg(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> R
     let term = get_premise_term(&premises[0])?;
     let (t, r) = match_term_err!((not (strinre t r)) = term)?;
 
+    // The bound variable is named in the conclusion, and that name can't be free in `term`, since
+    // the quantifier would capture it
+    let quantifier = match conclusion[0].as_op() {
+        Some((Operator::And, [_, q])) => q,
+        _ => &conclusion[0],
+    };
+    let (_, bindings, _) = quantifier.as_binder_err()?;
+    let [(l_name, _)] = bindings.as_slice() else {
+        return err!("expected the quantifier to bind a single variable");
+    };
+    if pool
+        .free_vars(term)
+        .iter()
+        .any(|v| v.as_var() == Some(l_name))
+    {
+        return err!("bound variable '{l_name}' captures a free variable of '{term}'");
+    }
+
     let int_sort = pool.add_sort(Sort::Int);
-    let l = pool.add(Term::new_var("L", int_sort.clone()));
+    let l = pool.add(Term::new_var(l_name, int_sort.clone()));
     let pref = build_skolem_prefix(pool, t.clone(), l.clone());
     let suff = build_skolem_suffix_rem(pool, t.clone(), l.clone());
 
@@ -1398,7 +1416,7 @@ pub fn re_unfold_neg(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> R
                 );
                 let quantifier = pool.add(Term::Binder(
                     Binder::Forall,
-                    BindingList(vec![("L".into(), int_sort.clone())]),
+                    BindingList(vec![(l_name.clone(), int_sort.clone())]),
                     inner,
                 ));
                 let empty = pool.add(Term::new_string(""));
@@ -1435,7 +1453,7 @@ pub fn re_unfold_neg(RuleArgs { premises, conclusion, pool, .. }: RuleArgs) -> R
                 );
                 let quantifier = pool.add(Term::Binder(
                     Binder::Forall,
-                    BindingList(vec![("L".into(), int_sort.clone())]),
+                    BindingList(vec![(l_name.clone(), int_sort.clone())]),
                     inner,
                 ));
                 Ok(quantifier)
