@@ -189,8 +189,14 @@ impl<'a> PolyeqElaborator<'a> {
                     })
                     .collect::<Result<_, _>>()?;
 
+                if let Some(c) = &mut self.context {
+                    c.push(&args);
+                }
                 self.open_subproof();
                 let previous = self.elaborate(pool, a_inner.clone(), b_inner.clone())?;
+                if let Some(c) = &mut self.context {
+                    c.pop();
+                }
                 let last_step = StepNode {
                     id: String::new(), // this will be overwritten later
                     depth: self.depth(),
