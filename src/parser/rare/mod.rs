@@ -100,6 +100,15 @@ impl<'p, 's> Parser<'p, 's> {
             ));
         }
 
+        // Every argument must be one of the rule's parameters
+        let param_set: rapidhash::RapidHashSet<_> = parameters.iter().map(|(p, _)| p).collect();
+        if let Some(arg) = body.args.iter().find(|a| !param_set.contains(a)) {
+            return Err(self.err(
+                ParserError::UndefinedIden(arg.clone()),
+                self.current_position,
+            ));
+        }
+
         Ok(RuleDefinition {
             name,
             parameters: parameters.iter().cloned().collect(),
