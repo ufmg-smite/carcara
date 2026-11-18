@@ -1,9 +1,9 @@
 use rapidhash::{HashMapExt, RapidHashMap};
 
 use crate::{
-    ast::{Constant, Substitution, Term},
+    ast::{Constant, Operator, Substitution, Term, rare_rules::AttributeParameters},
     checker::{
-        error::CheckerError,
+        error::{CheckerError, err},
         rules::{assert_num_args, assert_num_premises, get_premise_term},
     },
     rare::{get_rules, rewrite_meta_terms},
@@ -43,6 +43,12 @@ pub fn check_rare(
         for arg in rare_term.arguments.iter().rev() {
             let arg_sort = rare_term.parameters.get(arg).unwrap();
             let value = arguments.next().unwrap().clone();
+            // A `rare-list` can only be given to a `:list` parameter
+            if arg_sort.attribute == AttributeParameters::None
+                && matches!(value.as_ref(), Term::Op(Operator::RareList, _))
+            {
+                return err!("parameter '{arg}' is not a list, but was given '{value}'");
+            }
             let variable = pool.add(Term::Var(arg.clone(), arg_sort.sort.clone()));
             map.insert(variable, value);
         }

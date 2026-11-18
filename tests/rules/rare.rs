@@ -315,7 +315,9 @@ fn rare_rewrite_nary_list() {
             // The spliced result must match the clause.
             "(step t1 (cl (= (+ a c) (+ a b c))) :rule rare_rewrite :args (\"add-flatten\" (rare-list a b) c))": false,
         }
-
+        "Lists can only be given to `:list` parameters" {
+            "(step t1 (cl (= (+ a b c) (+ a b c))) :rule rare_rewrite :args (\"add-flatten\" (rare-list a) (rare-list b c)))": false,
+        }
         "Bitvector list flatten" {
             "(step t1 (cl (= (bvadd #b0001 #b0010 #b0011) (bvadd #b0001 #b0010 #b0011))) :rule rare_rewrite :args (\"bvadd-flatten\" (rare-list #b0001 #b0010) #b0011))": true,
 
