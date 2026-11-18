@@ -77,6 +77,14 @@ pub fn bind(
     let (left, right) = match_term_err!((= l r) = &conclusion[0])?;
     assert_no_assigned_vars(pool, &context.last().unwrap().args, right)?;
 
+    // The free variables of the left side, to check that the outer context doesn't substitute in a
+    // variable that a right-hand binding would capture
+    let left_free_vars: Vec<_> = if context.len() > 1 {
+        pool.free_vars(left).iter().cloned().collect()
+    } else {
+        Vec::new()
+    };
+
     let (l_binder, l_bindings, left) = left.as_binder_err()?;
     let (r_binder, r_bindings, right) = right.as_binder_err()?;
     assert_eq(&l_binder, &r_binder)?;
@@ -106,6 +114,19 @@ pub fn bind(
     {
         let y = y.as_var().unwrap();
         return err!("binding '{y}' appears as free variable in phi");
+    }
+
+    // The bindings in the right side also can't capture a variable that the outer context
+    // substitutes in, as in `z := y` with a new binding `y`
+    for v in left_free_vars {
+        let value = context.apply_previous(pool, &v);
+        if value != v {
+            let value_free_vars = pool.free_vars(&value);
+            if let Some(y) = r_bindings.iter().find(|&y| value_free_vars.contains(y)) {
+                let y = y.as_var().unwrap();
+                return err!("binding '{y}' would capture a variable from the outer context");
+            }
+        }
     }
 
     let args = &context.last().unwrap().args;

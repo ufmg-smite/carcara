@@ -169,6 +169,28 @@ fn bind() {
             (step t1 (cl (= (forall ((x Real) (y Real)) (= x y)) (forall ((y Real) (z Real)) (= y z))))
                 :rule bind)": true,
         }
+        "Right-hand bindings can't capture variables introduced by the outer context" {
+            "(anchor :step t1 :args ((:= (z Real) y)))
+            (anchor :step t1.t1 :args ((w Real) (:= (x Real) w)))
+            (step t1.t1.t1 (cl (= (= x z) (= w y))) :rule hole)
+            (step t1.t1 (cl (= (forall ((x Real)) (= x z)) (forall ((w Real)) (= w y)))) :rule bind)
+            (step t1 (cl (= (let ((z y)) (forall ((x Real)) (= x z))) (forall ((w Real)) (= w y))))
+                :rule let)": true,
+
+            "(anchor :step t1 :args ((:= (z Real) y)))
+            (anchor :step t1.t1 :args ((y Real) (:= (x Real) y)))
+            (step t1.t1.t1 (cl (= (= x z) (= y y))) :rule hole)
+            (step t1.t1 (cl (= (forall ((x Real)) (= x z)) (forall ((y Real)) (= y y)))) :rule bind)
+            (step t1 (cl (= (let ((z y)) (forall ((x Real)) (= x z))) (forall ((y Real)) (= y y))))
+                :rule let)": false,
+
+            "(anchor :step t1 :args ((:= (z Real) y)))
+            (anchor :step t1.t1 :args ((y Real)))
+            (step t1.t1.t1 (cl (= (= y z) (= y y))) :rule hole)
+            (step t1.t1 (cl (= (forall ((y Real)) (= y z)) (forall ((y Real)) (= y y)))) :rule bind)
+            (step t1 (cl (= (let ((z y)) (forall ((y Real)) (= y z))) (forall ((y Real)) (= y y))))
+                :rule let)": false,
+        }
     }
 }
 
