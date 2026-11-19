@@ -54,6 +54,10 @@ pub struct Substitution {
     /// substitution, so it should be empty otherwise.
     renaming_shadow: MultiSet<String>,
 
+    /// Whether the substitution is idempotent, that is, whether no variable in the left-hand side
+    /// of the substitution appears as a free variable in its right-hand side.
+    is_idempotent: Option<bool>,
+
     cache: HashMapStack<Rc<Term>, Rc<Term>>,
 }
 
@@ -66,6 +70,7 @@ impl Substitution {
             should_be_renamed: None,
             renaming_shadow: MultiSet::new(),
             cache: HashMapStack::new(),
+            is_idempotent: Some(true),
         }
     }
 
@@ -92,12 +97,27 @@ impl Substitution {
             should_be_renamed: None,
             renaming_shadow: MultiSet::new(),
             cache: HashMapStack::new(),
+            is_idempotent: None,
         })
     }
 
     /// Returns `true` if the substitution is empty.
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
+    }
+
+    /// Returns `true` if the substitution is idempotent.
+    pub fn is_idempotent(&mut self, pool: &mut Pool) -> bool {
+        if let Some(cached) = self.is_idempotent {
+            return cached;
+        }
+        let overlap = self.map.iter().any(|(_, t)| {
+            pool.free_vars(t)
+                .iter()
+                .any(|x| self.map.get(x).is_some_and(|t| x != t))
+        });
+        self.is_idempotent = Some(!overlap);
+        !overlap
     }
 
     /// Returns `true` if all the mappings in the substitution have been shadowed by a binder.
@@ -124,6 +144,9 @@ impl Substitution {
         if !pool.sort(&x).is_compatible(&pool.sort(&t)) {
             return Err(SubstitutionError::DifferentSorts(x, t));
         }
+
+        // We invalidate the cached `is_idempotent` value, so it must be computed again later.
+        self.is_idempotent = None;
 
         // Introducing new mappings may invalidate previously defined cache entries. In particular,
         // if a term contains `x` as a free variable, the result of applying the substitution to
@@ -159,6 +182,7 @@ impl Substitution {
         let was_present = self.map.remove(x).is_some();
         if was_present {
             self.should_be_renamed = None;
+            self.is_idempotent = None;
             self.cache.clear();
         }
     }

@@ -33,8 +33,10 @@ pub fn refl(
     // `left = σ(right)`.
     let new_left = context.apply(pool, left);
     let result = alpha_equiv(&new_left, right, polyeq_time) || {
-        let new_right = context.apply(pool, right);
-        alpha_equiv(left, &new_right, polyeq_time)
+        context.is_idempotent(pool) && {
+            let new_right = context.apply(pool, right);
+            alpha_equiv(left, &new_right, polyeq_time)
+        }
     };
     rassert!(
         result,

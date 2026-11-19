@@ -374,6 +374,14 @@ pub enum CongruenceError {
         premise: (Rc<Term>, Rc<Term>),
     },
 
+    /// A premise is used flipped, but its terms are not fixed by the context.
+    #[error("premise '(= {0} {1})' is used flipped, but its terms are not fixed by the context")]
+    FlippedPremiseNotFixed(Rc<Term>, Rc<Term>),
+
+    /// An argument has no premise, but is not fixed by the context.
+    #[error("argument '{0}' has no premise, but is not fixed by the context")]
+    ArgumentNotFixed(Rc<Term>),
+
     /// The two terms have different numbers of arguments.
     #[error("different numbers of arguments: {0} and {1}")]
     DifferentNumberOfArguments(usize, usize),

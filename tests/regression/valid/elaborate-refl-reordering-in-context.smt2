@@ -1,0 +1,5 @@
+(set-logic UF)
+(declare-sort U 0)
+(assert (exists ((x U) (y U)) (= x y)))
+(assert (not (exists ((y U) (z U)) (= z y))))
+(check-sat)

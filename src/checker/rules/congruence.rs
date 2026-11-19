@@ -93,7 +93,12 @@ where
 
 /// Since the semantics of the `cong` rule is slightly different from that of `eq_congruent` and
 /// `eq_congruent_pred`, we cannot just use the `generic_congruent_rule` function
-fn check_cong<'a, I>(premises: &[(&'a Rc<Term>, &'a Rc<Term>)], f_args: I, g_args: I) -> RuleResult
+fn check_cong<'a, I>(
+    premises: &[(&'a Rc<Term>, &'a Rc<Term>)],
+    f_args: I,
+    g_args: I,
+    mut side_condition: impl FnMut(&Rc<Term>) -> bool,
+) -> RuleResult
 where
     I: IntoIterator<Item = &'a Rc<Term>>,
 {
@@ -103,13 +108,28 @@ where
         match premises.peek() {
             // If the next premise can justify that the arguments are equal, we consume it. We
             // prefer consuming the premise even if the arguments are directly equal
-            Some((t, u)) if expected == (t, u) || expected == (u, t) => {
+            Some((t, u)) if expected == (t, u) => {
+                premises.next();
+            }
+            // A flipped premise acts as an implicit `symm`, so both its terms must be fixed by
+            // the context
+            Some((t, u)) if expected == (u, t) => {
+                rassert!(
+                    side_condition(t) && side_condition(u),
+                    CongruenceError::FlippedPremiseNotFixed((*t).clone(), (*u).clone())
+                );
                 premises.next();
             }
 
             // If the arguments are directly equal, we simply continue to the next pair of
-            // arguments
-            _ if f_arg == g_arg => (),
+            // arguments. This acts as an implicit `refl`, so the argument must be fixed by the
+            // context
+            _ if f_arg == g_arg => {
+                rassert!(
+                    side_condition(f_arg),
+                    CongruenceError::ArgumentNotFixed(f_arg.clone())
+                );
+            }
 
             // If the arguments are not directly equal, we needed a premise that can justify
             // their equality, so now we return an error
@@ -134,9 +154,18 @@ where
     }
 }
 
-pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
+pub fn cong(
+    RuleArgs {
+        conclusion, premises, pool, context, ..
+    }: RuleArgs,
+) -> RuleResult {
     assert_clause_len(conclusion, 1)?;
     assert_num_premises(premises, 1..)?;
+
+    // Under a non-idempotent context, implicit `refl` and `symm` reasoning is only sound for fixed
+    // terms
+    let strict = !context.is_idempotent(pool);
+    let mut sc = |t: &Rc<Term>| !strict || context.apply(pool, t) == *t;
 
     let premises: Vec<_> = premises
         .iter()
@@ -159,16 +188,17 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
             // We store the result of the first possibility (when neither arguments are flipped),
             // because, if the checking fails in the end, we use it to get more sensible error
             // messages
-            let original_result = check_cong(&premises, f_args, g_args);
+            let original_result = check_cong(&premises, f_args, g_args, &mut sc);
             let any_valid = original_result.is_ok()
-                || check_cong(&premises, f_args_flipped, g_args.as_slice()).is_ok()
-                || check_cong(&premises, f_args.as_slice(), g_args_flipped).is_ok()
-                || check_cong(&premises, f_args_flipped, g_args_flipped).is_ok();
+                || check_cong(&premises, f_args_flipped, g_args.as_slice(), &mut sc).is_ok()
+                || check_cong(&premises, f_args.as_slice(), g_args_flipped, &mut sc).is_ok()
+                || check_cong(&premises, f_args_flipped, g_args_flipped, &mut sc).is_ok();
             return if any_valid { Ok(()) } else { original_result };
         }
 
         (Term::App(f, f_args), Term::App(g, g_args)) => {
             assert_eq(f, g)?;
+            rassert!(sc(f), CongruenceError::ArgumentNotFixed(f.clone()));
             Ok((f_args, g_args))
         }
         (Term::Op(f, f_args), Term::Op(g, g_args)) => {
@@ -217,7 +247,7 @@ pub fn cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         f_args.len() == g_args.len(),
         CongruenceError::DifferentNumberOfArguments(f_args.len(), g_args.len())
     );
-    check_cong(&premises, f_args, g_args)
+    check_cong(&premises, f_args, g_args, sc)
 }
 
 pub fn ho_cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
@@ -244,5 +274,5 @@ pub fn ho_cong(RuleArgs { conclusion, premises, .. }: RuleArgs) -> RuleResult {
         _ => Err(CongruenceError::NotApplicationOrOperation(f.clone())),
     }?;
 
-    check_cong(&premises, f_args, g_args)
+    check_cong(&premises, f_args, g_args, |_| true)
 }

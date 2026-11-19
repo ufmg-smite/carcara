@@ -420,6 +420,14 @@ impl<'c> Checker<'c> {
         // Execute the rule with the provided arguments
         rule(rule_args)?;
 
+        check_non_idempotent_context(
+            self.pool,
+            &mut self.context,
+            &step.rule,
+            &step.clause,
+            &premises,
+        )?;
+
         self.run_stats.polyeq_time += polyeq_time;
         Ok(())
     }
@@ -440,6 +448,39 @@ fn check_discharge(
             "local assumption '{}' was not discharged",
             not_discharged.id(),
         )
+    } else {
+        Ok(())
+    }
+}
+
+fn check_non_idempotent_context(
+    pool: &mut Pool,
+    context: &mut ContextStack,
+    rule: &str,
+    conclusion: &[Rc<Term>],
+    premises: &[Premise],
+) -> RuleResult {
+    // `refl`, `trans`, `cong` and all subproof-closing rules have their own dedicated side
+    // conditions for when a context is non-idempotent
+    if context.is_empty()
+        || matches!(rule, "refl" | "trans" | "cong")
+        || is_subproof_closing_rule(rule)
+    {
+        return Ok(());
+    }
+
+    // Computing whether a context is idempotent can actually be expensive, so we avoid doing it
+    // until after we rule out the easy cases
+    if context.is_idempotent(pool) {
+        return Ok(());
+    }
+
+    // for all other rules, all step terms (conclusion + premises) should be fixed by the context
+    let mut all_terms = conclusion
+        .iter()
+        .chain(premises.iter().flat_map(|p| p.clause));
+    if let Some(t) = all_terms.find(|&t| context.apply(pool, t) != *t) {
+        err!("term {t} is not fixed by the context") // TODO: improve error message
     } else {
         Ok(())
     }

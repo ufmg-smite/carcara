@@ -1,0 +1,5 @@
+(set-logic QF_SLIA)
+(declare-fun x () String)
+(declare-fun c () String)
+(assert (not (= c "")))
+(check-sat)

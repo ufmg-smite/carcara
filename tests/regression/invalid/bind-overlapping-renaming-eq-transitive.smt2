@@ -1,0 +1,6 @@
+(set-logic UF)
+(declare-sort U 0)
+(declare-fun P (U U) Bool)
+(assert (exists ((x U) (y U)) (P x y)))
+(assert (not (exists ((z U)) (P z z))))
+(check-sat)

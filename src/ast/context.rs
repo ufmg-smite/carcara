@@ -66,6 +66,20 @@ impl ContextStack {
             std::cmp::min(self.num_cumulative_calculated, self.stack.len());
     }
 
+    /// Returns `true` if the cumulative context is idempotent.
+    pub fn is_idempotent(&mut self, pool: &mut Pool) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+        let index = self.len() - 1;
+        self.catch_up_cumulative(pool, index);
+        self.stack[index]
+            .cumulative_substitution
+            .as_mut()
+            .unwrap()
+            .is_idempotent(pool)
+    }
+
     /// Computes the cumulative substitution of all contexts up to the given index `up_to`.
     fn catch_up_cumulative(&mut self, pool: &mut Pool, up_to: usize) {
         /// Maximum depth beyond which the substitution construction will not use a cache.

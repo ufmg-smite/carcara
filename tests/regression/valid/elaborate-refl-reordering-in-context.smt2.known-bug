@@ -1,0 +1,8 @@
+; carcara-command: elaborate
+(assume h1 (exists ((x U) (y U)) (= x y)))
+(assume h2 (not (exists ((y U) (z U)) (= z y))))
+(anchor :step t1 :args ((y U) (z U) (:= (x U) y) (:= (y U) z)))
+(step t1.t1 (cl (= (= x y) (= z y))) :rule refl)
+(step t1 (cl (= (exists ((x U) (y U)) (= x y)) (exists ((y U) (z U)) (= z y)))) :rule bind)
+(step t2 (cl (not (= (exists ((x U) (y U)) (= x y)) (exists ((y U) (z U)) (= z y)))) (not (exists ((x U) (y U)) (= x y))) (exists ((y U) (z U)) (= z y))) :rule equiv_pos2)
+(step t3 (cl) :rule resolution :premises (t2 t1 h1 h2))
