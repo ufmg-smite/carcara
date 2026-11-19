@@ -420,6 +420,10 @@ impl<'c> Checker<'c> {
         // Execute the rule with the provided arguments
         rule(rule_args)?;
 
+        // for the purposes of the context, the last command in a subproof is at current depth -1
+        let context_depth = iter.depth() - usize::from(previous_command.is_some());
+        check_outbound_capture(self.pool, &mut self.context, &premises, context_depth)?;
+
         check_non_idempotent_context(
             self.pool,
             &mut self.context,
@@ -484,6 +488,32 @@ fn check_non_idempotent_context(
     } else {
         Ok(())
     }
+}
+
+fn check_outbound_capture(
+    pool: &mut Pool,
+    context: &mut ContextStack,
+    premises: &[Premise],
+    depth: usize,
+) -> RuleResult {
+    use crate::ast::AnchorArg;
+
+    for p in premises {
+        let Some(contexts) = context.stack.get(p.index.0..depth) else {
+            continue;
+        };
+        for arg in contexts.iter().flat_map(|c| &c.args) {
+            let (AnchorArg::Variable(var) | AnchorArg::Assign(var, _)) = arg;
+            let var = pool.add(var.clone().into());
+            if p.clause.iter().any(|t| pool.free_vars(t).contains(&var)) {
+                return err!(
+                    "outbound premise {} uses variable {var} that was captured by the context",
+                    p.id
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn check_external(

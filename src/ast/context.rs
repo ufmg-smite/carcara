@@ -24,7 +24,7 @@ impl Context {
 /// cumulative substitution defined by them.
 #[derive(Default, Debug)]
 pub struct ContextStack {
-    stack: Vec<Context>,
+    pub stack: Vec<Context>,
     num_cumulative_calculated: usize,
 }
 
