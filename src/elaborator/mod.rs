@@ -365,6 +365,34 @@ fn add_trans_step(
     }))
 }
 
+/// Returns an error if the substitution of the current context is not idempotent, that is, if one
+/// of its values mentions a variable that it changes.
+///
+/// Inside such a context, a step `(= t u)` actually means `σ(t) = u`, and the `=` under this
+/// context is not necessarily symmetric. This means that every step that implicitly introduces
+/// symmetry must only reason about terms that σ doesn't change: `trans` needs its middle terms to
+/// be fixed by σ, and `symm` and `eq_symmetric` need all their terms to be fixed by σ. Elaborations
+/// that reorder equalities between terms changed by σ (e.g., `refl` modulo reordering, or `cong`
+/// with a flipped equality) can't be expressed with these restrictions, so we give up instead of
+/// producing a proof that doesn't check.
+///
+/// The most correct way to handle these cases would probably be to rename the variables of the
+/// anchor apart, making its substitution idempotent. That is, replace the variables it introduces
+/// with fresh ones, rename them in the right-hand sides of the steps inside the subproof, and then
+/// add a `bind` step whose substitution is idempotent to rename them back. However, correctly
+/// implementing this option is tricky, and I could not find (as of 2026-11-19) any real-world
+/// benchmark that reaches this restriction, so this is currently not supported.
+fn assert_idempotent_context(
+    pool: &mut Pool,
+    context: &mut ContextStack,
+) -> Result<(), ElaborationError> {
+    if context.is_idempotent(pool) {
+        Ok(())
+    } else {
+        Err(ElaborationError::NonIdempotentContext)
+    }
+}
+
 type ElaborationFunc =
     fn(&mut Pool, &mut ContextStack, &StepNode) -> Result<Rc<ProofNode>, ElaborationError>;
 

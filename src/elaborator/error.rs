@@ -62,6 +62,11 @@ pub enum ElaborationError {
     /// A polyequality between two terms could not be elaborated.
     #[error("cannot elaborate the polyequality between '{0}' and '{1}'")]
     UnsupportedPolyeq(Rc<Term>, Rc<Term>),
+
+    /// The step would need to be elaborated with reasoning about terms changed by a context whose
+    /// substitution is not idempotent, which is not supported.
+    #[error("cannot elaborate this step inside a context whose substitution is not idempotent")]
+    NonIdempotentContext,
 }
 
 impl ElaborationError {

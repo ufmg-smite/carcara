@@ -47,7 +47,9 @@ pub fn refl(
         return Ok(Rc::new(ProofNode::Step(step.clone())));
     }
 
-    // The remaining cases actually require elaboration
+    // The remaining cases actually require elaboration. Since this elaboration introduces symmetry
+    // under a context, we require that the context is idempotent.
+    assert_idempotent_context(pool, context)?;
     let mut ids = IdHelper::new(&step.id);
     let depth = step.depth;
 

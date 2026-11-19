@@ -3,8 +3,9 @@ use crate::{
         ContextStack, ProofNode, Rc, StepNode, Term, build_term, match_term, match_term_err,
         pool::Pool,
     },
-    checker::error::CheckerError,
-    elaborator::{IdHelper, add_symm_step, add_trans_step, error::ElaborationError},
+    elaborator::{
+        IdHelper, add_symm_step, add_trans_step, assert_idempotent_context, error::ElaborationError,
+    },
     utils::{DedupIterator, MultiSet},
 };
 use std::collections::HashSet;
@@ -76,7 +77,7 @@ fn term_args(term: &Rc<Term>) -> &[Rc<Term>] {
 
 pub fn cong(
     pool: &mut Pool,
-    _: &mut ContextStack,
+    context: &mut ContextStack,
     step: &StepNode,
 ) -> Result<Rc<ProofNode>, ElaborationError> {
     assert_eq!(step.clause.len(), 1);
@@ -97,7 +98,7 @@ pub fn cong(
     let step =
         if let (Some(fs), Some(gs)) = (match_term!((= f1 f2) = f), match_term!((= g1 g2) = g)) {
             // If it's a congruence between two equalities, we need to take some extra care
-            elaborate_cong_between_equalities(pool, step, fs, gs)?
+            elaborate_cong_between_equalities(pool, context, step, fs, gs)?
         } else {
             flip_needed_premises(pool, step.clone())
         };
@@ -138,16 +139,20 @@ fn flip_needed_premises(pool: &mut Pool, step: StepNode) -> Rc<ProofNode> {
 
 fn elaborate_cong_between_equalities(
     pool: &mut Pool,
+    context: &mut ContextStack,
     step: &StepNode,
     (f1, f2): (&Rc<Term>, &Rc<Term>),
     (g1, g2): (&Rc<Term>, &Rc<Term>),
-) -> Result<Rc<ProofNode>, CheckerError> {
+) -> Result<Rc<ProofNode>, ElaborationError> {
     // At this point, we know there are either one or two premises
     assert!(step.premises.len() <= 2);
 
     // Similar to the `refl` case, sometimes `cong` is used to derive `(= (= a b) (= b a))`. In this
-    // case, we turn the step into a `eq_symmetric` step, without any premise
+    // case, we turn the step into a `eq_symmetric` step, without any premise. Since this and the
+    // flipped cases below reason about the conclusion's terms with `eq_symmetric`, they are not
+    // supported if the context's substitution is not idempotent
     if f1 == g2 && f2 == g1 {
+        assert_idempotent_context(pool, context)?;
         return Ok(Rc::new(ProofNode::Step(StepNode {
             rule: "eq_symmetric".to_owned(),
             premises: vec![],
@@ -169,6 +174,7 @@ fn elaborate_cong_between_equalities(
         // f is flipped. We flip g instead, so the elaboration is the same as in the next case, but
         // with the premises reversed. Flipping f first would put `(= f2 f1)` in the middle of the
         // transitivity chain, which may not be allowed inside a subproof
+        assert_idempotent_context(pool, context)?;
         let eq_symm_step = build_eq_symm_step(pool, g2, g1, ids.next_id(), step.depth);
         let cong_step = StepNode {
             id: ids.next_id(),
@@ -185,6 +191,7 @@ fn elaborate_cong_between_equalities(
         Ok(trans_step)
     } else if check_cong(&premises, [f1, f2], [g2, g1], None) {
         // g is flipped
+        assert_idempotent_context(pool, context)?;
         let eq_symm_step = build_eq_symm_step(pool, g2, g1, ids.next_id(), step.depth);
         let cong_step = StepNode {
             id: ids.next_id(),
