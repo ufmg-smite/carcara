@@ -105,6 +105,10 @@ pub enum CheckerError {
     #[error("broken transitivity chain: can't prove '(= {0} {1})'")]
     BrokenTransitivityChain(Rc<Term>, Rc<Term>),
 
+    /// A term in the middle of a transitivity chain is not fixed by the context substitution.
+    #[error("term '{0}' in the middle of a transitivity chain is changed by the context")]
+    TransitivityTermNotFixed(Rc<Term>),
+
     /// A term is missing from the conclusion clause of a step.
     #[error("term '{0}' is missing in conclusion clause")]
     MissingTermInClause(Rc<Term>),

@@ -166,20 +166,22 @@ fn elaborate_cong_between_equalities(
         // None are flipped, everything is good
         Ok(flip_needed_premises(pool, step.clone()))
     } else if check_cong(&premises, [f2, f1], [g1, g2], None) {
-        // f is flipped
-        let eq_symm_step = build_eq_symm_step(pool, f1, f2, ids.next_id(), step.depth);
+        // f is flipped. We flip g instead, so the elaboration is the same as in the next case, but
+        // with the premises reversed. Flipping f first would put `(= f2 f1)` in the middle of the
+        // transitivity chain, which may not be allowed inside a subproof
+        let eq_symm_step = build_eq_symm_step(pool, g2, g1, ids.next_id(), step.depth);
         let cong_step = StepNode {
             id: ids.next_id(),
             depth: step.depth,
             clause: vec![
-                build_term!(pool, (= (= {f2.clone()} {f1.clone()}) (= {g1.clone()} {g2.clone()}))),
+                build_term!(pool, (= (= {f1.clone()} {f2.clone()}) (= {g2.clone()} {g1.clone()}))),
             ],
             rule: "cong".to_owned(),
-            premises: step.premises.clone(),
+            premises: step.premises.iter().rev().cloned().collect(),
             ..StepNode::default()
         };
         let cong_step = flip_needed_premises(pool, cong_step);
-        let trans_step = add_trans_step(pool, [eq_symm_step, cong_step], step.id.clone());
+        let trans_step = add_trans_step(pool, [cong_step, eq_symm_step], step.id.clone());
         Ok(trans_step)
     } else if check_cong(&premises, [f1, f2], [g2, g1], None) {
         // g is flipped

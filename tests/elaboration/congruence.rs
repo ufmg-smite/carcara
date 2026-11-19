@@ -53,9 +53,9 @@ fn cong() {
             ->
             "(step t2 (cl (= b c)) :rule hole)
             (step t3 (cl (= a d)) :rule hole)
-            (step t1.t1 (cl (= (= a b) (= b a))) :rule eq_symmetric)
-            (step t1.t2 (cl (= (= b a) (= c d))) :rule cong :premises (t2 t3))
-            (step t1 (cl (= (= a b) (= c d))) :rule trans :premises (t1.t1 t1.t2))",
+            (step t1.t2 (cl (= (= a b) (= d c))) :rule cong :premises (t3 t2))
+            (step t1.t1 (cl (= (= d c) (= c d))) :rule eq_symmetric)
+            (step t1 (cl (= (= a b) (= c d))) :rule trans :premises (t1.t2 t1.t1))",
 
             "(step t2 (cl (= a d)) :rule hole)
             (step t3 (cl (= b c)) :rule hole)
